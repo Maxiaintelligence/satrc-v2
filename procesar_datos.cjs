@@ -4,26 +4,31 @@ const path = require('path');
 const rutaCSV = path.join(__dirname, 'localidades_crudo.csv');
 const rutaSalida = path.join(__dirname, 'src', 'data', 'localidades.json');
 
-console.log('🔄 Re-procesando CSV con identificadores únicos robustos...');
+console.log('🔄 Procesando base de datos diocesana depurada...');
 
 if (!fs.existsSync(rutaCSV)) {
-  console.error('❌ Error: No se encontró "localidades_crudo.csv".');
+  console.error('❌ Error: No se encontró "localidades_crudo.csv" en la raíz.');
   process.exit(1);
 }
 
 const contenido = fs.readFileSync(rutaCSV, 'utf-8');
 const lineas = contenido.split(/\r?\n/).filter(linea => linea.trim() !== '');
 
+if (lineas.length < 2) {
+  console.error('❌ Error: El archivo CSV está vacío.');
+  process.exit(1);
+}
+
 const encabezados = lineas[0].replace(/^\uFEFF/, '').split(',').map(h => h.trim());
 const localidades = [];
 const subcuencasMap = {};
 const zonasMap = {};
 const laderasCriticas = [];
+const municipiosUnicos = new Set();
 
-// Función para limpiar cadenas y crear identificadores únicos limpios
 function sanitizar(texto) {
   return (texto || '')
-    .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // Quitar acentos
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
     .toUpperCase()
     .replace(/[^A-Z0-9]/g, '_');
 }
@@ -41,14 +46,18 @@ for (let i = 1; i < lineas.length; i++) {
   const relieve = fila.tipo_relieve || 'MESETA';
   const subcuencaCve = fila.CVE_SUBCUE || 'SIN_CUENCA';
   const zonaId = fila.ZONA_ID || 'GEN';
+  const municipio = fila.NOM_MUN || 'Sin Municipio';
+  const nombreLoc = fila.NOM_LOC || `Comunidad_${i}`;
 
-  // ID ÚNICO BLINDADO: ZONA + MUNICIPIO + LOCALIDAD + NUMERO
-  const idUnico = `${sanitizar(zonaId)}_${sanitizar(fila.NOM_MUN)}_${sanitizar(fila.NOM_LOC)}_${i}`;
+  municipiosUnicos.add(municipio);
+
+  // ID único irrepetible
+  const idUnico = `${sanitizar(zonaId)}_${sanitizar(municipio)}_${sanitizar(nombreLoc)}_${i}`;
 
   const objLocalidad = {
     id: idUnico,
-    nombre: fila.NOM_LOC,
-    municipio: fila.NOM_MUN,
+    nombre: nombreLoc,
+    municipio: municipio,
     estado: fila.NOM_ENT,
     zona_id: zonaId,
     zona_nombre: fila.ZONA_RESGUARDO,
@@ -86,17 +95,23 @@ for (let i = 1; i < lineas.length; i++) {
 
   localidades.push(objLocalidad);
 
-  // Indexar Zona
+  // 1. Árbol Jerárquico: Zona -> Municipios -> Localidades
   if (!zonasMap[zonaId]) {
     zonasMap[zonaId] = {
       id: zonaId,
       nombre: fila.ZONA_RESGUARDO,
+      municipios: {},
       localidades_ids: []
     };
   }
   zonasMap[zonaId].localidades_ids.push(idUnico);
 
-  // Indexar Subcuenca
+  if (!zonasMap[zonaId].municipios[municipio]) {
+    zonasMap[zonaId].municipios[municipio] = [];
+  }
+  zonasMap[zonaId].municipios[municipio].push(idUnico);
+
+  // 2. Indexar Subcuenca
   if (!subcuencasMap[subcuencaCve]) {
     subcuencasMap[subcuencaCve] = {
       cve: subcuencaCve,
@@ -111,15 +126,17 @@ for (let i = 1; i < lineas.length; i++) {
   else if (pos === 'media') subcuencasMap[subcuencaCve].media.push(idUnico);
   else subcuencasMap[subcuencaCve].baja.push(idUnico);
 
-  if (pendienteMax >= 25.0 || relieve === 'LADERA') {
+  // 3. Laderas críticas para deslaves
+  if (pendienteMax >= 20.0 || relieve === 'LADERA') {
     laderasCriticas.push(idUnico);
   }
 }
 
 const estructuraFinal = {
-  version: "2.1",
+  version: "3.0",
   actualizado: new Date().toISOString(),
   total_localidades: localidades.length,
+  total_municipios: municipiosUnicos.size,
   indices: {
     zonas: zonasMap,
     subcuencas: subcuencasMap,
@@ -131,7 +148,11 @@ const estructuraFinal = {
 fs.writeFileSync(rutaSalida, JSON.stringify(estructuraFinal, null, 2), 'utf-8');
 
 console.log('--------------------------------------------------');
-console.log(`✅ Base de datos reparada: ${localidades.length} localidades únicas.`);
-const pachu = localidades.find(l => l.nombre.toLowerCase().includes('pachuquilla'));
-console.log(`🔎 Verificación Pachuquilla: ${pachu ? `ENCONTRADA en ${pachu.zona_nombre}` : 'NO ENCONTRADA'}`);
+console.log(`✅ ¡Base de datos diocesana generada con éxito!`);
+console.log(`📍 Localidades registradas: ${localidades.length}`);
+console.log(`🏛️ Municipios únicos: ${municipiosUnicos.size}`);
+console.log(`🗺️ Zonas de resguardo activas: ${Object.keys(zonasMap).length}`);
+console.log(`🌊 Subcuencas hidrológicas: ${Object.keys(subcuencasMap).length}`);
+console.log(`⚠️ Comunidades en ladera crítica: ${laderasCriticas.length}`);
+console.log(`📁 Guardado en: src/data/localidades.json`);
 console.log('--------------------------------------------------');

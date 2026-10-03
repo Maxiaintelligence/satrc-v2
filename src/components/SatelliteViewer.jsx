@@ -23,52 +23,85 @@ export default function SatelliteViewer() {
     { ...NOAA_PRODUCTS.geocolor, icono: CloudSun },
     { ...NOAA_PRODUCTS.glmFed, icono: Zap },
     { ...NOAA_PRODUCTS.fireTemperature, icono: Flame },
-    { ...NOAA_PRODUCTS.band13, icono: Layers },
+    { ...NOAA_PRODUCTS.sandwich, icono: Layers },
     { ...NOAA_PRODUCTS.airMass, icono: Wind }
   ];
 
-  // Inicia por defecto con GeoColor
   const [productoActivo, setProductoActivo] = useState(listaProductos[0]);
+  const [urlAnimacion, setUrlAnimacion] = useState('');
   const [versionCache, setVersionCache] = useState(Date.now());
   const [cargando, setCargando] = useState(true);
   const [errorCarga, setErrorCarga] = useState(false);
 
-  const [horaSatelital, setHoraSatelital] = useState('');
+  const [horaSatelital, setHoraSatelital] = useState('--:--');
   const [minutosAtras, setMinutosAtras] = useState(0);
 
   // Estados de Zoom Pantalla Completa
   const [modalZoomAbierto, setModalZoomAbierto] = useState(false);
   const [zoomNivel, setZoomNivel] = useState(1.6);
 
-  // Reloj de pasada satelital de NOAA
+  // Decodificador de la marca de tiempo de NOAA: AAAADDDHHMM en UTC a Hora Local de México
+  function parseNoaaStamp(s) {
+    if (!s || s.length < 11) return new Date();
+    const anio = parseInt(s.slice(0, 4), 10);
+    const diaJuliano = parseInt(s.slice(4, 7), 10);
+    const horas = parseInt(s.slice(7, 9), 10);
+    const minutos = parseInt(s.slice(9, 11), 10);
+
+    // Enero 1 del año en UTC + días julianos
+    const fecha = new Date(Date.UTC(anio, 0, 1, horas, minutos));
+    fecha.setUTCDate(fecha.getUTCDate() + (diaJuliano - 1));
+    return fecha;
+  }
+
+  // Consulta dinámica del GIF más reciente
   useEffect(() => {
-    function actualizarReloj() {
-      const ahora = new Date();
-      const fechaScan = new Date(ahora.getTime() - 10 * 60000);
-      const min = fechaScan.getMinutes();
-      fechaScan.setMinutes(min - (min % 10) + 1);
-      fechaScan.setSeconds(0);
+    let cancelado = false;
+    setCargando(true);
+    setErrorCarga(false);
 
-      setHoraSatelital(fechaScan.toLocaleTimeString('es-MX', { 
-        hour: '2-digit', 
-        minute: '2-digit',
-        hour12: true 
-      }));
-      setMinutosAtras(Math.max(2, Math.round((ahora - fechaScan) / 60000)));
-    }
+    fetch(`/api/latest-gif?p=${productoActivo.id}`)
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
+      .then(({ url, fin }) => {
+        if (cancelado) return;
+        const fechaRealToma = parseNoaaStamp(fin);
+        setUrlAnimacion(url);
+        
+        setHoraSatelital(
+          fechaRealToma.toLocaleTimeString('es-MX', { 
+            hour: '2-digit', 
+            minute: '2-digit', 
+            hour12: true 
+          })
+        );
+        setMinutosAtras(Math.max(0, Math.round((Date.now() - fechaRealToma.getTime()) / 60000)));
+      })
+      .catch((err) => {
+        console.error("Error al obtener último GIF de NOAA:", err);
+        if (!cancelado) {
+          setCargando(false);
+          setErrorCarga(true);
+        }
+      });
 
-    actualizarReloj();
-    const interval = setInterval(actualizarReloj, 60000);
-    return () => clearInterval(interval);
-  }, [versionCache]);
+    return () => { cancelado = true; };
+  }, [productoActivo.id, versionCache]);
 
-  const refrescar = () => {
+  // Auto-refresco de la pasada cada 10 minutos
+  useEffect(() => {
+    const timer = setInterval(() => setVersionCache(Date.now()), 10 * 60 * 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const refrescarManualmente = () => {
     setCargando(true);
     setErrorCarga(false);
     setVersionCache(Date.now());
   };
 
-  const urlAnimacion = `${productoActivo.gif}?v=${versionCache}`;
   const IconoProducto = productoActivo.icono;
 
   return (
@@ -97,16 +130,16 @@ export default function SatelliteViewer() {
           </button>
 
           <button
-            onClick={refrescar}
+            onClick={refrescarManualmente}
             className="p-1.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors border border-slate-600"
-            title="Refrescar toma satelital"
+            title="Refrescar última pasada satelital"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${cargando ? 'animate-spin text-amber-400' : ''}`} />
           </button>
         </div>
       </div>
 
-      {/* 2. SELECTOR DE PRODUCTOS (Los 5 Canales Oficiales GOES-19) */}
+      {/* 2. SELECTOR DE LOS 5 CANALES OFICIALES (Sin Texto Encima) */}
       <div className="p-2.5 bg-slate-950/70 border-b border-slate-800 flex flex-wrap items-center gap-1.5">
         {listaProductos.map((p) => {
           const Icon = p.icono;
@@ -117,8 +150,6 @@ export default function SatelliteViewer() {
               onClick={() => {
                 if (productoActivo.id !== p.id) {
                   setProductoActivo(p);
-                  setErrorCarga(false);
-                  setCargando(true);
                 }
               }}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
@@ -134,7 +165,7 @@ export default function SatelliteViewer() {
         })}
       </div>
 
-      {/* 3. LIENZO SATELITAL ANIMADO: 100% LIMPIO • CERO OBSTRUCCIÓN DE TEXTO */}
+      {/* 3. LIENZO SATELITAL ANIMADO: 100% LIMPIO • CERO OBSTRUCCIÓN */}
       <div 
         onClick={() => setModalZoomAbierto(true)}
         className="relative bg-black flex items-center justify-center overflow-hidden cursor-zoom-in aspect-square sm:aspect-video w-full"
@@ -142,41 +173,41 @@ export default function SatelliteViewer() {
         {cargando && !errorCarga && (
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-slate-950/90 gap-2">
             <div className="w-7 h-7 border-3 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
-            <p className="text-[11px] text-slate-400 font-mono">Sincronizando {productoActivo.name}...</p>
+            <p className="text-[11px] text-slate-400 font-mono">Sincronizando última corrida de NOAA...</p>
           </div>
         )}
 
         {errorCarga ? (
           <div className="p-8 text-center text-slate-400 space-y-3">
             <AlertCircle className="w-8 h-8 text-amber-400 mx-auto" />
-            <p className="text-xs font-bold text-white">Animación en proceso de compilación por NOAA</p>
+            <p className="text-xs font-bold text-white">Actualizando catálogo dinámico de NOAA</p>
             <button
-              onClick={refrescar}
-              className="bg-amber-500 text-slate-950 px-3 py-1.5 rounded-lg text-xs font-bold"
+              onClick={refrescarManualmente}
+              className="bg-amber-500 text-slate-950 px-3 py-1.5 rounded-lg text-xs font-bold shadow"
             >
-              Reintentar
+              Reintentar Conexión
             </button>
           </div>
         ) : (
-          <img
-            key={urlAnimacion}
-            src={urlAnimacion}
-            alt={productoActivo.name}
-            loading="lazy"
-            decoding="async"
-            onLoad={() => setCargando(false)}
-            onError={() => {
-              setCargando(false);
-              setErrorCarga(true);
-            }}
-            className={`w-full h-full object-contain transition-opacity duration-200 ${
-              cargando ? 'opacity-0' : 'opacity-100'
-            }`}
-          />
+          urlAnimacion && (
+            <img
+              key={urlAnimacion}
+              src={urlAnimacion}
+              alt={productoActivo.name}
+              onLoad={() => setCargando(false)}
+              onError={() => {
+                setCargando(false);
+                setErrorCarga(true);
+              }}
+              className={`w-full h-full object-contain transition-opacity duration-200 ${
+                cargando ? 'opacity-0' : 'opacity-100'
+              }`}
+            />
+          )
         )}
       </div>
 
-      {/* 4. METADATOS Y DIAGNÓSTICO EXTERIOR (Fuera del mapa) */}
+      {/* 4. METADATOS Y DIAGNÓSTICO EXTERIOR (Fuera de la Imagen) */}
       <div className="p-3.5 bg-slate-950/95 border-t border-slate-800 space-y-2 text-xs">
         
         <div className="flex flex-wrap justify-between items-center gap-2">
@@ -186,13 +217,13 @@ export default function SatelliteViewer() {
             </div>
             <div>
               <p className="font-bold text-white text-xs md:text-sm">{productoActivo.name}</p>
-              <p className="text-[10px] text-slate-400">Instrumento {productoActivo.type} • NOAA STAR</p>
+              <p className="text-[10px] text-slate-400">Instrumento {productoActivo.type} • NOAA STAR GOES-19</p>
             </div>
           </div>
 
           <div className="flex items-center gap-1.5 text-[11px] font-mono bg-slate-900 px-2.5 py-1 rounded-lg border border-slate-800 text-slate-300">
             <Clock className="w-3.5 h-3.5 text-amber-400" />
-            <span>Última pasada: <strong className="text-white">{horaSatelital}</strong> ({minutosAtras} min)</span>
+            <span>Última pasada real: <strong className="text-white">{horaSatelital}</strong> (hace {minutosAtras} min)</span>
           </div>
         </div>
 
@@ -201,7 +232,7 @@ export default function SatelliteViewer() {
         </p>
 
         <div className="pt-2 border-t border-slate-800/80 flex justify-between items-center text-[10px] text-slate-500 pl-8">
-          <span>Toca la animación para ampliar a pantalla completa.</span>
+          <span>Toca la animación para ampliar en pantalla completa.</span>
           <a
             href={productoActivo.officialUrl}
             target="_blank"
@@ -219,12 +250,9 @@ export default function SatelliteViewer() {
         <div className="fixed inset-0 z-50 flex flex-col bg-slate-950/98 backdrop-blur-md animate-fade-in text-white">
           
           <div className="p-3 bg-slate-900 border-b border-slate-800 flex justify-between items-center">
-            <div className="flex items-center gap-2">
-              <IconoProducto className="w-4 h-4 text-amber-400" />
-              <div>
-                <h4 className="font-bold text-xs md:text-sm text-white">{productoActivo.name}</h4>
-                <p className="text-[10px] text-slate-400">Bucle animado continuo • Pasada de las {horaSatelital}</p>
-              </div>
+            <div>
+              <h4 className="font-bold text-xs md:text-sm text-white">{productoActivo.name}</h4>
+              <p className="text-[10px] text-slate-400">Bucle inmutable de las {horaSatelital} (Sector México)</p>
             </div>
 
             <div className="flex items-center gap-2">
@@ -270,17 +298,19 @@ export default function SatelliteViewer() {
               className="relative transition-transform duration-200 origin-center"
               style={{ transform: `scale(${zoomNivel})` }}
             >
-              <img
-                src={urlAnimacion}
-                alt="Satélite Ampliado"
-                className="max-w-none w-[700px] md:w-[950px] h-auto rounded shadow-2xl select-none"
-                draggable={false}
-              />
+              {urlAnimacion && (
+                <img
+                  src={urlAnimacion}
+                  alt={productoActivo.name}
+                  className="max-w-none w-[700px] md:w-[950px] h-auto rounded shadow-2xl select-none"
+                  draggable={false}
+                />
+              )}
             </div>
           </div>
 
           <div className="p-2.5 bg-slate-900 border-t border-slate-800 text-[11px] text-slate-400 text-center">
-            Inspección animada continua en alta definición.
+            Inspección animada GOES-19 en alta definición.
           </div>
 
         </div>

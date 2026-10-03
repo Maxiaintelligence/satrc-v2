@@ -13,26 +13,63 @@ import {
   Calendar, 
   Info,
   Droplets,
-  TrendingUp
+  TrendingUp,
+  Building2
 } from 'lucide-react';
 
 export default function MonitorPublico() {
   const listaZonas = Object.values(db.indices.zonas);
 
+  // Estados de los 3 niveles jerárquicos
   const [zonaActiva, setZonaActiva] = useState(listaZonas[0] || null);
+  const [municipioActivo, setMunicipioActivo] = useState('');
   const [localidadActiva, setLocalidadActiva] = useState(null);
+
   const [cargando, setCargando] = useState(false);
   const [datosConsenso, setDatosConsenso] = useState([]);
   const [pestanaActiva, setPestanaActiva] = useState('hoy');
   const [mostrarDisclaimer, setMostrarDisclaimer] = useState(false);
 
+  // Lista de municipios de la zona seleccionada
+  const listaMunicipios = zonaActiva ? Object.keys(zonaActiva.municipios || {}) : [];
+
+  // Al montar o cambiar de zona: fijar el primer municipio y su primera localidad
   useEffect(() => {
-    if (zonaActiva && zonaActiva.localidades_ids?.length > 0) {
-      const primerPueblo = db.localidades.find(l => l.id === zonaActiva.localidades_ids[0]);
-      setLocalidadActiva(primerPueblo || null);
+    if (zonaActiva && listaMunicipios.length > 0) {
+      const primerMun = listaMunicipios[0];
+      setMunicipioActivo(primerMun);
+
+      const idsComunidades = zonaActiva.municipios[primerMun] || [];
+      if (idsComunidades.length > 0) {
+        const primerPueblo = db.localidades.find(l => l.id === idsComunidades[0]);
+        setLocalidadActiva(primerPueblo || null);
+      }
     }
   }, [zonaActiva]);
 
+  // Al cambiar de municipio dentro de la zona: fijar su primera localidad
+  const manejarCambioMunicipio = (e) => {
+    const munSeleccionado = e.target.value;
+    setMunicipioActivo(munSeleccionado);
+
+    const idsComunidades = zonaActiva?.municipios[munSeleccionado] || [];
+    if (idsComunidades.length > 0) {
+      const primerPueblo = db.localidades.find(l => l.id === idsComunidades[0]);
+      setLocalidadActiva(primerPueblo || null);
+    }
+  };
+
+  const manejarCambioZona = (e) => {
+    const nuevaZona = listaZonas.find(z => z.id === e.target.value);
+    setZonaActiva(nuevaZona);
+  };
+
+  const manejarCambioLocalidad = (e) => {
+    const loc = db.localidades.find(l => l.id === e.target.value);
+    if (loc) setLocalidadActiva(loc);
+  };
+
+  // Consultar pronóstico meteorológico multi-modelo
   useEffect(() => {
     if (!localidadActiva) return;
 
@@ -55,21 +92,7 @@ export default function MonitorPublico() {
     return () => { cancelado = true; };
   }, [localidadActiva]);
 
-  const manejarCambioZona = (e) => {
-    const nuevaZona = listaZonas.find(z => z.id === e.target.value);
-    setZonaActiva(nuevaZona);
-    if (nuevaZona && nuevaZona.localidades_ids?.length > 0) {
-      const primerPueblo = db.localidades.find(l => l.id === nuevaZona.localidades_ids[0]);
-      setLocalidadActiva(primerPueblo);
-    }
-  };
-
-  const manejarCambioLocalidad = (e) => {
-    const loc = db.localidades.find(l => l.id === e.target.value);
-    if (loc) setLocalidadActiva(loc);
-  };
-
-  // Eje de tiempo homogéneo y estable: 24 horas naturales completas (00:00 a 23:00) para cada día
+  // Eje de tiempo homogéneo y estable: 24 horas naturales completas (00:00 a 23:00)
   const obtenerHorasPestana = () => {
     if (!datosConsenso || datosConsenso.length === 0) return [];
     if (pestanaActiva === 'hoy') return datosConsenso.slice(0, 24);
@@ -93,7 +116,6 @@ export default function MonitorPublico() {
   const padTop = 32;
   const padBottom = 38;
 
-  // Cálculo de coordenadas X con 24 puntos fijos (índice 0 a 23)
   const coordX = (i) => padLeft + (i / 23) * (anchoGrafica - padLeft - padRight);
 
   // Escala Temperatura
@@ -122,7 +144,6 @@ export default function MonitorPublico() {
   const maxV = Math.max(30, ...horasMostradas.map(h => Math.max(h.viento_kmh, h.rafagas_kmh)));
   const coordYV = (v) => altoGrafica - padBottom - (v / maxV) * (altoGrafica - padTop - padBottom);
 
-  // Horas clave de referencia en el Eje X (cada 3 horas)
   const esHoraReferencia = (i) => i % 3 === 0 || i === 23;
 
   return (
@@ -130,57 +151,79 @@ export default function MonitorPublico() {
       <DisclaimerModal abierto={mostrarDisclaimer} alCerrar={() => setMostrarDisclaimer(false)} />
 
       {/* ========================================================== */}
-      {/* 1. SELECTOR DE ZONA Y COMUNIDAD (ALTO CONTRASTE VISUAL)   */}
+      {/* 1. SELECTOR EN CASCADA DE 3 NIVELES (ZONA ➔ MUNICIPIO ➔ LOCALIDAD) */}
       {/* ========================================================== */}
       <div className="bg-slate-900 border-2 border-slate-700 p-5 rounded-2xl shadow-xl">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-4 items-end">
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-12 gap-3.5 items-end">
           
-          <div className="lg:col-span-6 space-y-1.5">
+          {/* Nivel 1: Zona de Resguardo / Cuenca */}
+          <div className="md:col-span-1 lg:col-span-4 space-y-1.5">
             <label className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
-              <MapPin className="w-4 h-4 text-amber-400" />
-              Zona de Resguardo / Cuenca Hidrológica
+              <MapPin className="w-4 h-4 text-amber-400 shrink-0" />
+              1. Zona de Resguardo / Cuenca
             </label>
             <select
               value={zonaActiva?.id || ''}
               onChange={manejarCambioZona}
-              className="w-full bg-slate-800 text-white font-bold text-sm rounded-xl px-4 py-3 border-2 border-slate-600 focus:border-amber-400 focus:ring-2 focus:ring-amber-500/20 focus:outline-none transition-all shadow-inner cursor-pointer"
+              className="w-full bg-slate-800 text-white font-bold text-xs md:text-sm rounded-xl px-3 py-3 border-2 border-slate-600 focus:border-amber-400 focus:outline-none transition-all shadow-inner cursor-pointer"
             >
               {listaZonas.map((z) => (
-                <option key={z.id} value={z.id} className="bg-slate-900 text-white py-1">
-                  {z.nombre} ({z.localidades_ids.length} comunidades)
+                <option key={z.id} value={z.id} className="bg-slate-900 text-white">
+                  {z.nombre} ({Object.keys(z.municipios || {}).length} municipios)
                 </option>
               ))}
             </select>
           </div>
 
-          <div className="lg:col-span-4 space-y-1.5">
+          {/* Nivel 2: Municipio */}
+          <div className="md:col-span-1 lg:col-span-3 space-y-1.5">
+            <label className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
+              <Building2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              2. Municipio
+            </label>
+            <select
+              value={municipioActivo}
+              onChange={manejarCambioMunicipio}
+              className="w-full bg-slate-800 text-white font-bold text-xs md:text-sm rounded-xl px-3 py-3 border-2 border-slate-600 focus:border-emerald-400 focus:outline-none transition-all shadow-inner cursor-pointer"
+            >
+              {listaMunicipios.map((mun) => (
+                <option key={mun} value={mun} className="bg-slate-900 text-white">
+                  {mun} ({zonaActiva?.municipios[mun]?.length || 0} loc.)
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Nivel 3: Localidad Específica */}
+          <div className="md:col-span-1 lg:col-span-3 space-y-1.5">
             <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
-              Comunidad Específica
+              3. Comunidad / Localidad
             </label>
             <select
               value={localidadActiva?.id || ''}
               onChange={manejarCambioLocalidad}
-              className="w-full bg-slate-800 text-white font-bold text-sm rounded-xl px-4 py-3 border-2 border-slate-600 focus:border-amber-400 focus:ring-2 focus:ring-amber-500/20 focus:outline-none transition-all shadow-inner cursor-pointer"
+              className="w-full bg-slate-800 text-white font-bold text-xs md:text-sm rounded-xl px-3 py-3 border-2 border-slate-600 focus:border-amber-400 focus:outline-none transition-all shadow-inner cursor-pointer"
             >
-              {zonaActiva?.localidades_ids.map((idLoc) => {
+              {municipioActivo && zonaActiva?.municipios[municipioActivo]?.map((idLoc) => {
                 const loc = db.localidades.find(l => l.id === idLoc);
                 if (!loc) return null;
                 return (
-                  <option key={loc.id} value={loc.id} className="bg-slate-900 text-white py-1">
-                    {loc.nombre} — {loc.municipio} ({loc.topografia.altitud_msnm} msnm)
+                  <option key={loc.id} value={loc.id} className="bg-slate-900 text-white">
+                    {loc.nombre} ({loc.topografia.altitud_msnm} msnm)
                   </option>
                 );
               })}
             </select>
           </div>
 
-          <div className="lg:col-span-2">
+          {/* Botón de Deslinde */}
+          <div className="md:col-span-3 lg:col-span-2">
             <button
               onClick={() => setMostrarDisclaimer(true)}
               className="w-full flex items-center justify-center gap-1.5 px-3 py-3 bg-slate-800 hover:bg-slate-750 text-slate-300 border-2 border-slate-700 rounded-xl text-xs font-bold transition-all shadow"
             >
               <Info className="w-4 h-4 text-amber-400" />
-              Deslinde Oficial
+              Deslinde
             </button>
           </div>
 
@@ -188,7 +231,7 @@ export default function MonitorPublico() {
       </div>
 
       {/* ========================================================== */}
-      {/* 2. BOTONES DE HORIZONTE ESTABLES (24 HORAS COMPLETAS)     */}
+      {/* 2. BOTONES TEMPORALES                                      */}
       {/* ========================================================== */}
       <div className="flex flex-wrap gap-2 border-b border-slate-800 pb-2">
         <button
@@ -229,7 +272,7 @@ export default function MonitorPublico() {
       </div>
 
       {/* ========================================================== */}
-      {/* 3. RESUMEN MÉTRICO                                         */}
+      {/* 3. RESUMEN MÉTRICO DE LA COMUNIDAD SELECCIONADA            */}
       {/* ========================================================== */}
       {localidadActiva && (
         <div className="bg-gradient-to-r from-slate-900 via-slate-900 to-slate-800 border-2 border-slate-800 p-5 rounded-2xl shadow-xl">
@@ -337,7 +380,6 @@ export default function MonitorPublico() {
 
               <div className="relative w-full overflow-x-auto">
                 <svg viewBox={`0 0 ${anchoGrafica} ${altoGrafica}`} className="w-full h-52 select-none">
-                  {/* Guías Horizontales con etiquetas Y */}
                   {[minT, Math.round((minT + maxT) / 2), maxT].map((valY, idx) => {
                     const y = coordYTemp(valY);
                     return (
@@ -350,12 +392,10 @@ export default function MonitorPublico() {
                     );
                   })}
 
-                  {/* Curvas de los 3 Modelos con Pantone de Alta Visibilidad */}
                   <path d={crearRutaLinea('ecmwf')} fill="none" stroke="#38bdf8" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />
                   <path d={crearRutaLinea('gfs')} fill="none" stroke="#34d399" strokeWidth="2.5" strokeDasharray="5 3" strokeLinecap="round" strokeLinejoin="round" />
                   <path d={crearRutaLinea('icon')} fill="none" stroke="#fbbf24" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
 
-                  {/* Puntos y Etiquetas Horarias */}
                   {horasMostradas.map((h, i) => {
                     const x = coordX(i);
                     const y = coordYTemp(h.temperatura_c);
@@ -363,22 +403,15 @@ export default function MonitorPublico() {
 
                     return (
                       <g key={i}>
-                        {/* Línea vertical guía tenue en horas clave */}
                         {esHoraReferencia(i) && (
                           <line x1={x} y1={padTop} x2={x} y2={altoGrafica - padBottom} stroke="#1e293b" strokeWidth="1" />
                         )}
-
-                        {/* Punto con borde protector */}
                         <circle cx={x} cy={y} r="4" fill="#fbbf24" stroke="#020617" strokeWidth="2" />
-
-                        {/* Etiqueta de hora cada 3 horas */}
                         {esHoraReferencia(i) && (
                           <text x={x} y={altoGrafica - 12} fill="#94a3b8" fontSize="11" textAnchor="middle" fontFamily="monospace" fontWeight="600">
                             {horaStr}
                           </text>
                         )}
-
-                        {/* Etiqueta numérica de temperatura en horas clave */}
                         {esHoraReferencia(i) && (
                           <g>
                             <rect x={x - 14} y={y - 20} width="28" height="15" rx="4" fill="#0f172a" fillOpacity="0.8" />
@@ -394,7 +427,7 @@ export default function MonitorPublico() {
               </div>
             </div>
 
-            {/* CUADRANTE 2: PRECIPITACIÓN POR HORA (BARRAS DE CONSENSO) */}
+            {/* CUADRANTE 2: PRECIPITACIÓN POR HORA */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl space-y-2">
               <div className="flex justify-between items-center border-b border-slate-800/80 pb-2">
                 <span className="text-xs font-bold text-white flex items-center gap-1.5">
@@ -407,7 +440,6 @@ export default function MonitorPublico() {
 
               <div className="relative w-full overflow-x-auto">
                 <svg viewBox={`0 0 ${anchoGrafica} ${altoGrafica}`} className="w-full h-52 select-none">
-                  {/* Guías Y */}
                   {[0, (maxLl / 2).toFixed(1), maxLl.toFixed(1)].map((valY, idx) => {
                     const y = altoGrafica - padBottom - ((valY / maxLl) * (altoGrafica - padTop - padBottom));
                     return (
@@ -420,7 +452,6 @@ export default function MonitorPublico() {
                     );
                   })}
 
-                  {/* Barras de Consistente Espaciado */}
                   {horasMostradas.map((h, i) => {
                     const x = coordX(i);
                     const altBarra = escalaYBarra(h.lluvia_mm);
@@ -469,7 +500,6 @@ export default function MonitorPublico() {
 
               <div className="relative w-full overflow-x-auto">
                 <svg viewBox={`0 0 ${anchoGrafica} ${altoGrafica}`} className="w-full h-52 select-none">
-                  {/* Guías Y fijas: 50%, 75%, 100% */}
                   {[50, 75, 100].map((pct, idx) => {
                     const y = altoGrafica - padBottom - (pct / 100) * (altoGrafica - padTop - padBottom);
                     return (
@@ -482,7 +512,6 @@ export default function MonitorPublico() {
                     );
                   })}
 
-                  {/* Curva de Humedad en Turquesa Brillante */}
                   <path 
                     d={horasMostradas.map((h, i) => {
                       const x = coordX(i);
@@ -533,7 +562,6 @@ export default function MonitorPublico() {
 
               <div className="relative w-full overflow-x-auto">
                 <svg viewBox={`0 0 ${anchoGrafica} ${altoGrafica}`} className="w-full h-52 select-none">
-                  {/* Guías Y */}
                   {[0, Math.round(maxV / 2), Math.round(maxV)].map((valY, idx) => {
                     const y = coordYV(valY);
                     return (
@@ -546,15 +574,13 @@ export default function MonitorPublico() {
                     );
                   })}
 
-                  {/* Ráfagas en Naranja Coral */}
                   <path 
                     d={horasMostradas.map((h, i) => `${i === 0 ? 'M' : 'L'} ${coordX(i)} ${coordYV(h.rafagas_kmh)}`).join(' ')} 
-                    fill="none" stroke="#fb923c" strokeWidth="2.5" strokeDasharray="6 3" strokeLinecap="round" strokeLinejoin="round"
+                    fill="none" stroke="#fb923c" strokeWidth="2.5" strokeDasharray="6 3" strokeLinecap="round" strokeLinejoin="round" 
                   />
-                  {/* Viento Sostenido en Verde Menta */}
                   <path 
                     d={horasMostradas.map((h, i) => `${i === 0 ? 'M' : 'L'} ${coordX(i)} ${coordYV(h.viento_kmh)}`).join(' ')} 
-                    fill="none" stroke="#2dd4bf" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"
+                    fill="none" stroke="#2dd4bf" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" 
                   />
 
                   {horasMostradas.map((h, i) => {
@@ -591,7 +617,7 @@ export default function MonitorPublico() {
       </div>
 
       {/* ========================================================== */}
-      {/* 5. SECCIÓN DE SATÉLITE GOES-19 (AL FINAL DE LA PANTALLA)  */}
+      {/* 5. SECCIÓN DE SATÉLITE GOES-19 (AL FINAL)                 */}
       {/* ========================================================== */}
       <div className="pt-2">
         <SatelliteViewer />
