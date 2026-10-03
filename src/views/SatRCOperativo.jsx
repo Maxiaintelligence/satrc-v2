@@ -4,6 +4,7 @@ import { consultarModelosDeterministas } from '../engine/meteoFetcher.js';
 import { generarConsensoDeterminista } from '../engine/consensusEngine.js';
 import { evaluarLocalidad } from '../engine/riskEvaluator.js';
 import SatelliteViewer from '../components/SatelliteViewer.jsx';
+import RiskMap from '../components/RiskMap.jsx';
 import { 
   ShieldAlert, 
   AlertTriangle, 
@@ -16,9 +17,6 @@ import {
   MapPin, 
   FileText, 
   X,
-  CloudRain,
-  Hospital,
-  Compass,
   ArrowRight
 } from 'lucide-react';
 
@@ -80,7 +78,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
     return () => { cancelado = true; };
   }, [zonaSeleccionada, killSwitchActivo]);
 
-  // Al abrir el detalle de una comunidad específica, consultamos su coordenada precisa
+  // Al abrir el detalle de una comunidad específica, consultamos sus coordenadas precisas
   const abrirDetalleComunidad = async (itemEvaluado) => {
     setComunidadDetalle(itemEvaluado);
     setCargandoDetalleLocal(true);
@@ -92,7 +90,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
 
     if (res.exito) {
       const serie = generarConsensoDeterminista(res.datos_horarios);
-      setDetalleMeteoLocal(serie.slice(0, 12)); // Primeras 12 horas críticas
+      setDetalleMeteoLocal(serie.slice(0, 12));
     }
     setCargandoDetalleLocal(false);
   };
@@ -114,7 +112,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
   return (
     <div className="space-y-6">
       
-      {/* 1. Barra de Control Maestro */}
+      {/* 1. Barra de Control Maestro (Kill-Switch y Estados) */}
       <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl shadow-xl flex flex-col md:flex-row justify-between items-center gap-4">
         
         <div className="flex items-center gap-3">
@@ -196,7 +194,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
         </div>
       )}
 
-      {/* Formulario Manual */}
+      {/* Formulario de Emisión Manual */}
       {modoManual && (
         <div className="bg-slate-900 border border-amber-500/50 p-5 rounded-2xl shadow-2xl space-y-4">
           <h3 className="text-sm font-bold text-amber-400 flex items-center gap-2">
@@ -407,6 +405,13 @@ export default function SatRCOperativo({ alCerrarSesion }) {
         </div>
       )}
 
+{/* 4. Mapa Geográfico Táctico de las Localidades Evaluadas */}
+      <RiskMap 
+        evaluaciones={evaluaciones}
+        localidadFoco={localidadFoco}
+        alSeleccionarLocalidad={(item) => abrirDetalleComunidad(item)}
+      />
+
       {/* 4. Matriz de Localidades */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
         <div className="p-4 bg-slate-800/80 border-b border-slate-700 flex justify-between items-center">
@@ -415,7 +420,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
             Matriz de Amenazas por Localidad ({evaluaciones.length} Comunidades)
           </h3>
           <span className="text-[11px] text-slate-400 hidden sm:inline">
-            Haz clic en "Ver Detalle" para auditar una comunidad
+            Haz clic en "Auditar" para ver el análisis de una comunidad
           </span>
         </div>
 
@@ -488,12 +493,11 @@ export default function SatRCOperativo({ alCerrarSesion }) {
         )}
       </div>
 
-      {/* 5. MODAL DE DETALLE PROFUNDO COMUNITARIO */}
+      {/* 5. Modal de Detalle Profundo Comunitario */}
       {comunidadDetalle && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fade-in">
           <div className="bg-slate-900 border border-slate-700 max-w-3xl w-full rounded-2xl shadow-2xl overflow-hidden flex flex-col text-slate-200">
             
-            {/* Cabecera del Detalle */}
             <div className="p-5 border-b border-slate-800 flex justify-between items-start"
                  style={{ backgroundColor: `${comunidadDetalle.color_alerta}20` }}>
               <div>
@@ -518,17 +522,14 @@ export default function SatRCOperativo({ alCerrarSesion }) {
               </button>
             </div>
 
-            {/* Cuerpo del Detalle */}
             <div className="p-6 overflow-y-auto max-h-[70vh] space-y-6">
               
-              {/* Desglose de Amenaza */}
               <div className="bg-slate-950/70 p-4 rounded-xl border border-slate-800 space-y-1">
                 <p className="text-xs font-bold text-amber-400 uppercase tracking-wider">Diagnóstico de Amenaza</p>
                 <p className="text-base font-bold text-white">{comunidadDetalle.que.evento}</p>
                 <p className="text-xs text-slate-300 leading-relaxed">{comunidadDetalle.que.descripcion}</p>
               </div>
 
-              {/* Métricas Críticas del Terreno */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
                   <span className="text-[10px] text-slate-400 uppercase font-semibold block">Pendiente Máx</span>
@@ -555,7 +556,6 @@ export default function SatRCOperativo({ alCerrarSesion }) {
                 </div>
               </div>
 
-              {/* Pronóstico Horario Específico de las Coordenadas de ESTA Localidad */}
               <div>
                 <h4 className="text-xs font-bold text-white uppercase tracking-wider mb-2 flex items-center gap-1.5">
                   <Clock className="w-4 h-4 text-cyan-400" /> Curva Horaria Específica de esta Comunidad (Próximas 12h)
@@ -582,7 +582,6 @@ export default function SatRCOperativo({ alCerrarSesion }) {
 
             </div>
 
-            {/* Pie del Modal */}
             <div className="p-4 bg-slate-800/80 border-t border-slate-700 flex justify-between items-center">
               <span className="text-[11px] text-slate-400">
                 Población protegida: <strong>{comunidadDetalle.tamano_impacto.poblacion_directa.toLocaleString()}</strong> habitantes
@@ -599,9 +598,9 @@ export default function SatRCOperativo({ alCerrarSesion }) {
         </div>
       )}
 
-      {/* 6. Visor Satelital */}
+      {/* 6. Visor Satelital con Enfoque Dinámico en la Comunidad Foco */}
       <div className="pt-2">
-        <SatelliteViewer />
+        <SatelliteViewer localidadFoco={localidadFoco} />
       </div>
 
     </div>

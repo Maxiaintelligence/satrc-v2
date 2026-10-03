@@ -88,6 +88,7 @@ export default function MonitorPublico() {
     <div className="space-y-6">
       <DisclaimerModal abierto={mostrarDisclaimer} alCerrar={() => setMostrarDisclaimer(false)} />
 
+      {/* Selectores de Zona y Comunidad */}
       <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl shadow-lg flex flex-col md:flex-row justify-between items-stretch md:items-center gap-4">
         
         <div className="flex-1">
@@ -139,6 +140,7 @@ export default function MonitorPublico() {
         </div>
       </div>
 
+      {/* Resumen de la Comunidad */}
       {localidadActiva && (
         <div className="bg-gradient-to-r from-slate-900 via-slate-900 to-slate-800 border border-slate-800 p-5 rounded-2xl shadow-xl">
           <div className="flex flex-col lg:flex-row justify-between lg:items-center gap-4">
@@ -196,6 +198,7 @@ export default function MonitorPublico() {
         </div>
       )}
 
+      {/* Pestañas de Días */}
       <div className="flex gap-2 border-b border-slate-800 pb-2">
         <button
           onClick={() => setPestanaActiva('hoy')}
@@ -234,6 +237,7 @@ export default function MonitorPublico() {
         </button>
       </div>
 
+      {/* Tabla Horaria */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
         <div className="p-4 bg-slate-800/80 border-b border-slate-700/80 flex justify-between items-center">
           <div className="flex items-center gap-2">
@@ -318,8 +322,9 @@ export default function MonitorPublico() {
         )}
       </div>
 
+      {/* Visor Satelital con Enfoque Dinámico en la Localidad Activa */}
       <div className="pt-2">
-        <SatelliteViewer />
+        <SatelliteViewer localidadFoco={localidadActiva} />
       </div>
     </div>
   );
