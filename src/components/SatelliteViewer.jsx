@@ -1,171 +1,104 @@
 import React, { useState, useEffect } from 'react';
+import { NOAA_PRODUCTS } from '../config/noaa-goes.js';
 import { 
   Eye, 
   RefreshCw, 
-  Info, 
+  Clock, 
   ExternalLink, 
-  ZoomIn, 
-  ZoomOut, 
   Maximize2, 
   X, 
+  ZoomIn, 
+  ZoomOut, 
   RotateCcw,
-  Camera,
-  Film,
-  Clock
+  Zap,
+  Flame,
+  CloudSun,
+  Wind,
+  Layers,
+  AlertCircle
 } from 'lucide-react';
 
 export default function SatelliteViewer() {
-  const canales = [
-    {
-      id: 'GEOCOLOR',
-      nombre: 'GeoColor (Visible / Color Real)',
-      descripcion: 'Evolución de la nubosidad real, bruma y sombras orográficas.',
-      urlFija: 'https://cdn.star.nesdis.noaa.gov/GOES16/ABI/SECTOR/mex/GEOCOLOR/1000x1000.jpg',
-      urlAnimada: 'https://cdn.star.nesdis.noaa.gov/GOES16/ABI/GIFS/GOES16-MEX-GEOCOLOR-1000x1000.gif',
-      urlOficialNOAA: 'https://www.star.nesdis.noaa.gov/goes/sector.php?sat=G16&sector=mex'
-    },
-    {
-      id: 'Band13',
-      nombre: 'Infrarrojo Térmico (Banda 13 - Topes Fríos)',
-      descripcion: 'Animación de celdas severas. Rojo/Morado = tormentas convectivas en expansión.',
-      urlFija: 'https://cdn.star.nesdis.noaa.gov/GOES16/ABI/SECTOR/mex/13/1000x1000.jpg',
-      urlAnimada: 'https://cdn.star.nesdis.noaa.gov/GOES16/ABI/GIFS/GOES16-MEX-13-1000x1000.gif',
-      urlOficialNOAA: 'https://www.star.nesdis.noaa.gov/goes/sector_band.php?sat=G16&sector=mex&band=13&length=12'
-    },
-    {
-      id: 'Band09',
-      nombre: 'Vapor de Agua (Niveles Medios)',
-      descripcion: 'Dinámica de vientos y ríos atmosféricos en niveles medios sobre México.',
-      urlFija: 'https://cdn.star.nesdis.noaa.gov/GOES16/ABI/SECTOR/mex/09/1000x1000.jpg',
-      urlAnimada: 'https://cdn.star.nesdis.noaa.gov/GOES16/ABI/GIFS/GOES16-MEX-09-1000x1000.gif',
-      urlOficialNOAA: 'https://www.star.nesdis.noaa.gov/goes/sector_band.php?sat=G16&sector=mex&band=09&length=12'
-    }
+  const listaProductos = [
+    { ...NOAA_PRODUCTS.geocolor, icono: CloudSun },
+    { ...NOAA_PRODUCTS.glmFed, icono: Zap },
+    { ...NOAA_PRODUCTS.fireTemperature, icono: Flame },
+    { ...NOAA_PRODUCTS.band13, icono: Layers },
+    { ...NOAA_PRODUCTS.airMass, icono: Wind }
   ];
 
-  const [canalSeleccionado, setCanalSeleccionado] = useState(canales[0]);
-  const [modoAnimado, setModoAnimado] = useState(false);
-  const [timestamp, setTimestamp] = useState(Date.now());
+  // Inicia por defecto con GeoColor
+  const [productoActivo, setProductoActivo] = useState(listaProductos[0]);
+  const [versionCache, setVersionCache] = useState(Date.now());
   const [cargando, setCargando] = useState(true);
+  const [errorCarga, setErrorCarga] = useState(false);
+
   const [horaSatelital, setHoraSatelital] = useState('');
   const [minutosAtras, setMinutosAtras] = useState(0);
 
-  // Estados del Modo Pantalla Completa
-  const [modalAbierto, setModalAbierto] = useState(false);
-  const [zoomNivel, setZoomNivel] = useState(1.8);
+  // Estados de Zoom Pantalla Completa
+  const [modalZoomAbierto, setModalZoomAbierto] = useState(false);
+  const [zoomNivel, setZoomNivel] = useState(1.6);
 
+  // Reloj de pasada satelital de NOAA
   useEffect(() => {
-    function calcularPasadaSatelite() {
+    function actualizarReloj() {
       const ahora = new Date();
-      const fechaToma = new Date(ahora.getTime() - 10 * 60000);
-      const minutos = fechaToma.getMinutes();
-      const residuo = minutos % 10;
-      fechaToma.setMinutes(minutos - residuo + 1);
-      fechaToma.setSeconds(0);
+      const fechaScan = new Date(ahora.getTime() - 10 * 60000);
+      const min = fechaScan.getMinutes();
+      fechaScan.setMinutes(min - (min % 10) + 1);
+      fechaScan.setSeconds(0);
 
-      const horaFormato = fechaToma.toLocaleTimeString('es-MX', { 
+      setHoraSatelital(fechaScan.toLocaleTimeString('es-MX', { 
         hour: '2-digit', 
         minute: '2-digit',
         hour12: true 
-      });
-
-      const difMin = Math.max(2, Math.round((ahora - fechaToma) / 60000));
-      setHoraSatelital(horaFormato);
-      setMinutosAtras(difMin);
+      }));
+      setMinutosAtras(Math.max(2, Math.round((ahora - fechaScan) / 60000)));
     }
 
-    calcularPasadaSatelite();
-    const intervalo = setInterval(calcularPasadaSatelite, 60000);
-    return () => clearInterval(intervalo);
-  }, [timestamp]);
+    actualizarReloj();
+    const interval = setInterval(actualizarReloj, 60000);
+    return () => clearInterval(interval);
+  }, [versionCache]);
 
-  const refrescarImagen = () => {
+  const refrescar = () => {
     setCargando(true);
-    setTimestamp(Date.now());
+    setErrorCarga(false);
+    setVersionCache(Date.now());
   };
 
-  const abrirModalZoom = () => {
-    setZoomNivel(1.8);
-    setModalAbierto(true);
-  };
-
-  const urlVisible = modoAnimado 
-    ? `${canalSeleccionado.urlAnimada}?t=${timestamp}`
-    : `${canalSeleccionado.urlFija}?t=${timestamp}`;
+  const urlAnimacion = `${productoActivo.gif}?v=${versionCache}`;
+  const IconoProducto = productoActivo.icono;
 
   return (
-    <div className="bg-slate-900 text-white rounded-2xl shadow-2xl overflow-hidden border border-slate-800">
+    <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden">
       
-      {/* Cabecera del Visor */}
-      <div className="p-4 bg-slate-800/90 flex flex-wrap justify-between items-center gap-3 border-b border-slate-700">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-slate-950 rounded-xl border border-slate-700 text-amber-400">
-            <Eye className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h3 className="font-bold text-sm md:text-base tracking-wide text-white">
-                Satélite GOES-East (GOES-16) • Sector México y Golfo
-              </h3>
-              <span className="text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full font-mono font-bold">
-                EN VIVO • NOAA
-              </span>
-            </div>
-            
-            <p className="text-[11px] text-slate-300 flex items-center gap-1.5 mt-0.5">
-              <Clock className="w-3.5 h-3.5 text-amber-400" />
-              <span>Última toma satelital: <strong className="text-white">{horaSatelital}</strong> (hace {minutosAtras} min)</span>
-            </p>
-          </div>
+      {/* 1. CABECERA: Título y Controles */}
+      <div className="p-3.5 bg-slate-800/90 border-b border-slate-700 flex justify-between items-center gap-2">
+        <div className="flex items-center gap-2">
+          <Eye className="w-4 h-4 text-amber-400 shrink-0" />
+          <h3 className="font-bold text-xs md:text-sm text-white tracking-wide">
+            Satélite GOES-19 • Sector México
+          </h3>
+          <span className="text-[9px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.5 rounded font-mono font-bold">
+            EN VIVO • NOAA
+          </span>
         </div>
 
-        {/* Conmutadores de Control */}
-        <div className="flex flex-wrap items-center gap-2">
-          
-          {/* Fija vs Animación */}
-          <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-700">
-            <button
-              onClick={() => {
-                setModoAnimado(false);
-                setCargando(true);
-              }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                !modoAnimado 
-                  ? 'bg-slate-800 text-white shadow' 
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <Camera className="w-3.5 h-3.5 text-slate-400" />
-              Toma Fija
-            </button>
-
-            <button
-              onClick={() => {
-                setModoAnimado(true);
-                setCargando(true);
-              }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                modoAnimado 
-                  ? 'bg-rose-600 text-white shadow-lg shadow-rose-600/30 animate-pulse' 
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <Film className="w-3.5 h-3.5 text-amber-300" />
-              Animación (Loop)
-            </button>
-          </div>
-
-          {/* Botón Ampliar */}
+        <div className="flex items-center gap-2">
           <button
-            onClick={abrirModalZoom}
-            className="flex items-center gap-1.5 text-xs bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-3 py-2 rounded-xl transition-all shadow"
+            onClick={() => setModalZoomAbierto(true)}
+            className="flex items-center gap-1 text-[11px] bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-2.5 py-1.5 rounded-lg transition-all shadow"
+            title="Ampliar a pantalla completa"
           >
             <Maximize2 className="w-3.5 h-3.5" />
-            Ampliar Pantalla Completa
+            <span className="hidden sm:inline">Ampliar</span>
           </button>
 
           <button
-            onClick={refrescarImagen}
-            className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl border border-slate-700 transition-colors"
+            onClick={refrescar}
+            className="p-1.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors border border-slate-600"
             title="Refrescar toma satelital"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${cargando ? 'animate-spin text-amber-400' : ''}`} />
@@ -173,109 +106,149 @@ export default function SatelliteViewer() {
         </div>
       </div>
 
-      {/* Selector de Canales */}
-      <div className="px-4 py-2.5 bg-slate-800/50 flex flex-wrap gap-2 border-b border-slate-700/60">
-        {canales.map((canal) => (
-          <button
-            key={canal.id}
-            onClick={() => {
-              setCanalSeleccionado(canal);
-              setCargando(true);
-            }}
-            className={`text-xs px-3.5 py-1.5 rounded-xl font-bold transition-all ${
-              canalSeleccionado.id === canal.id
-                ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
-                : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-            }`}
-          >
-            {canal.nombre}
-          </button>
-        ))}
+      {/* 2. SELECTOR DE PRODUCTOS (Los 5 Canales Oficiales GOES-19) */}
+      <div className="p-2.5 bg-slate-950/70 border-b border-slate-800 flex flex-wrap items-center gap-1.5">
+        {listaProductos.map((p) => {
+          const Icon = p.icono;
+          const activo = productoActivo.id === p.id;
+          return (
+            <button
+              key={p.id}
+              onClick={() => {
+                if (productoActivo.id !== p.id) {
+                  setProductoActivo(p);
+                  setErrorCarga(false);
+                  setCargando(true);
+                }
+              }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                activo
+                  ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20 scale-[1.02]'
+                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+              }`}
+            >
+              <Icon className="w-3.5 h-3.5" />
+              <span>{p.shortName}</span>
+            </button>
+          );
+        })}
       </div>
 
-      {/* Contenedor Principal */}
+      {/* 3. LIENZO SATELITAL ANIMADO: 100% LIMPIO • CERO OBSTRUCCIÓN DE TEXTO */}
       <div 
-        onClick={abrirModalZoom}
-        className="relative aspect-video md:aspect-[16/10] bg-black flex items-center justify-center overflow-hidden cursor-zoom-in group"
+        onClick={() => setModalZoomAbierto(true)}
+        className="relative bg-black flex items-center justify-center overflow-hidden cursor-zoom-in aspect-square sm:aspect-video w-full"
       >
-        {cargando && (
-          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-slate-950/80 gap-3">
-            <div className="w-8 h-8 border-4 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
-            <p className="text-xs text-slate-400 font-mono">
-              {modoAnimado ? 'Descargando bucle animado oficial NOAA...' : 'Sincronizando satélite NOAA...'}
-            </p>
+        {cargando && !errorCarga && (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-slate-950/90 gap-2">
+            <div className="w-7 h-7 border-3 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
+            <p className="text-[11px] text-slate-400 font-mono">Sincronizando {productoActivo.name}...</p>
           </div>
         )}
 
-        <img
-          key={urlVisible}
-          src={urlVisible}
-          alt={`Satélite GOES-16 ${canalSeleccionado.nombre}`}
-          onLoad={() => setCargando(false)}
-          className={`w-full h-full object-cover transition-opacity duration-300 ${
-            cargando ? 'opacity-0' : 'opacity-100'
-          }`}
-        />
-
-        {modoAnimado && (
-          <div className="absolute top-3 left-3 bg-rose-600/90 text-white font-mono text-[10px] font-bold px-2.5 py-1 rounded-lg shadow-lg flex items-center gap-1.5 backdrop-blur-sm">
-            <span className="w-2 h-2 rounded-full bg-white animate-ping"></span>
-            REPRODUCIENDO ÚLTIMAS HORAS (NOAA LOOP)
+        {errorCarga ? (
+          <div className="p-8 text-center text-slate-400 space-y-3">
+            <AlertCircle className="w-8 h-8 text-amber-400 mx-auto" />
+            <p className="text-xs font-bold text-white">Animación en proceso de compilación por NOAA</p>
+            <button
+              onClick={refrescar}
+              className="bg-amber-500 text-slate-950 px-3 py-1.5 rounded-lg text-xs font-bold"
+            >
+              Reintentar
+            </button>
           </div>
+        ) : (
+          <img
+            key={urlAnimacion}
+            src={urlAnimacion}
+            alt={productoActivo.name}
+            loading="lazy"
+            decoding="async"
+            onLoad={() => setCargando(false)}
+            onError={() => {
+              setCargando(false);
+              setErrorCarga(true);
+            }}
+            className={`w-full h-full object-contain transition-opacity duration-200 ${
+              cargando ? 'opacity-0' : 'opacity-100'
+            }`}
+          />
         )}
-
-        <div className="absolute top-3 right-3 bg-slate-900/85 backdrop-blur-md px-3 py-1.5 rounded-xl border border-slate-700 text-xs text-amber-300 flex items-center gap-1.5 shadow-lg">
-          <ZoomIn className="w-4 h-4" />
-          <span>Clic para ampliar a pantalla completa</span>
-        </div>
-
-        <div className="absolute bottom-2 left-2 right-2 bg-slate-900/85 backdrop-blur-md p-3 rounded-xl border border-slate-700/80 flex items-start gap-2.5 text-xs text-slate-300">
-          <Info className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-          <div>
-            <p className="font-bold text-white">
-              {canalSeleccionado.nombre} {modoAnimado && '• Bucle en Movimiento'}
-            </p>
-            <p className="text-slate-300 text-[11px] leading-relaxed">{canalSeleccionado.descripcion}</p>
-          </div>
-        </div>
       </div>
 
-      {/* MODAL DE PANTALLA COMPLETA */}
-      {modalAbierto && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-slate-950/95 backdrop-blur-md animate-fade-in text-white">
-          
-          <div className="p-4 bg-slate-900/90 border-b border-slate-800 flex flex-wrap justify-between items-center gap-3">
+      {/* 4. METADATOS Y DIAGNÓSTICO EXTERIOR (Fuera del mapa) */}
+      <div className="p-3.5 bg-slate-950/95 border-t border-slate-800 space-y-2 text-xs">
+        
+        <div className="flex flex-wrap justify-between items-center gap-2">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20">
+              <IconoProducto className="w-4 h-4" />
+            </div>
             <div>
-              <h3 className="font-black text-sm md:text-base text-white">
-                Visor Satelital NOAA GOES-16 • Sector México y Golfo
-              </h3>
-              <p className="text-[11px] text-slate-400">
-                Toma satelital de las {horaSatelital} • {canalSeleccionado.nombre}
-              </p>
+              <p className="font-bold text-white text-xs md:text-sm">{productoActivo.name}</p>
+              <p className="text-[10px] text-slate-400">Instrumento {productoActivo.type} • NOAA STAR</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5 text-[11px] font-mono bg-slate-900 px-2.5 py-1 rounded-lg border border-slate-800 text-slate-300">
+            <Clock className="w-3.5 h-3.5 text-amber-400" />
+            <span>Última pasada: <strong className="text-white">{horaSatelital}</strong> ({minutosAtras} min)</span>
+          </div>
+        </div>
+
+        <p className="text-slate-300 text-[11px] leading-relaxed pl-8">
+          {productoActivo.description}
+        </p>
+
+        <div className="pt-2 border-t border-slate-800/80 flex justify-between items-center text-[10px] text-slate-500 pl-8">
+          <span>Toca la animación para ampliar a pantalla completa.</span>
+          <a
+            href={productoActivo.officialUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-amber-400 hover:underline flex items-center gap-1 font-medium"
+          >
+            Portal Oficial NOAA <ExternalLink className="w-3 h-3" />
+          </a>
+        </div>
+
+      </div>
+
+      {/* 5. MODAL DE ZOOM A PANTALLA COMPLETA DIRECTO EN LA ANIMACIÓN */}
+      {modalZoomAbierto && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-slate-950/98 backdrop-blur-md animate-fade-in text-white">
+          
+          <div className="p-3 bg-slate-900 border-b border-slate-800 flex justify-between items-center">
+            <div className="flex items-center gap-2">
+              <IconoProducto className="w-4 h-4 text-amber-400" />
+              <div>
+                <h4 className="font-bold text-xs md:text-sm text-white">{productoActivo.name}</h4>
+                <p className="text-[10px] text-slate-400">Bucle animado continuo • Pasada de las {horaSatelital}</p>
+              </div>
             </div>
 
             <div className="flex items-center gap-2">
-              <div className="flex bg-slate-800 rounded-xl p-1 border border-slate-700">
+              <div className="flex bg-slate-800 rounded-xl p-0.5 border border-slate-700">
                 <button
                   onClick={() => setZoomNivel(prev => Math.max(1.0, prev - 0.3))}
-                  className="p-2 hover:bg-slate-700 rounded-lg text-slate-300 hover:text-white"
+                  className="p-1.5 hover:bg-slate-700 rounded-lg text-slate-300"
                   title="Alejar"
                 >
                   <ZoomOut className="w-4 h-4" />
                 </button>
-                <span className="px-3 py-1.5 text-xs font-mono font-bold text-amber-400 flex items-center">
+                <span className="px-2 py-1 text-xs font-mono font-bold text-amber-400 flex items-center">
                   {Math.round(zoomNivel * 100)}%
                 </span>
                 <button
-                  onClick={() => setZoomNivel(prev => Math.min(4.0, prev + 0.3))}
-                  className="p-2 hover:bg-slate-700 rounded-lg text-slate-300 hover:text-white"
+                  onClick={() => setZoomNivel(prev => Math.min(3.5, prev + 0.3))}
+                  className="p-1.5 hover:bg-slate-700 rounded-lg text-slate-300"
                   title="Acercar"
                 >
                   <ZoomIn className="w-4 h-4" />
                 </button>
                 <button
-                  onClick={() => setZoomNivel(1.8)}
-                  className="p-2 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-white border-l border-slate-700"
+                  onClick={() => setZoomNivel(1.6)}
+                  className="p-1.5 hover:bg-slate-700 rounded-lg text-slate-400 border-l border-slate-700"
                   title="Restablecer"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
@@ -283,43 +256,31 @@ export default function SatelliteViewer() {
               </div>
 
               <button
-                onClick={() => setModalAbierto(false)}
-                className="p-2.5 bg-rose-600/20 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-500/30 rounded-xl transition-all"
-                title="Cerrar"
+                onClick={() => setModalZoomAbierto(false)}
+                className="p-2 bg-rose-600/20 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-500/30 rounded-xl transition-all"
+                title="Cerrar visor"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
           </div>
 
-          <div className="flex-1 relative overflow-auto bg-black flex items-center justify-center p-4">
+          <div className="flex-1 relative overflow-auto bg-black flex items-center justify-center p-2">
             <div 
-              className="relative transition-transform duration-200"
-              style={{
-                transform: `scale(${zoomNivel})`,
-                transformOrigin: 'center center'
-              }}
+              className="relative transition-transform duration-200 origin-center"
+              style={{ transform: `scale(${zoomNivel})` }}
             >
               <img
-                src={`${canalSeleccionado.urlFija}?t=${timestamp}`}
-                alt="Satélite GOES-16 Pantalla Completa"
-                className="max-w-none w-[800px] md:w-[950px] h-auto select-none pointer-events-auto rounded shadow-2xl"
-                style={{ imageRendering: '-webkit-optimize-contrast' }}
+                src={urlAnimacion}
+                alt="Satélite Ampliado"
+                className="max-w-none w-[700px] md:w-[950px] h-auto rounded shadow-2xl select-none"
                 draggable={false}
               />
             </div>
           </div>
 
-          <div className="p-3 bg-slate-900 border-t border-slate-800 text-center text-xs text-slate-400 flex justify-between items-center px-6">
-            <span>Usa (+) y (-) para ajustar el tamaño. La imagen muestra la cobertura de nubes real sobre el país.</span>
-            <a 
-              href={canalSeleccionado.urlOficialNOAA} 
-              target="_blank" 
-              rel="noreferrer" 
-              className="text-amber-400 hover:underline flex items-center gap-1 font-medium"
-            >
-              Portal Oficial NOAA STAR <ExternalLink className="w-3 h-3" />
-            </a>
+          <div className="p-2.5 bg-slate-900 border-t border-slate-800 text-[11px] text-slate-400 text-center">
+            Inspección animada continua en alta definición.
           </div>
 
         </div>
