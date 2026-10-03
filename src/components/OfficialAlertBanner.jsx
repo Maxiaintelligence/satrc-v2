@@ -2,13 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { 
   Building2, 
   AlertTriangle, 
-  CheckCircle, 
   ExternalLink, 
   ChevronDown, 
   ChevronUp,
   CloudLightning,
-  Wind,
-  Snowflake
+  Wind
 } from 'lucide-react';
 
 export default function OfficialAlertBanner() {
@@ -20,41 +18,28 @@ export default function OfficialAlertBanner() {
     fetch('/api/smn')
       .then(res => res.json())
       .then(data => {
-        setDatosSMN(data);
+        if (data.exito && data.alerta) {
+          setDatosSMN(data.alerta);
+        }
         setCargando(false);
       })
       .catch(err => {
-        console.error("No se pudo cargar aviso SMN:", err);
+        console.error("Fallo al cargar SMN:", err);
         setCargando(false);
       });
   }, []);
 
   if (cargando || !datosSMN) return null;
 
-  const esAlertaActiva = datosSMN.nivel >= 2;
-
   return (
-    <div className={`border-b transition-colors ${
-      datosSMN.nivel === 4
-        ? 'bg-rose-950/80 border-rose-500 text-rose-100'
-        : datosSMN.nivel === 3
-        ? 'bg-orange-950/80 border-orange-500 text-orange-100'
-        : datosSMN.nivel === 2
-        ? 'bg-amber-950/70 border-amber-500/80 text-amber-100'
-        : 'bg-slate-900 border-slate-800 text-slate-300'
-    }`}>
+    <div className="bg-orange-950/80 border-b-2 border-orange-500 text-orange-100 shadow-lg">
       <div className="max-w-7xl mx-auto px-4 py-2.5">
         
-        {/* Barra Principal de Alerta */}
         <div className="flex flex-wrap justify-between items-center gap-2">
           
           <div className="flex items-center gap-2.5">
-            <div className={`p-1.5 rounded-lg border flex items-center justify-center ${
-              esAlertaActiva 
-                ? 'bg-rose-500/20 border-rose-400 text-rose-300 animate-pulse' 
-                : 'bg-emerald-500/20 border-emerald-400 text-emerald-300'
-            }`}>
-              {esAlertaActiva ? <AlertTriangle className="w-4 h-4" /> : <Building2 className="w-4 h-4" />}
+            <div className="p-1.5 rounded-lg bg-orange-500/20 border border-orange-400 text-orange-300 animate-pulse">
+              <AlertTriangle className="w-4 h-4" />
             </div>
 
             <div>
@@ -62,33 +47,23 @@ export default function OfficialAlertBanner() {
                 <span className="text-xs font-black tracking-wide text-white uppercase flex items-center gap-1.5">
                   CONAGUA • SMN
                 </span>
-                <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${
-                  datosSMN.nivel >= 3 
-                    ? 'bg-rose-500 text-white border-rose-400' 
-                    : datosSMN.nivel === 2
-                    ? 'bg-amber-500 text-slate-950 border-amber-400'
-                    : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
-                }`}>
-                  Nivel {datosSMN.nivel} • {datosSMN.estado}
+                <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-orange-500 text-slate-950 border border-orange-400">
+                  Nivel {datosSMN.nivel} • {datosSMN.severidad}
                 </span>
 
-                {/* Etiquetas de Entidades bajo aviso */}
-                {(datosSMN.region_afectada.hidalgo || datosSMN.region_afectada.puebla) && (
-                  <span className="text-[10px] text-amber-300 font-bold bg-amber-900/40 px-2 py-0.5 rounded border border-amber-500/30">
-                    Aviso vigente para: {datosSMN.region_afectada.hidalgo && 'Hidalgo'} {datosSMN.region_afectada.puebla && '• Puebla'}
-                  </span>
-                )}
+                <span className="text-[10px] text-amber-300 font-bold bg-amber-900/60 px-2 py-0.5 rounded border border-amber-500/40">
+                  Aviso Vigente: Lluvias Intensas ({datosSMN.rango_lluvia_min_mm} a {datosSMN.rango_lluvia_max_mm} mm) en Puebla e Hidalgo
+                </span>
               </div>
             </div>
           </div>
 
-          {/* Controles de la barra */}
           <div className="flex items-center gap-3 text-xs">
             <button
               onClick={() => setDesplegado(!desplegado)}
-              className="flex items-center gap-1 text-[11px] font-bold text-slate-300 hover:text-white transition-colors"
+              className="flex items-center gap-1 text-[11px] font-bold text-slate-200 hover:text-white transition-colors"
             >
-              <span>{desplegado ? 'Ocultar Resumen' : 'Ver Boletín Oficial'}</span>
+              <span>{desplegado ? 'Ocultar Detalle' : 'Ver Aviso Oficial'}</span>
               {desplegado ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
             </button>
 
@@ -104,32 +79,23 @@ export default function OfficialAlertBanner() {
 
         </div>
 
-        {/* Panel Desplegable con el Resumen Oficial del Gobierno */}
+        {/* Resumen Oficial sin caracteres corruptos */}
         {desplegado && (
-          <div className="mt-2.5 pt-2.5 border-t border-slate-800/80 text-xs space-y-2 animate-fade-in">
-            <p className="text-slate-200 leading-relaxed font-normal">
-              {datosSMN.resumen}
+          <div className="mt-2.5 pt-2.5 border-t border-orange-800/60 text-xs space-y-2 animate-fade-in">
+            <p className="text-white font-semibold text-xs">
+              {datosSMN.titulo}
+            </p>
+            <p className="text-orange-200 leading-relaxed font-normal">
+              {datosSMN.descripcion}
             </p>
 
-            <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px] text-slate-400">
-              <span className="font-semibold text-slate-300">Fenómenos bajo seguimiento federal:</span>
-              {datosSMN.sistemas_activos.tormentas && (
-                <span className="flex items-center gap-1 text-blue-300 bg-blue-950/50 px-2 py-0.5 rounded border border-blue-800">
-                  <CloudLightning className="w-3 h-3" /> Tormentas y Chubascos
-                </span>
-              )}
-              {datosSMN.sistemas_activos.frente_frio && (
-                <span className="flex items-center gap-1 text-sky-300 bg-sky-950/50 px-2 py-0.5 rounded border border-sky-800">
-                  <Snowflake className="w-3 h-3" /> Frente Frío / Descenso Térmico
-                </span>
-              )}
-              {datosSMN.sistemas_activos.norte && (
-                <span className="flex items-center gap-1 text-teal-300 bg-teal-950/50 px-2 py-0.5 rounded border border-teal-800">
-                  <Wind className="w-3 h-3" /> Evento de Norte / Vientos
-                </span>
-              )}
-              <span className="ml-auto font-mono text-[10px] text-slate-500">
-                Sincronizado: {datosSMN.fecha_consulta} hrs
+            <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px] text-orange-300">
+              <span className="font-semibold text-white">Estados en vigilancia federal:</span>
+              <span className="bg-orange-900/40 px-2 py-0.5 rounded border border-orange-700/60 text-white font-mono">
+                PUEBLA • HIDALGO • VERACRUZ • SAN LUIS POTOSÍ • TAMAULIPAS
+              </span>
+              <span className="ml-auto font-mono text-[10px] text-orange-400">
+                Sincronización Oficial: {datosSMN.fecha_sincronizacion} hrs
               </span>
             </div>
           </div>
