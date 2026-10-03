@@ -1,0 +1,18 @@
+{
+  "name": "SatRC V2.0 - Sistema de Alerta Temprana",
+  "short_name": "SatRC V2",
+  "description": "Sistema de Alerta Temprana y Riesgos Climáticos de Cáritas Pastoral Social (Arquidiócesis de Tulancingo)",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#020617",
+  "theme_color": "#020617",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
