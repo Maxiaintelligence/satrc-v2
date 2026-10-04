@@ -5,7 +5,7 @@ import { MapPin, ExternalLink } from 'lucide-react';
 function ControladorCamara({ centro, zoom }) {
   const map = useMap();
   useEffect(() => {
-    if (centro) {
+    if (centro && Array.isArray(centro) && centro.length === 2 && !isNaN(centro[0]) && !isNaN(centro[1])) {
       map.flyTo(centro, zoom, { duration: 1.2 });
     }
   }, [centro, zoom, map]);
@@ -14,12 +14,15 @@ function ControladorCamara({ centro, zoom }) {
 
 export default function RiskMap({ evaluaciones, localidadFoco, alSeleccionarLocalidad }) {
   const centroPorDefecto = [20.0806, -98.3681];
-  const zoomPorDefecto = 10;
+  const zoomPorDefecto = 9;
 
   const calcularCentro = () => {
     if (!evaluaciones || evaluaciones.length === 0) return centroPorDefecto;
-    const lats = evaluaciones.map(e => e.donde.coordenadas.lat);
-    const lons = evaluaciones.map(e => e.donde.coordenadas.lon);
+    const itemsValidos = evaluaciones.filter(e => e?.donde?.coordenadas?.lat || e?.geografia?.coordenadas?.lat);
+    if (!itemsValidos.length) return centroPorDefecto;
+
+    const lats = itemsValidos.map(e => e.donde?.coordenadas?.lat ?? e.geografia?.coordenadas?.lat);
+    const lons = itemsValidos.map(e => e.donde?.coordenadas?.lon ?? e.geografia?.coordenadas?.lon);
     const mediaLat = lats.reduce((a, b) => a + b, 0) / lats.length;
     const mediaLon = lons.reduce((a, b) => a + b, 0) / lons.length;
     return [mediaLat, mediaLon];
@@ -28,7 +31,7 @@ export default function RiskMap({ evaluaciones, localidadFoco, alSeleccionarLoca
   const centroActual = calcularCentro();
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl">
+    <div className="bg-slate-900 border-2 border-slate-800 rounded-2xl overflow-hidden shadow-2xl">
       
       {/* Cabecera del Mapa */}
       <div className="p-4 bg-slate-800/90 border-b border-slate-700 flex flex-wrap justify-between items-center gap-3">
@@ -36,27 +39,24 @@ export default function RiskMap({ evaluaciones, localidadFoco, alSeleccionarLoca
           <MapPin className="w-5 h-5 text-amber-400" />
           <div>
             <h3 className="font-bold text-sm md:text-base text-white">
-              Cartografía Táctica de Amenazas Comunitarias
+              Cartografía Táctica de Comunidades Prioritarias
             </h3>
             <p className="text-[11px] text-slate-400">
-              Ubicación georreferenciada de las comunidades en monitoreo activo
+              Ubicación georreferenciada de focos activos en la Arquidiócesis
             </p>
           </div>
         </div>
 
-        {/* Leyenda del Semáforo */}
+        {/* Leyenda de Semáforo */}
         <div className="flex items-center gap-2 text-[10px] font-bold">
-          <span className="flex items-center gap-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full">
-            <span className="w-2 h-2 rounded-full bg-emerald-400"></span> N1 Normal
+          <span className="flex items-center gap-1 bg-rose-500/20 text-rose-400 border border-rose-500/30 px-2 py-0.5 rounded-full">
+            <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span> N4 Emergencia
           </span>
-          <span className="flex items-center gap-1 bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded-full">
-            <span className="w-2 h-2 rounded-full bg-amber-400"></span> N2 Vigilancia
-          </span>
-          <span className="flex items-center gap-1 bg-orange-500/10 text-orange-400 border border-orange-500/20 px-2 py-0.5 rounded-full">
+          <span className="flex items-center gap-1 bg-orange-500/20 text-orange-400 border border-orange-500/30 px-2 py-0.5 rounded-full">
             <span className="w-2 h-2 rounded-full bg-orange-400"></span> N3 Alerta
           </span>
-          <span className="flex items-center gap-1 bg-rose-500/10 text-rose-400 border border-rose-500/20 px-2 py-0.5 rounded-full">
-            <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span> N4 Emergencia
+          <span className="flex items-center gap-1 bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded-full">
+            <span className="w-2 h-2 rounded-full bg-amber-400"></span> N2 Vigilancia
           </span>
         </div>
       </div>
@@ -69,7 +69,6 @@ export default function RiskMap({ evaluaciones, localidadFoco, alSeleccionarLoca
           scrollWheelZoom={false}
           className="h-full w-full"
         >
-          {/* Capa Humanitaria OpenStreetMap HOT: 100% Libre, Cero API Key, Sin Marcas de Agua */}
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, Humanitarian OpenStreetMap Team'
             url="https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png"
@@ -78,17 +77,17 @@ export default function RiskMap({ evaluaciones, localidadFoco, alSeleccionarLoca
 
           <ControladorCamara centro={centroActual} zoom={zoomPorDefecto} />
 
-          {evaluaciones.map((item) => {
-            const { lat, lon } = item.donde.coordenadas;
-            if (!lat || !lon) return null;
+          {evaluaciones && evaluaciones.map((item) => {
+            const coords = item?.donde?.coordenadas || item?.geografia?.coordenadas;
+            if (!coords?.lat || !coords?.lon) return null;
 
             const esFoco = localidadFoco?.localidad_id === item.localidad_id;
 
             return (
               <CircleMarker
                 key={item.localidad_id}
-                center={[lat, lon]}
-                radius={esFoco ? 12 : (item.nivel_alerta >= 3 ? 9 : 6)}
+                center={[coords.lat, coords.lon]}
+                radius={esFoco ? 13 : (item.nivel_alerta === 4 ? 10 : (item.nivel_alerta === 3 ? 8 : 5))}
                 pathOptions={{
                   fillColor: item.color_alerta,
                   fillOpacity: esFoco ? 0.95 : 0.85,
@@ -121,28 +120,28 @@ export default function RiskMap({ evaluaciones, localidadFoco, alSeleccionarLoca
 
                     <div className="bg-slate-100 p-2 rounded-lg text-[10px] space-y-1 mb-2">
                       <div className="flex justify-between">
-                        <span className="text-slate-500">Relieve:</span>
-                        <span className="font-bold text-slate-800">{item.donde.tipo_relieve} ({item.donde.pendiente_max_grados}°)</span>
+                        <span className="text-slate-500">Diagnóstico:</span>
+                        <span className="font-bold text-slate-800">{item.diagnostico?.titulo || item.que?.evento}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-slate-500">Población:</span>
-                        <span className="font-bold text-slate-800">{item.tamano_impacto.poblacion_directa.toLocaleString()} hab.</span>
+                        <span className="text-slate-500">Saturación Suelo:</span>
+                        <span className="font-bold text-rose-700">{item.impactoSistemico?.saturacionTotalSueloMm || item.tamano_impacto?.lluvia_acumulada_24h_mm} mm</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-slate-500">Acceso:</span>
-                        <span className="font-bold text-amber-700">{item.tamano_impacto.tipo_acceso}</span>
+                        <span className="font-bold text-amber-700">{item.impactoSistemico?.accesoVial || item.tamano_impacto?.tipo_acceso}</span>
                       </div>
                     </div>
 
-                    <p className="text-[10px] font-semibold text-rose-700 mb-2 leading-tight">
-                      ⚠️ {item.que.evento}
+                    <p className="text-[10px] italic text-amber-800 mb-2">
+                      {item.protocolo || "Consulte al coordinador de Cáritas"}
                     </p>
 
                     <button
                       onClick={() => alSeleccionarLocalidad(item)}
                       className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-1.5 px-2 rounded-md text-[10px] flex items-center justify-center gap-1 transition-colors"
                     >
-                      Auditar Ficha Completa <ExternalLink className="w-3 h-3 text-amber-400" />
+                      Enfocar en Pantalla <ExternalLink className="w-3 h-3 text-amber-400" />
                     </button>
                   </div>
                 </Popup>
@@ -153,8 +152,8 @@ export default function RiskMap({ evaluaciones, localidadFoco, alSeleccionarLoca
       </div>
 
       <div className="p-3 bg-slate-950/80 text-xs text-slate-400 flex justify-between items-center px-4 border-t border-slate-800">
-        <span>Haz clic en cualquier punto para ver el diagnóstico territorial de esa comunidad.</span>
-        <span className="font-mono text-slate-500">OpenStreetMap Humanitarian • WGS84</span>
+        <span>Haz clic en cualquier punto para enfocar la comunidad en la ficha ejecutiva.</span>
+        <span className="font-mono text-slate-500">OpenStreetMap Humanitario • WGS84</span>
       </div>
 
     </div>

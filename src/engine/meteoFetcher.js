@@ -1,18 +1,11 @@
 /**
- * SatRC V2.0 - Core Engine: Conector Multi-Modelo Determinista
- * Consulta simultánea a ECMWF, GFS e ICON para un horizonte de 72 horas.
+ * SatRC V2.0 - Core Engine: Conector Multi-Modelo con Memoria Hídrica (7 días previos)
+ * Consulta lluvia acumulada pasada (past_days=7) + pronóstico 72h (forecast_days=3).
  */
 
 const OPEN_METEO_BASE = "https://api.open-meteo.com/v1/forecast";
 
-/**
- * Consulta pronóstico horario determinista para una coordenada (lat, lon)
- * @param {number} lat Latitud decimal
- * @param {number} lon Longitud decimal
- * @returns {Promise<Object>} Datos horarios crudos de los 3 modelos
- */
 export async function consultarModelosDeterministas(lat, lon) {
-  // Parámetros horarios requeridos para alimentar los 5 vectores
   const variables = [
     "precipitation",
     "temperature_2m",
@@ -22,12 +15,13 @@ export async function consultarModelosDeterministas(lat, lon) {
     "weather_code"
   ].join(",");
 
-  // Modelos oficiales: ECMWF IFS, GFS y DWD ICON
   const modelos = ["ecmwf_ifs025", "gfs_seamless", "icon_seamless"].join(",");
 
+  // past_days=7 nos da la memoria del suelo real de la última semana
   const url = `${OPEN_METEO_BASE}?latitude=${lat}&longitude=${lon}` +
               `&hourly=${variables}` +
               `&models=${modelos}` +
+              `&past_days=7` +
               `&forecast_days=3` +
               `&timezone=America%2FMexico_City`;
 

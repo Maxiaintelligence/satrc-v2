@@ -1,6 +1,7 @@
 /**
- * SatRC V2.0 - Core Engine: Evaluador de Amenazas Riguroso
- * Integra la Regla de Máxima Protección (SMN CAP) y Factor de Amplificación Orográfica.
+ * SatRC V2.0 - Core Engine: Sistema Experto de Interpretación y Asesoría Geofísica (SEIAG)
+ * Implementa API corregido (k=0.85), S_suelo sin doble conteo, Wind Chill desacoplado,
+ * visibilidad por niebla, viento sostenido y riesgo fluvial de cañada (Caso Huehuetla).
  */
 
 function calcularUmbralDeslave(localidad) {
@@ -11,131 +12,242 @@ function calcularUmbralDeslave(localidad) {
   if (relieve === 'LADERA') factorRelieve = 15;
   else if (relieve === 'LOMA') factorRelieve = 8;
 
-  // Umbral físico: a mayor pendiente y ladera, menor agua necesaria para desprender
+  // Umbral geomecánico calibrado: a mayor pendiente y ladera, menor agua detonante
   const umbral = 65 - (pendiente * 0.85) - factorRelieve;
   return Math.max(12, parseFloat(umbral.toFixed(1)));
 }
 
 /**
- * Evalúa la amenaza para una localidad cruzando la física del terreno con los modelos y el SMN
- * @param {Object} localidad Datos del CSV
- * @param {Array<Object>} serieHoraria Pronóstico numérico de 24h
- * @param {Object} contexto Contexto hidrológico y alertas oficiales del SMN
+ * P1 & P2: Calcula el API de los 7 días previos estrictos (d = 1 a 7)
+ * con decaimiento diario k = 0.85 sobre precipitación diaria acumulada.
+ */
+function calcularAPI7DiasPrevios(serieHoraria) {
+  if (!serieHoraria || serieHoraria.length < 168) return 25.0; // Valor base si no hay historial
+
+  // Las primeras 168 horas representan estrictamente los 7 días previos al evento actual
+  const horasPrevias = serieHoraria.slice(0, 168);
+  let api = 0;
+
+  for (let d = 1; d <= 7; d++) {
+    const inicioDia = (d - 1) * 24;
+    const finDia = d * 24;
+    // Precipitación diaria en mm/día
+    const lluviaDiaria = horasPrevias.slice(inicioDia, finDia).reduce((acc, h) => acc + (h.lluvia_mm || 0), 0);
+    // Factor (0.85)^d donde ayer (d=1) retiene 85% y hace 7 días retiene (0.85)^7
+    const pesoDecaimiento = Math.pow(0.85, 8 - d);
+    api += (lluviaDiaria * pesoDecaimiento);
+  }
+
+  return parseFloat(api.toFixed(1));
+}
+
+/**
+ * Evaluación Geofísica Individual Rigurosa
  */
 export function evaluarLocalidad(localidad, serieHoraria, contexto = {}) {
   const umbralDeslave = calcularUmbralDeslave(localidad);
-  
-  // 1. Detección de Alerta Federal Activa del SMN para esta comunidad
-  const alertaFederalSMN = contexto.alertaSMN || null;
-  const esEstadoBajoAlertaFederal = alertaFederalSMN && (
-    (localidad.estado.toLowerCase().includes('puebla') && alertaFederalSMN.estados_afectados?.includes('PUE')) ||
-    (localidad.estado.toLowerCase().includes('hidalgo') && alertaFederalSMN.estados_afectados?.includes('HGO')) ||
-    (localidad.estado.toLowerCase().includes('veracruz') && alertaFederalSMN.estados_afectados?.includes('VER'))
-  );
 
-  // 2. Factor de Amplificación Orográfica en la Sierra Madre Oriental
-  // Los modelos globales diluyen la lluvia en cuadrículas planas de 20 km.
-  // En laderas de montaña con pendiente > 25°, la condensación orográfica real es 2x a 3x superior.
-  const esLaderaCritica = localidad.topografia.pendiente_max_deg >= 20 || localidad.topografia.relieve === 'LADERA';
-  const factorOrografico = esLaderaCritica ? 2.2 : 1.0;
+  // 1. Memoria hídrica sin doble conteo: API de días 1 a 7 previos
+  const apiPrevio = calcularAPI7DiasPrevios(serieHoraria);
 
-  let lluvia24hCalculada = 0;
+  // 2. Evento actual en curso (Día actual t=0 / próximas 24h)
+  const eventoActual = (serieHoraria && serieHoraria.length > 168) 
+    ? serieHoraria.slice(168, 192) 
+    : (serieHoraria?.slice(0, 24) || []);
+
+  let lluviaEventoActual24h = 0;
   let lluviaMaxHoraria = 0;
   let horaPico = null;
   let horaInicio = null;
   let tempMinima = 99;
+  let vientoSostenidoMax = 0;
+  let rafagaMaxima = 0;
+  let visibilidadMinKm = 10;
 
-  for (let i = 0; i < Math.min(24, serieHoraria.length); i++) {
-    const h = serieHoraria[i];
-    // Se aplica la corrección orográfica si es zona de ladera
-    const lluviaRealEstimada = h.lluvia_mm * factorOrografico;
-    lluvia24hCalculada += lluviaRealEstimada;
-
-    if (lluviaRealEstimada > lluviaMaxHoraria) {
-      lluviaMaxHoraria = parseFloat(lluviaRealEstimada.toFixed(1));
+  eventoActual.forEach(h => {
+    const ll = h.lluvia_mm || 0;
+    lluviaEventoActual24h += ll;
+    if (ll > lluviaMaxHoraria) {
+      lluviaMaxHoraria = ll;
       horaPico = h.fecha_hora;
     }
-
-    if (lluviaRealEstimada >= 1.0 && !horaInicio) {
+    if (ll >= 1.0 && !horaInicio) {
       horaInicio = h.fecha_hora;
     }
-
-    if (h.temperatura_c < tempMinima) {
+    if (h.temperatura_c !== undefined && h.temperatura_c < tempMinima) {
       tempMinima = h.temperatura_c;
     }
-  }
+    if (h.wind_speed_10m && h.wind_speed_10m > vientoSostenidoMax) {
+      vientoSostenidoMax = h.wind_speed_10m;
+    }
+    if (h.rafagas_kmh && h.rafagas_kmh > rafagaMaxima) {
+      rafagaMaxima = h.rafagas_kmh;
+    }
+    if (h.visibility !== undefined) {
+      const visKm = h.visibility / 1000;
+      if (visKm < visibilidadMinKm) visibilidadMinKm = visKm;
+    }
+  });
 
-  // Si hay alerta federal oficial de 75 a 150 mm, el piso de lluvia adoptado es el del SMN
-  const lluviaAdoptada24h = esEstadoBajoAlertaFederal 
-    ? Math.max(lluvia24hCalculada, alertaFederalSMN.rango_lluvia_min_mm || 75)
-    : lluvia24hCalculada;
+  // Homologación ascendente con Aviso Federal del SMN
+  const alertaSMN = contexto.alertaSMN;
+  const bajoAvisoFederal = alertaSMN && (
+    (localidad.estado.toLowerCase().includes('puebla') && alertaSMN.estados_afectados?.includes('PUE')) ||
+    (localidad.estado.toLowerCase().includes('hidalgo') && alertaSMN.estados_afectados?.includes('HGO'))
+  );
 
-  // 3. Determinación Rigurosa de Niveles de Alerta (1 a 4)
+  const lluviaEfectiva24h = bajoAvisoFederal
+    ? Math.max(lluviaEventoActual24h, alertaSMN.rango_lluvia_min_mm || 75)
+    : lluviaEventoActual24h;
+
+  // Saturación total del suelo: Memoria días previos (t-1 a t-7) + Evento actual (t=0)
+  const saturacionTotalSuelo = parseFloat((apiPrevio + lluviaEfectiva24h).toFixed(1));
+
+  // Parámetros Físicos y Sociales del CSV
+  const pendiente = localidad.topografia.pendiente_max_deg || 0;
+  const relieve = localidad.topografia.relieve || 'MESETA';
+  const esLadera = relieve === 'LADERA' || pendiente >= 25;
+  const distRio = localidad.hidrologia.distancia_cauce_km || 99;
+  const twi = localidad.topografia.twi || 0;
+  const posHidro = localidad.hidrologia.posicion || 'BAJA';
+  const poblacionAguasArriba = localidad.hidrologia.poblacion_aguas_arriba || 0;
+  const accesoVial = localidad.vulnerabilidad.acceso_vial || 'CARRETERA_ESTATAL';
+  const esTerraceriaOBrecha = accesoVial === 'CAMINO_TERRACERIA' || accesoVial === 'BRECHA';
+  const esMarginacionAlta = localidad.vulnerabilidad.marginacion === 'ALTO' || localidad.vulnerabilidad.marginacion === 'MUY ALTO';
+  const distHospital = localidad.vulnerabilidad.dist_hospital_km || 0;
+  const altitud = localidad.topografia.altitud_msnm || 0;
+
+  // Nivel y Diagnóstico Geofísico
   let nivelAlerta = 1;
-  let queSucede = {
-    vector: "HIDROMETEOROLOGICO",
-    evento: "CONDICIONES_ESTABLES",
-    descripcion: "Sin amenazas significativas previstas en el periodo."
+  let diagnostico = {
+    titulo: "Condiciones de Estabilidad Atmosférica y Geofísica",
+    causa: "Suelo con capacidad de absorción y cauces en nivel base.",
+    tipoAmenaza: "ESTABLE"
   };
 
-  // CASO A: Homologación con Alerta Severa del SMN (75 a 150 mm)
-  if (esEstadoBajoAlertaFederal) {
-    if (esLaderaCritica && localidad.topografia.pendiente_max_deg >= 35) {
-      nivelAlerta = 4; // Emergencia por pendiente extrema bajo temporal federal
-      queSucede = {
-        vector: "HIDROMETEOROLOGICO",
-        evento: "ALERTA_MÁXIMA_POR_DESLAVE_Y_LLUVIA_TORRENCIAL",
-        descripcion: `Bajo Aviso Federal de CONAGUA/SMN (${alertaFederalSMN.titulo}): Previsión de 75 a 150 mm en pendiente de ${localidad.topografia.pendiente_max_deg}°. Peligro crítico de deslizamiento de ladera e incomunicación.`
+  // --- REGLAS DE VIENTO Y VISIBILIDAD (O4 & P4) ---
+  if (vientoSostenidoMax >= 60 || rafagaMaxima >= 75) {
+    nivelAlerta = Math.max(nivelAlerta, 4);
+    diagnostico = {
+      titulo: "Vientos Severos y Ráfagas Destructivas",
+      causa: `Ráfagas de ${rafagaMaxima} km/h (sostenido ${vientoSostenidoMax} km/h). Peligro de desprendimiento de techumbres y caída de cableado eléctrico.`,
+      tipoAmenaza: "VIENTO_SEVERO"
+    };
+  } else if (vientoSostenidoMax >= 40 || rafagaMaxima >= 55) {
+    nivelAlerta = Math.max(nivelAlerta, 3);
+    diagnostico = {
+      titulo: "Viento Fuerte con Riesgo de Afectación Ligera",
+      causa: `Ráfagas de ${rafagaMaxima} km/h con oleaje en embalses y riesgo de caída de ramas en caminos serranos.`,
+      tipoAmenaza: "VIENTO_FUERTE"
+    };
+  }
+
+  // Niebla densa orográfica (P4)
+  if (visibilidadMinKm < 0.5 && nivelAlerta < 3) {
+    nivelAlerta = 3;
+    diagnostico = {
+      titulo: "Niebla Densa con Visibilidad Nula en Carreteras",
+      causa: `Bancos de niebla espesa (< 500 m). Ceguera de tránsito en puertos y curvas de montaña.`,
+      tipoAmenaza: "NIEBLA_CRITICA"
+    };
+  }
+
+  // --- REGLAS DE FRÍO Y WIND CHILL DESACOPLADAS (O1 & P3) ---
+  if (altitud >= 2100) {
+    // Regla C: Combinada extrema
+    if (tempMinima <= 0.0 && rafagaMaxima >= 50) {
+      nivelAlerta = 4;
+      diagnostico = {
+        titulo: "Emergencia por Helada Severa con Viento Helado (Wind Chill)",
+        causa: `Temperatura de ${tempMinima}°C con ráfagas de ${rafagaMaxima} km/h. Hipotermia crítica inmediata y congelamiento de superficies.`,
+        tipoAmenaza: "WIND_CHILL_EXTREMO"
       };
-    } else {
-      nivelAlerta = 3; // Alerta Temprana obligatoria
-      queSucede = {
-        vector: "HIDROMETEOROLOGICO",
-        evento: "TEMPORAL_SEVERO_OFICIAL_SMN",
-        descripcion: `Aviso oficial de CONAGUA/SMN vigente: Lluvias puntuales intensas (75 a 150 mm) por Frente Frío y circulación ciclónica. Riesgo de encharcamientos severos y crecidas.`
+    }
+    // Regla A: Frío puro / Helada estática
+    else if (tempMinima <= -3.0) {
+      nivelAlerta = Math.max(nivelAlerta, 4);
+      diagnostico = {
+        titulo: "Helada Severa y Congelamiento",
+        causa: `Descenso térmico a ${tempMinima}°C a ${altitud} msnm. Alto impacto en salud de niños/adultos mayores y mortandad agropecuaria.`,
+        tipoAmenaza: "HELADA_NEGRA"
+      };
+    } else if (tempMinima <= 0.0) {
+      nivelAlerta = Math.max(nivelAlerta, 3);
+      diagnostico = {
+        titulo: "Helada y Descenso Térmico Crítico",
+        causa: `Mínima de ${tempMinima}°C a ${altitud} msnm con riesgo de escarcha y afectación respiratoria.`,
+        tipoAmenaza: "HELADA"
+      };
+    }
+    // Regla B: Wind Chill moderado
+    else if (tempMinima <= 4.0 && rafagaMaxima >= 50) {
+      nivelAlerta = Math.max(nivelAlerta, 3);
+      diagnostico = {
+        titulo: "Estrés Térmico Severo por Viento",
+        causa: `Sensación térmica bajo cero debido a ráfagas de ${rafagaMaxima} km/h con temperatura de ${tempMinima}°C.`,
+        tipoAmenaza: "STRESS_TERMICO"
       };
     }
   }
-  // CASO B: Deslave por Modelo Numérico Orográfico Local
-  else if (esLaderaCritica && lluviaAdoptada24h >= umbralDeslave) {
-    nivelAlerta = lluviaAdoptada24h >= (umbralDeslave * 1.3) ? 4 : 3;
-    queSucede = {
-      vector: "HIDROMETEOROLOGICO",
-      evento: "DESLAVE_Y_FLUJO_DETRITOS",
-      descripcion: `Lluvia acumulada (${lluviaAdoptada24h.toFixed(1)} mm) supera el umbral crítico local (${umbralDeslave} mm) en pendiente de ${localidad.topografia.pendiente_max_deg}°. Suelo saturado con riesgo de desprendimiento.`
-    };
+
+  // --- ESCENARIO 1: DESLAVE POR SATURACIÓN DE SUELO Y PENDIENTE ---
+  if (esLadera && saturacionTotalSuelo >= 65.0) {
+    if (pendiente >= 35 || (saturacionTotalSuelo >= 100.0 && esMarginacionAlta)) {
+      nivelAlerta = 4;
+      diagnostico = {
+        titulo: "Peligro Crítico de Deslave y Remoción en Masa",
+        causa: `Suelo saturado al límite geomecánico (${saturacionTotalSuelo} mm acumulados: ${apiPrevio} mm previos + ${lluviaEfectiva24h} mm hoy) sobre ladera de ${pendiente}°. Falla inminente de talud habitado.`,
+        tipoAmenaza: "DESLAVE_CRITICO"
+      };
+    } else {
+      nivelAlerta = Math.max(nivelAlerta, 3);
+      diagnostico = {
+        titulo: "Saturación Crítica de Terreno en Pendiente",
+        causa: `Acumulado hídrico de ${saturacionTotalSuelo} mm debilita la cohesión en ladera de ${pendiente}°. Probabilidad de caída de rocas y deslaves menores.`,
+        tipoAmenaza: "DESLAVE_MODERADO"
+      };
+    }
   }
-  // CASO C: Cascada Hidrológica aguas abajo
-  else if (contexto.lluvia_cabecera_mm >= 45 && localidad.hidrologia.posicion === 'BAJA') {
-    nivelAlerta = contexto.lluvia_cabecera_mm >= 80 ? 4 : 3;
-    queSucede = {
-      vector: "HIDROMETEOROLOGICO",
-      evento: "CRECIDA_FLUVIAL_EN_CASCADA",
-      descripcion: `Aporte torrencial en la cabecera de la subcuenca ${localidad.hidrologia.subcuenca_nom}. Crecida en tránsito hacia planicie ribereña.`
-    };
+
+  // --- ESCENARIO 2: DESBORDAMIENTO FLUVIAL EN CAÑADA (Caso Huehuetla) ---
+  const riesgoFluvial = (distRio <= 0.8) && (twi >= 12.0) && (lluviaEfectiva24h >= 25.0 || contexto.lluvia_cabecera_mm >= 45.0);
+  if (riesgoFluvial) {
+    const severidadFluvial = (lluviaEfectiva24h >= 60.0 || poblacionAguasArriba >= 40000) ? 4 : 3;
+    if (severidadFluvial >= nivelAlerta) {
+      nivelAlerta = severidadFluvial;
+      diagnostico = {
+        titulo: "Riesgo de Desbordamiento e Inundación Ribereña",
+        causa: `Comunidad en ribera activa a ${distRio} km del cauce en zona de convergencia de flujo (TWI ${twi}). Crecida en tránsito con aporte de ${poblacionAguasArriba.toLocaleString()} hab. aguas arriba.`,
+        tipoAmenaza: "INUNDACION_FLUVIAL"
+      };
+    }
   }
-  // CASO D: Lluvia moderada ordinaria
-  else if (lluviaAdoptada24h >= 8.0) {
-    nivelAlerta = 2; // Vigilancia
-    queSucede = {
-      vector: "HIDROMETEOROLOGICO",
-      evento: "VIGILANCIA_POR_PRECIPITACIÓN",
-      descripcion: `Lluvia continua con acumulado de ${lluviaAdoptada24h.toFixed(1)} mm. Mantener vigilancia preventiva en cañadas y pasos a desnivel.`
+
+  // --- ESCENARIO 3: AISLAMIENTO VIAL POR TEMPORAL PROLONGADO ---
+  const riesgoCorteVial = esTerraceriaOBrecha && (lluviaEfectiva24h >= 20.0 || saturacionTotalSuelo >= 50.0);
+  if (riesgoCorteVial && nivelAlerta < 3) {
+    nivelAlerta = 3;
+    diagnostico = {
+      titulo: "Amenaza de Incomunicación y Corte de Acceso",
+      causa: `Vía única de terracería/brecha vulnerable a corte total por zanjas de lodo. Distancia a hospital de ${distHospital} km sin paso garantizado.`,
+      tipoAmenaza: "CORTE_VIAL"
     };
   }
 
-  // Tiempos y Ventanas
-  const tc = localidad.hidrologia.tc_horas || 6;
-  const horaImpactoCresta = horaPico ? new Date(new Date(horaPico).getTime() + (tc * 3600000)).toISOString() : null;
-
-  // Dimensión e Incomunicación
-  const esAccesoVulnerable = localidad.vulnerabilidad.acceso_vial === 'BRECHA' || localidad.vulnerabilidad.acceso_vial === 'CAMINO_TERRACERIA';
-  let riesgoAislamiento = "BAJO";
-  if (esAccesoVulnerable && nivelAlerta >= 3) {
-    riesgoAislamiento = "CRÍTICO (Acceso por camino de terracería con alto riesgo de corte total por lodazal)";
-  } else if (esAccesoVulnerable) {
-    riesgoAislamiento = "MODERADO (Vía vulnerable a anegamiento)";
+  // Vigilancia preventiva ordinaria
+  if (nivelAlerta === 1 && (lluviaEfectiva24h >= 8.0 || saturacionTotalSuelo >= 35.0)) {
+    nivelAlerta = 2;
+    diagnostico = {
+      titulo: "Vigilancia Meteorológica Preventiva",
+      causa: `Precipitación continua con acumulación hídrica moderada (${saturacionTotalSuelo} mm). Mantener vigilancia de vados y alcantarillas.`,
+      tipoAmenaza: "VIGILANCIA_NORMAL"
+    };
   }
+
+  const tc = localidad.hidrologia.tc_horas || 6.0;
+  const horaImpactoCresta = horaPico 
+    ? new Date(new Date(horaPico).getTime() + (tc * 3600000)).toISOString() 
+    : null;
 
   return {
     localidad_id: localidad.id,
@@ -148,37 +260,51 @@ export function evaluarLocalidad(localidad, serieHoraria, contexto = {}) {
     color_alerta: ['#10B981', '#F59E0B', '#F97316', '#EF4444'][nivelAlerta - 1],
     estado_alerta: ['NORMAL', 'VIGILANCIA', 'ALERTA_TEMPRANA', 'EMERGENCIA'][nivelAlerta - 1],
     
-    que: queSucede,
+    // Diagnóstico Ejecutivo Implícito
+    diagnostico: diagnostico,
     
-    cuando: {
-      inicio_amenaza: horaInicio || "En curso / Vigilancia activa",
-      pico_maximo_lluvia: horaPico || "Periodo de temporal",
-      intensidad_pico_horaria_mm: lluviaMaxHoraria,
-      llegada_cresta_hidrologica: horaImpactoCresta || "No aplica",
-      ventana_evacuacion_horas: tc,
-      temperatura_minima_c: tempMinima
-    },
-    
+    // Compatibilidad Total (Mapa y Tablas)
     donde: {
       subcuenca_cve: localidad.hidrologia.subcuenca_cve,
       subcuenca_nom: localidad.hidrologia.subcuenca_nom,
-      posicion_hidrologica: localidad.hidrologia.posicion,
-      tipo_relieve: localidad.topografia.relieve,
-      pendiente_max_grados: localidad.topografia.pendiente_max_deg,
-      distancia_cauce_km: localidad.hidrologia.distancia_cauce_km,
+      posicion_hidrologica: posHidro,
+      tipo_relieve: relieve,
+      pendiente_max_grados: pendiente,
+      distancia_cauce_km: distRio,
       coordenadas: localidad.coords
     },
-    
-    tamano_impacto: {
-      poblacion_directa: localidad.vulnerabilidad.poblacion,
-      poblacion_aguas_arriba: localidad.hidrologia.poblacion_aguas_arriba,
-      riesgo_aislamiento_vial: riesgoAislamiento,
-      tipo_acceso: localidad.vulnerabilidad.acceso_vial,
-      distancia_hospital_km: localidad.vulnerabilidad.dist_hospital_km,
-      grado_marginacion: localidad.vulnerabilidad.marginacion,
-      lluvia_acumulada_24h_mm: parseFloat(lluviaAdoptada24h.toFixed(1)),
-      umbral_deslave_local_mm: umbralDeslave,
-      bajo_aviso_federal_smn: esEstadoBajoAlertaFederal
-    }
+    tiempos: {
+      inicio: horaInicio ? horaInicio.split('T')[1] + ' hrs' : 'En curso',
+      picoMaximo: horaPico ? horaPico.split('T')[1] + ' hrs' : 'Periodo activo',
+      crestaImpacto: horaImpactoCresta ? horaImpactoCresta.split('T')[1] + ' hrs' : 'No prevista',
+      ventanaAccionHoras: tc
+    },
+    geografia: {
+      relieve: relieve,
+      pendienteMax: pendiente,
+      distanciaRioKm: distRio,
+      twi: twi,
+      posicionHidro: posHidro,
+      coordenadas: localidad.coords,
+      cuenca: localidad.hidrologia.subcuenca_nom
+    },
+    impactoSistemico: {
+      poblacionDirecta: localidad.vulnerabilidad.poblacion,
+      poblacionAguasArriba: poblacionAguasArriba,
+      accesoVial: accesoVial,
+      distanciaHospitalKm: distHospital,
+      marginacion: localidad.vulnerabilidad.marginacion,
+      apiPrevio7DiasMm: apiPrevio,
+      lluviaEvento24hMm: parseFloat(lluviaEfectiva24h.toFixed(1)),
+      saturacionTotalSueloMm: saturacionTotalSuelo,
+      umbralFisicoDeslaveMm: umbralDeslave,
+      vientoSostenidoKmh: vientoSostenidoMax,
+      rafagaMaximaKmh: rafagaMaxima,
+      visibilidadMinKm: visibilidadMinKm,
+      esLaderaHabitada: esLadera,
+      esRiberaVulnerable: distRio <= 0.8
+    },
+
+    protocolo: "Consulte al coordinador de Cáritas"
   };
 }
