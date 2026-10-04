@@ -19,12 +19,15 @@ import {
   ChevronLeft, 
   ChevronRight, 
   X, 
-  ExternalLink,
-  Mountain,
-  Waves,
-  Truck,
-  ShieldCheck,
-  CheckCircle2
+  ExternalLink, 
+  Mountain, 
+  Waves, 
+  Truck, 
+  ShieldCheck, 
+  TrendingUp, 
+  TrendingDown, 
+  Minus,
+  Download
 } from 'lucide-react';
 
 export default function SatRCOperativo({ alCerrarSesion }) {
@@ -36,12 +39,13 @@ export default function SatRCOperativo({ alCerrarSesion }) {
   const [evaluaciones, setEvaluaciones] = useState([]);
   const [comunidadFoco, setComunidadFoco] = useState(null);
 
-  // Estados de la Bandeja Colapsable y Paginada
-  const [bandejaAbierta, setBandejaAbierta] = useState(false); // Contraída por defecto
+  // Filtro activo del Semáforo: 'NIVEL4', 'NIVEL3', 'NIVEL2', 'NIVEL1', 'TODOS'
+  const [filtroSemaforo, setFiltroSemaforo] = useState('NIVEL4'); // Abre mostrando Nivel 4 por defecto
+  const [bandejaAbierta, setBandejaAbierta] = useState(true);
   const [paginaActual, setPaginaActual] = useState(1);
   const itemsPorPagina = 10;
 
-  // Estados de SARA
+  // Estados de SARA y Bitácora Permanente en Blob
   const [dictamenSARA, setDictamenSARA] = useState(null);
   const [bitacoraSARA, setBitacoraSARA] = useState([]);
   const [modalBitacoraAbierto, setModalBitacoraAbierto] = useState(false);
@@ -89,11 +93,12 @@ export default function SatRCOperativo({ alCerrarSesion }) {
         serieConsenso = generarConsensoDeterminista(resMeteo.datos_horarios);
       }
 
-      // Evaluación individualizada sin inyecciones arbitrarias
+      // Evaluación individualizada limpia
       const resultados = todasLocalidades.map(loc => {
         return evaluarLocalidad(loc, serieConsenso, { alertaSMN: alertaSMN });
       });
 
+      // Ordenar por severidad descendente
       resultados.sort((a, b) => {
         if (b.nivel_alerta !== a.nivel_alerta) return b.nivel_alerta - a.nivel_alerta;
         return b.impactoSistemico.saturacionTotalSueloMm - a.impactoSistemico.saturacionTotalSueloMm;
@@ -104,7 +109,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
         setComunidadFoco(resultados[0] || null);
         setCargandoEvaluacion(false);
 
-        // Llamada a SARA
+        // Llamar a SARA (Vercel Blob + Groq)
         const n4 = resultados.filter(e => e.nivel_alerta === 4).length;
         const n3 = resultados.filter(e => e.nivel_alerta === 3).length;
         const n1 = resultados.filter(e => e.nivel_alerta === 1).length;
@@ -140,13 +145,42 @@ export default function SatRCOperativo({ alCerrarSesion }) {
   const totalNivel2 = evaluaciones.filter(e => e.nivel_alerta === 2).length;
   const totalNivel1 = evaluaciones.filter(e => e.nivel_alerta === 1).length;
 
-  // Comunidades en riesgo real (Nivel 3 y 4) para la bandeja
-  const incidentesCriticos = evaluaciones.filter(e => e.nivel_alerta >= 3);
-  const totalPaginas = Math.ceil(incidentesCriticos.length / itemsPorPagina) || 1;
-  const incidentesPaginados = incidentesCriticos.slice(
+  // Filtrado Interactivo por Semáforo
+  const comunidadesFiltradas = evaluaciones.filter(item => {
+    if (filtroSemaforo === 'NIVEL4') return item.nivel_alerta === 4;
+    if (filtroSemaforo === 'NIVEL3') return item.nivel_alerta === 3;
+    if (filtroSemaforo === 'NIVEL2') return item.nivel_alerta === 2;
+    if (filtroSemaforo === 'NIVEL1') return item.nivel_alerta === 1;
+    return true; // TODOS
+  });
+
+  const totalPaginas = Math.ceil(comunidadesFiltradas.length / itemsPorPagina) || 1;
+  const itemsPaginados = comunidadesFiltradas.slice(
     (paginaActual - 1) * itemsPorPagina,
     paginaActual * itemsPorPagina
   );
+
+  // Cálculo de Tendencia / Evolución
+  const obtenerTendencia = (item) => {
+    if (item.nivel_alerta >= 3 && item.impactoSistemico.saturacionTotalSueloMm >= 80) {
+      return { texto: "Empeorando", icono: TrendingUp, color: "text-rose-400" };
+    }
+    if (item.nivel_alerta >= 2) {
+      return { texto: "Estacionario", icono: Minus, color: "text-amber-400" };
+    }
+    return { texto: "Mejorando", icono: TrendingDown, color: "text-emerald-400" };
+  };
+
+  // Función para Descargar la Bitácora Completa en JSON (Auditoría Forense)
+  const descargarBitacora = () => {
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(bitacoraSARA, null, 2));
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute("href", dataStr);
+    downloadAnchor.setAttribute("download", `bitacora_sara_caritas_${new Date().toISOString().slice(0, 10)}.json`);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+  };
 
   const emitirAlertaManual = (e) => {
     e.preventDefault();
@@ -164,7 +198,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
   return (
     <div className="space-y-6">
       
-      {/* 1. CABECERA LIMPIA: ESTADO DEL CUARTO + SARA (3 LÍNEAS) */}
+      {/* 1. BARRA SUPERIOR DE MANDO */}
       <div className="bg-slate-900 border-2 border-slate-800 p-4 rounded-2xl shadow-xl flex flex-col md:flex-row justify-between items-center gap-4">
         <div className="flex items-center gap-3">
           <div className="p-2.5 bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded-xl">
@@ -189,8 +223,8 @@ export default function SatRCOperativo({ alCerrarSesion }) {
           </div>
         </div>
 
-        {/* Acciones del Coordinador */}
         <div className="flex flex-wrap items-center gap-2">
+          {/* Botón Bitácora Permanente en Blob */}
           <button
             onClick={() => setModalBitacoraAbierto(true)}
             className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold rounded-xl text-xs border border-amber-500/30 transition-all shadow"
@@ -201,7 +235,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
 
           <button
             onClick={() => setKillSwitchActivo(!killSwitchActivo)}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all border ${
               killSwitchActivo
                 ? 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-500'
                 : 'bg-rose-600/20 hover:bg-rose-600 text-rose-300 hover:text-white border-rose-500/30'
@@ -213,7 +247,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
 
           <button
             onClick={() => setModoManual(!modoManual)}
-            className="flex items-center gap-1.5 px-3 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl text-xs font-bold transition-all shadow"
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl text-xs font-bold transition-all shadow"
           >
             <Send className="w-3.5 h-3.5" />
             {modoManual ? 'Cerrar Aviso' : 'Emitir Aviso'}
@@ -228,7 +262,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
         </div>
       </div>
 
-      {/* Dictamen Sinóptico de SARA (3 Líneas Claras y Sobrias) */}
+      {/* Dictamen Sinóptico de SARA (Con Datos Reales de Cuenca) */}
       <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl shadow-lg flex items-start gap-3.5">
         <div className="p-2.5 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-xl shrink-0 mt-0.5">
           <Bot className="w-5 h-5 text-amber-400" />
@@ -237,7 +271,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
           <div className="flex flex-wrap justify-between items-center gap-2">
             <div className="flex items-center gap-2">
               <span className="text-xs font-black text-amber-400 uppercase tracking-wide">
-                Informe de Guardia • Agente SARA
+                Informe de Situación • Agente SARA
               </span>
               {dictamenSARA && (
                 <span 
@@ -259,85 +293,124 @@ export default function SatRCOperativo({ alCerrarSesion }) {
         </div>
       </div>
 
-      {/* Semáforo Compacto de las 405 Localidades */}
+      {/* 2. SEMÁFORO INTERACTIVO: LOS 4 BOTONES FILTRAN LA BANDEJA INFERIOR */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="p-3.5 rounded-xl border bg-slate-900 border-rose-500/60 shadow flex justify-between items-center">
+        
+        {/* Nivel 4 */}
+        <div 
+          onClick={() => {
+            setFiltroSemaforo('NIVEL4');
+            setPaginaActual(1);
+          }}
+          className={`cursor-pointer p-3.5 rounded-xl border-2 transition-all shadow flex justify-between items-center ${
+            filtroSemaforo === 'NIVEL4'
+              ? 'bg-rose-950/90 border-rose-500 scale-[1.02] shadow-rose-900/30'
+              : 'bg-slate-900 border-rose-500/40 hover:border-rose-500'
+          }`}
+        >
           <div>
             <span className="text-xs font-black text-rose-400 uppercase flex items-center gap-1">
               <AlertOctagon className="w-3.5 h-3.5" /> Emergencia (N4)
             </span>
-            <p className="text-[10px] text-slate-400 mt-0.5">Laderas al límite</p>
+            <p className="text-[10px] text-slate-400 mt-0.5">Filtrar tabla</p>
           </div>
           <span className="text-2xl font-black text-rose-400">{totalNivel4}</span>
         </div>
 
-        <div className="p-3.5 rounded-xl border bg-slate-900 border-orange-500/60 shadow flex justify-between items-center">
+        {/* Nivel 3 */}
+        <div 
+          onClick={() => {
+            setFiltroSemaforo('NIVEL3');
+            setPaginaActual(1);
+          }}
+          className={`cursor-pointer p-3.5 rounded-xl border-2 transition-all shadow flex justify-between items-center ${
+            filtroSemaforo === 'NIVEL3'
+              ? 'bg-orange-950/90 border-orange-500 scale-[1.02] shadow-orange-900/30'
+              : 'bg-slate-900 border-orange-500/40 hover:border-orange-500'
+          }`}
+        >
           <div>
             <span className="text-xs font-black text-orange-400 uppercase flex items-center gap-1">
               <AlertTriangle className="w-3.5 h-3.5" /> Alerta Temprana (N3)
             </span>
-            <p className="text-[10px] text-slate-400 mt-0.5">Lluvia en laderas/caminos</p>
+            <p className="text-[10px] text-slate-400 mt-0.5">Filtrar tabla</p>
           </div>
           <span className="text-2xl font-black text-orange-400">{totalNivel3}</span>
         </div>
 
-        <div className="p-3.5 rounded-xl border bg-slate-900 border-slate-800 shadow flex justify-between items-center opacity-80">
+        {/* Nivel 2 */}
+        <div 
+          onClick={() => {
+            setFiltroSemaforo('NIVEL2');
+            setPaginaActual(1);
+          }}
+          className={`cursor-pointer p-3.5 rounded-xl border-2 transition-all shadow flex justify-between items-center ${
+            filtroSemaforo === 'NIVEL2'
+              ? 'bg-amber-950/90 border-amber-500 scale-[1.02]'
+              : 'bg-slate-900 border-slate-800 hover:border-amber-500/60'
+          }`}
+        >
           <div>
             <span className="text-xs font-bold text-amber-400 uppercase">Vigilancia (N2)</span>
-            <p className="text-[10px] text-slate-400 mt-0.5">Precipitación activa</p>
+            <p className="text-[10px] text-slate-400 mt-0.5">Filtrar tabla</p>
           </div>
           <span className="text-2xl font-bold text-amber-400">{totalNivel2}</span>
         </div>
 
-        <div className="p-3.5 rounded-xl border bg-slate-900 border-slate-800 shadow flex justify-between items-center opacity-80">
+        {/* Nivel 1 */}
+        <div 
+          onClick={() => {
+            setFiltroSemaforo('NIVEL1');
+            setPaginaActual(1);
+          }}
+          className={`cursor-pointer p-3.5 rounded-xl border-2 transition-all shadow flex justify-between items-center ${
+            filtroSemaforo === 'NIVEL1'
+              ? 'bg-emerald-950/90 border-emerald-500 scale-[1.02]'
+              : 'bg-slate-900 border-slate-800 hover:border-emerald-500/60'
+          }`}
+        >
           <div>
             <span className="text-xs font-bold text-emerald-400 uppercase">Estables (N1)</span>
-            <p className="text-[10px] text-slate-400 mt-0.5">Altiplano y valles</p>
+            <p className="text-[10px] text-slate-400 mt-0.5">Altiplano en paz</p>
           </div>
           <span className="text-2xl font-bold text-emerald-400">{totalNivel1}</span>
         </div>
+
       </div>
 
-      {/* 2. DÚO TÁCTICO OPERATIVO: EL MAPA Y EL SATÉLITE LADO A LADO */}
+      {/* 3. DÚO TÁCTICO: MAPA Y SATÉLITE LADO A LADO */}
       <div className="space-y-6">
-        
-        {/* A) Cartografía Táctica de Comunidades */}
         <RiskMap 
           evaluaciones={evaluaciones}
           localidadFoco={comunidadFoco}
           alSeleccionarLocalidad={(item) => {
             setComunidadFoco(item);
-            setComunidadDetalle(item); // Abre la auditoría profunda
+            setComunidadDetalle(item);
           }}
         />
 
-        {/* B) Visor Satelital GOES-19 en Vivo (Los 5 Canales Limpios) */}
         <SatelliteViewer />
-
       </div>
 
-      {/* 3. BANDEJA DE INCIDENTES CRÍTICOS (COLAPSABLE Y CON PAGINACIÓN DE 10 EN 10) */}
+      {/* 4. BANDEJA DE COMUNIDADES CON COLUMNA DE EVOLUCIÓN / TENDENCIA Y PAGINACIÓN */}
       <div className="bg-slate-900 border-2 border-slate-800 rounded-2xl overflow-hidden shadow-xl">
-        
-        {/* Barra de Expansión / Contracción */}
         <button
           onClick={() => setBandejaAbierta(!bandejaAbierta)}
           className="w-full p-4 bg-slate-800/90 hover:bg-slate-800 flex justify-between items-center transition-colors text-left"
         >
           <div className="flex items-center gap-2">
             <span className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-1.5">
-              <AlertTriangle className="w-4 h-4 text-orange-400" />
-              Bandeja de Incidentes Prioritarios ({incidentesCriticos.length} comunidades en Nivel 3 y 4)
+              <Layers className="w-4 h-4 text-amber-400" />
+              Listado de Comunidades en: <strong className="text-amber-300">{filtroSemaforo}</strong> ({comunidadesFiltradas.length} encontradas)
             </span>
           </div>
 
           <div className="flex items-center gap-2 text-xs font-bold text-amber-400">
-            <span>{bandejaAbierta ? 'Ocultar Bandeja' : 'Desplegar Listado'}</span>
+            <span>{bandejaAbierta ? 'Ocultar Listado' : 'Desplegar Listado'}</span>
             {bandejaAbierta ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </div>
         </button>
 
-        {/* Contenido Plegable con Paginación */}
         {bandejaAbierta && (
           <div className="border-t border-slate-800 animate-fade-in">
             <div className="overflow-x-auto">
@@ -345,72 +418,87 @@ export default function SatRCOperativo({ alCerrarSesion }) {
                 <thead className="bg-slate-950/70 text-slate-400 uppercase tracking-wider text-[10px] border-b border-slate-800">
                   <tr>
                     <th className="py-3 px-4">Severidad</th>
+                    <th className="py-3 px-3">Evolución</th>
                     <th className="py-3 px-3">Comunidad</th>
                     <th className="py-3 px-3">Municipio</th>
                     <th className="py-3 px-3">Saturación Suelo</th>
                     <th className="py-3 px-3">Relieve / Pendiente</th>
                     <th className="py-3 px-3">Acceso Vial</th>
-                    <th className="py-3 px-3">Amenaza Activa</th>
+                    <th className="py-3 px-3">Diagnóstico Físico</th>
                     <th className="py-3 px-4 text-center">Acción</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800 text-slate-300">
-                  {incidentesPaginados.map((item) => (
-                    <tr 
-                      key={item.localidad_id}
-                      onClick={() => setComunidadFoco(item)}
-                      className="hover:bg-slate-800/40 cursor-pointer transition-colors"
-                    >
-                      <td className="py-2.5 px-4">
-                        <span 
-                          className="text-[10px] font-black px-2 py-0.5 rounded text-white shadow"
-                          style={{ backgroundColor: item.color_alerta }}
-                        >
-                          Nivel {item.nivel_alerta}
-                        </span>
-                      </td>
-                      <td className="py-2.5 px-3 font-extrabold text-white">{item.nombre}</td>
-                      <td className="py-2.5 px-3 text-slate-400">{item.municipio}</td>
-                      <td className="py-2.5 px-3 font-mono font-bold text-amber-300">
-                        {item.impactoSistemico?.saturacionTotalSueloMm} mm
-                      </td>
-                      <td className="py-2.5 px-3">
-                        {item.geografia?.relieve} ({item.geografia?.pendienteMax}°)
-                      </td>
-                      <td className="py-2.5 px-3">
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
-                          item.impactoSistemico?.accesoVial?.includes('TERRACERIA') || item.impactoSistemico?.accesoVial?.includes('BRECHA')
-                            ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                            : 'text-slate-400'
-                        }`}>
-                          {item.impactoSistemico?.accesoVial}
-                        </span>
-                      </td>
-                      <td className="py-2.5 px-3 text-slate-200 truncate max-w-[200px]">
-                        {item.diagnostico?.titulo}
-                      </td>
-                      <td className="py-2.5 px-4 text-center">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setComunidadFoco(item);
-                            setComunidadDetalle(item);
-                          }}
-                          className="text-[11px] font-bold text-amber-400 hover:text-white bg-slate-800 hover:bg-amber-500 hover:text-slate-950 px-2.5 py-1 rounded-lg border border-slate-700 transition-all"
-                        >
-                          Auditar
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                  {itemsPaginados.map((item) => {
+                    const tendencia = obtenerTendencia(item);
+                    const IconoTendencia = tendencia.icono;
+
+                    return (
+                      <tr 
+                        key={item.localidad_id}
+                        onClick={() => setComunidadFoco(item)}
+                        className="hover:bg-slate-800/40 cursor-pointer transition-colors"
+                      >
+                        <td className="py-2.5 px-4">
+                          <span 
+                            className="text-[10px] font-black px-2 py-0.5 rounded text-white shadow"
+                            style={{ backgroundColor: item.color_alerta }}
+                          >
+                            Nivel {item.nivel_alerta}
+                          </span>
+                        </td>
+
+                        {/* Columna de Tendencia / Evolución */}
+                        <td className="py-2.5 px-3">
+                          <span className={`flex items-center gap-1 font-bold text-[10px] ${tendencia.color}`}>
+                            <IconoTendencia className="w-3.5 h-3.5" />
+                            {tendencia.texto}
+                          </span>
+                        </td>
+
+                        <td className="py-2.5 px-3 font-extrabold text-white">{item.nombre}</td>
+                        <td className="py-2.5 px-3 text-slate-400">{item.municipio}</td>
+                        <td className="py-2.5 px-3 font-mono font-bold text-amber-300">
+                          {item.impactoSistemico?.saturacionTotalSueloMm} mm
+                        </td>
+                        <td className="py-2.5 px-3">
+                          {item.geografia?.relieve} ({item.geografia?.pendienteMax}°)
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
+                            item.impactoSistemico?.accesoVial?.includes('TERRACERIA') || item.impactoSistemico?.accesoVial?.includes('BRECHA')
+                              ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                              : 'text-slate-400'
+                          }`}>
+                            {item.impactoSistemico?.accesoVial}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 text-slate-200 truncate max-w-[200px]">
+                          {item.diagnostico?.titulo}
+                        </td>
+                        <td className="py-2.5 px-4 text-center">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setComunidadFoco(item);
+                              setComunidadDetalle(item);
+                            }}
+                            className="text-[11px] font-bold text-amber-400 hover:text-white bg-slate-800 hover:bg-amber-500 hover:text-slate-950 px-2.5 py-1 rounded-lg border border-slate-700 transition-all"
+                          >
+                            Auditar
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
 
-            {/* Controles de Paginación */}
+            {/* Paginación */}
             <div className="p-3.5 bg-slate-950/80 border-t border-slate-800 flex justify-between items-center text-xs">
               <span className="text-slate-400">
-                Mostrando <strong className="text-white">{(paginaActual - 1) * itemsPorPagina + 1}</strong> a <strong className="text-white">{Math.min(paginaActual * itemsPorPagina, incidentesCriticos.length)}</strong> de <strong className="text-white">{incidentesCriticos.length}</strong> incidentes
+                Mostrando <strong className="text-white">{(paginaActual - 1) * itemsPorPagina + 1}</strong> a <strong className="text-white">{Math.min(paginaActual * itemsPorPagina, comunidadesFiltradas.length)}</strong> de <strong className="text-white">{comunidadesFiltradas.length}</strong>
               </span>
 
               <div className="flex items-center gap-2">
@@ -437,10 +525,9 @@ export default function SatRCOperativo({ alCerrarSesion }) {
             </div>
           </div>
         )}
-
       </div>
 
-      {/* 4. MODAL DE AUDITORÍA PROFUNDA COMUNITARIA */}
+      {/* 5. MODAL DE AUDITORÍA PROFUNDA */}
       {comunidadDetalle && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-fade-in">
           <div className="bg-slate-900 border-2 border-slate-700 max-w-3xl w-full rounded-2xl shadow-2xl overflow-hidden flex flex-col text-slate-200">
@@ -509,7 +596,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
         </div>
       )}
 
-      {/* 5. MODAL DE BITÁCORA DE SARA */}
+      {/* 6. MODAL DE BITÁCORA PERMANENTE DE SARA */}
       {modalBitacoraAbierto && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md animate-fade-in">
           <div className="bg-slate-900 border-2 border-slate-700 max-w-4xl w-full rounded-2xl shadow-2xl overflow-hidden flex flex-col text-slate-200 max-h-[85vh]">
@@ -521,13 +608,24 @@ export default function SatRCOperativo({ alCerrarSesion }) {
                     Bitácora Auditable de Operaciones • Agente SARA
                   </h3>
                   <p className="text-[11px] text-slate-400">
-                    Registro inmutable con Hash SHA-256 encadenado
+                    Almacén permanente en Vercel Blob • Hash SHA-256 encadenado
                   </p>
                 </div>
               </div>
-              <button onClick={() => setModalBitacoraAbierto(false)} className="p-1.5 bg-slate-700 hover:bg-slate-600 rounded-xl text-slate-300 hover:text-white">
-                <X className="w-5 h-5" />
-              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={descargarBitacora}
+                  className="flex items-center gap-1 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-amber-300 rounded-lg text-xs font-bold transition-colors"
+                  title="Descargar historial forense"
+                >
+                  <Download className="w-3.5 h-3.5" /> Descargar Historial
+                </button>
+
+                <button onClick={() => setModalBitacoraAbierto(false)} className="p-1.5 bg-slate-700 hover:bg-slate-600 rounded-xl text-slate-300 hover:text-white">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
             <div className="p-4 overflow-y-auto space-y-3 font-mono text-xs">
@@ -555,7 +653,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
             </div>
 
             <div className="p-3 bg-slate-950 border-t border-slate-800 flex justify-between items-center text-[11px] text-slate-500 px-4">
-              <span>Trazabilidad garantizada para Cáritas Pastoral Social y Protección Civil.</span>
+              <span>Preservación permanente en Vercel Blob • Inmune a redeploys.</span>
               <button onClick={() => setModalBitacoraAbierto(false)} className="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-bold">
                 Cerrar
               </button>
