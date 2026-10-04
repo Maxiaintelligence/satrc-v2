@@ -27,11 +27,12 @@ import {
   TrendingUp, 
   TrendingDown, 
   Minus,
-  Download
+  Download,
+  Layers
 } from 'lucide-react';
 
 export default function SatRCOperativo({ alCerrarSesion }) {
-  const todasLocalidades = db.localidades;
+  const todasLocalidades = db.localidades || [];
 
   // Estados del Cuarto de Situación
   const [killSwitchActivo, setKillSwitchActivo] = useState(false);
@@ -39,13 +40,13 @@ export default function SatRCOperativo({ alCerrarSesion }) {
   const [evaluaciones, setEvaluaciones] = useState([]);
   const [comunidadFoco, setComunidadFoco] = useState(null);
 
-  // Filtro activo del Semáforo: 'NIVEL4', 'NIVEL3', 'NIVEL2', 'NIVEL1', 'TODOS'
-  const [filtroSemaforo, setFiltroSemaforo] = useState('NIVEL4'); // Abre mostrando Nivel 4 por defecto
+  // Filtro activo del Semáforo
+  const [filtroSemaforo, setFiltroSemaforo] = useState('NIVEL4');
   const [bandejaAbierta, setBandejaAbierta] = useState(true);
   const [paginaActual, setPaginaActual] = useState(1);
   const itemsPorPagina = 10;
 
-  // Estados de SARA y Bitácora Permanente en Blob
+  // Estados de SARA
   const [dictamenSARA, setDictamenSARA] = useState(null);
   const [bitacoraSARA, setBitacoraSARA] = useState([]);
   const [modalBitacoraAbierto, setModalBitacoraAbierto] = useState(false);
@@ -68,7 +69,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
   useEffect(() => {
     fetch('/api/smn')
       .then(r => r.json())
-      .then(d => { if (d.exito && d.alerta) setAlertaSMN(d.alerta); })
+      .then(d => { if (d?.exito && d?.alerta) setAlertaSMN(d.alerta); })
       .catch(() => null);
   }, []);
 
@@ -83,25 +84,40 @@ export default function SatRCOperativo({ alCerrarSesion }) {
     async function correrEscaneo() {
       setCargandoEvaluacion(true);
 
-      const nodoSierra = db.localidades.find(l => l.nombre.toLowerCase().includes('huauchinango')) || db.localidades[0];
+      const nodoSierra = todasLocalidades.find(l => l.nombre.toLowerCase().includes('huauchinango')) || todasLocalidades[0];
+      if (!nodoSierra?.coords) {
+        setCargandoEvaluacion(false);
+        return;
+      }
+
       const resMeteo = await consultarModelosDeterministas(nodoSierra.coords.lat, nodoSierra.coords.lon);
 
       if (cancelado) return;
 
       let serieConsenso = [];
-      if (resMeteo.exito) {
+      if (resMeteo?.exito && resMeteo?.datos_horarios) {
         serieConsenso = generarConsensoDeterminista(resMeteo.datos_horarios);
       }
 
-      // Evaluación individualizada limpia
+      // Evaluación individualizada segura
       const resultados = todasLocalidades.map(loc => {
-        return evaluarLocalidad(loc, serieConsenso, { alertaSMN: alertaSMN });
-      });
+        try {
+          return evaluarLocalidad(loc, serieConsenso, { alertaSMN: alertaSMN });
+        } catch (e) {
+          console.error("Error evaluando:", loc?.nombre, e);
+          return null;
+        }
+      }).filter(Boolean);
 
-      // Ordenar por severidad descendente
+      // Ordenar con protección contra nulos
       resultados.sort((a, b) => {
-        if (b.nivel_alerta !== a.nivel_alerta) return b.nivel_alerta - a.nivel_alerta;
-        return b.impactoSistemico.saturacionTotalSueloMm - a.impactoSistemico.saturacionTotalSueloMm;
+        const nivelA = a?.nivel_alerta ?? 1;
+        const nivelB = b?.nivel_alerta ?? 1;
+        if (nivelB !== nivelA) return nivelB - nivelA;
+
+        const satA = a?.impactoSistemico?.saturacionTotalSueloMm ?? 0;
+        const satB = b?.impactoSistemico?.saturacionTotalSueloMm ?? 0;
+        return satB - satA;
       });
 
       if (!cancelado) {
@@ -109,11 +125,11 @@ export default function SatRCOperativo({ alCerrarSesion }) {
         setComunidadFoco(resultados[0] || null);
         setCargandoEvaluacion(false);
 
-        // Llamar a SARA (Vercel Blob + Groq)
-        const n4 = resultados.filter(e => e.nivel_alerta === 4).length;
-        const n3 = resultados.filter(e => e.nivel_alerta === 3).length;
-        const n1 = resultados.filter(e => e.nivel_alerta === 1).length;
-        const criticas = resultados.filter(e => e.nivel_alerta >= 3).slice(0, 6).map(c => `${c.nombre} (${c.municipio})`);
+        // Llamar a SARA
+        const n4 = resultados.filter(e => e?.nivel_alerta === 4).length;
+        const n3 = resultados.filter(e => e?.nivel_alerta === 3).length;
+        const n1 = resultados.filter(e => e?.nivel_alerta === 1).length;
+        const criticas = resultados.filter(e => (e?.nivel_alerta ?? 1) >= 3).slice(0, 6).map(c => `${c?.nombre} (${c?.municipio})`);
 
         fetch('/api/sara', {
           method: 'POST',
@@ -125,7 +141,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
         })
           .then(r => r.json())
           .then(data => {
-            if (data.exito && data.dictamen) {
+            if (data?.exito && data?.dictamen) {
               setDictamenSARA(data.dictamen);
               setBitacoraSARA(data.bitacora || []);
             }
@@ -139,19 +155,20 @@ export default function SatRCOperativo({ alCerrarSesion }) {
     return () => { cancelado = true; };
   }, [killSwitchActivo, alertaSMN]);
 
-  // Conteos
-  const totalNivel4 = evaluaciones.filter(e => e.nivel_alerta === 4).length;
-  const totalNivel3 = evaluaciones.filter(e => e.nivel_alerta === 3).length;
-  const totalNivel2 = evaluaciones.filter(e => e.nivel_alerta === 2).length;
-  const totalNivel1 = evaluaciones.filter(e => e.nivel_alerta === 1).length;
+  // Conteos seguros
+  const totalNivel4 = evaluaciones.filter(e => e?.nivel_alerta === 4).length;
+  const totalNivel3 = evaluaciones.filter(e => e?.nivel_alerta === 3).length;
+  const totalNivel2 = evaluaciones.filter(e => e?.nivel_alerta === 2).length;
+  const totalNivel1 = evaluaciones.filter(e => e?.nivel_alerta === 1).length;
 
-  // Filtrado Interactivo por Semáforo
+  // Filtrado Seguro del Semáforo
   const comunidadesFiltradas = evaluaciones.filter(item => {
+    if (!item) return false;
     if (filtroSemaforo === 'NIVEL4') return item.nivel_alerta === 4;
     if (filtroSemaforo === 'NIVEL3') return item.nivel_alerta === 3;
     if (filtroSemaforo === 'NIVEL2') return item.nivel_alerta === 2;
     if (filtroSemaforo === 'NIVEL1') return item.nivel_alerta === 1;
-    return true; // TODOS
+    return true;
   });
 
   const totalPaginas = Math.ceil(comunidadesFiltradas.length / itemsPorPagina) || 1;
@@ -160,18 +177,19 @@ export default function SatRCOperativo({ alCerrarSesion }) {
     paginaActual * itemsPorPagina
   );
 
-  // Cálculo de Tendencia / Evolución
+  // Cálculo Seguro de Tendencia
   const obtenerTendencia = (item) => {
-    if (item.nivel_alerta >= 3 && item.impactoSistemico.saturacionTotalSueloMm >= 80) {
+    const sat = item?.impactoSistemico?.saturacionTotalSueloMm ?? 0;
+    const nivel = item?.nivel_alerta ?? 1;
+    if (nivel >= 3 && sat >= 70) {
       return { texto: "Empeorando", icono: TrendingUp, color: "text-rose-400" };
     }
-    if (item.nivel_alerta >= 2) {
+    if (nivel >= 2) {
       return { texto: "Estacionario", icono: Minus, color: "text-amber-400" };
     }
     return { texto: "Mejorando", icono: TrendingDown, color: "text-emerald-400" };
   };
 
-  // Función para Descargar la Bitácora Completa en JSON (Auditoría Forense)
   const descargarBitacora = () => {
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(bitacoraSARA, null, 2));
     const downloadAnchor = document.createElement('a');
@@ -224,7 +242,6 @@ export default function SatRCOperativo({ alCerrarSesion }) {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {/* Botón Bitácora Permanente en Blob */}
           <button
             onClick={() => setModalBitacoraAbierto(true)}
             className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold rounded-xl text-xs border border-amber-500/30 transition-all shadow"
@@ -235,7 +252,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
 
           <button
             onClick={() => setKillSwitchActivo(!killSwitchActivo)}
-            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all border ${
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${
               killSwitchActivo
                 ? 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-500'
                 : 'bg-rose-600/20 hover:bg-rose-600 text-rose-300 hover:text-white border-rose-500/30'
@@ -247,7 +264,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
 
           <button
             onClick={() => setModoManual(!modoManual)}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl text-xs font-bold transition-all shadow"
+            className="flex items-center gap-1.5 px-3 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl text-xs font-bold transition-all shadow"
           >
             <Send className="w-3.5 h-3.5" />
             {modoManual ? 'Cerrar Aviso' : 'Emitir Aviso'}
@@ -262,7 +279,85 @@ export default function SatRCOperativo({ alCerrarSesion }) {
         </div>
       </div>
 
-      {/* Dictamen Sinóptico de SARA (Con Datos Reales de Cuenca) */}
+      {/* Alerta Manual */}
+      {alertaManualEmitida && (
+        <div className="bg-rose-950/40 border-2 border-rose-500 p-4 rounded-2xl flex justify-between items-start gap-3">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-black bg-rose-500 text-white px-2 py-0.5 rounded">
+                  AVISO DIOCESANO EMITIDO • NIVEL {alertaManualEmitida.nivel}
+                </span>
+                <span className="text-xs text-rose-300 font-semibold">{alertaManualEmitida.zona}</span>
+                <span className="text-[11px] text-slate-400">• {alertaManualEmitida.timestamp}</span>
+              </div>
+              <p className="text-sm font-medium text-white mt-1.5">{alertaManualEmitida.mensaje}</p>
+            </div>
+          </div>
+          <button onClick={() => setAlertaManualEmitida(null)} className="text-xs text-slate-400 hover:text-white px-2 py-1 bg-slate-800 rounded-lg">
+            Retirar
+          </button>
+        </div>
+      )}
+
+      {/* Formulario Manual */}
+      {modoManual && (
+        <div className="bg-slate-900 border border-amber-500/50 p-5 rounded-2xl shadow-2xl space-y-3">
+          <h3 className="text-sm font-bold text-amber-400 flex items-center gap-2">
+            <Send className="w-4 h-4" /> Formulario de Comunicación de Crisis Cáritas
+          </h3>
+          <form onSubmit={emitirAlertaManual} className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="text-[11px] font-semibold text-slate-400 block mb-1">Zona Pastoral</label>
+                <input
+                  type="text"
+                  value={zonaManual}
+                  onChange={(e) => setZonaManual(e.target.value)}
+                  placeholder="Sierra de Pahuatlán y Huauchinango"
+                  className="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-semibold text-slate-400 block mb-1">Nivel de Gravedad</label>
+                <select
+                  value={nivelManual}
+                  onChange={(e) => setNivelManual(Number(e.target.value))}
+                  className="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-xs font-bold"
+                >
+                  <option value={4} className="text-rose-400 font-bold">Nivel 4 — Emergencia Crítica (Rojo)</option>
+                  <option value={3} className="text-orange-400 font-bold">Nivel 3 — Alerta Temprana (Naranja)</option>
+                  <option value={2} className="text-amber-400 font-bold">Nivel 2 — Vigilancia Preventiva (Amarillo)</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-[11px] font-semibold text-slate-400 block mb-1">Instrucciones Operativas</label>
+              <textarea
+                rows={3}
+                placeholder="Instrucciones para párrocos y brigadistas..."
+                value={mensajeManual}
+                onChange={(e) => setMensajeManual(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl p-3 text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setModoManual(false)} className="px-4 py-2 bg-slate-800 text-slate-400 rounded-xl text-xs">
+                Cancelar
+              </button>
+              <button type="submit" className="px-5 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl text-xs shadow-lg">
+                Transmitir Aviso Oficial
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Dictamen Sinóptico de SARA */}
       <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl shadow-lg flex items-start gap-3.5">
         <div className="p-2.5 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-xl shrink-0 mt-0.5">
           <Bot className="w-5 h-5 text-amber-400" />
@@ -273,12 +368,12 @@ export default function SatRCOperativo({ alCerrarSesion }) {
               <span className="text-xs font-black text-amber-400 uppercase tracking-wide">
                 Informe de Situación • Agente SARA
               </span>
-              {dictamenSARA && (
+              {dictamenSARA?.color && (
                 <span 
                   className="text-[10px] font-black px-2 py-0.5 rounded text-white"
                   style={{ backgroundColor: dictamenSARA.color }}
                 >
-                  {dictamenSARA.estado_situacion}
+                  {dictamenSARA.estado_situacion || "SITUACION_DIOCESANA"}
                 </span>
               )}
             </div>
@@ -293,10 +388,8 @@ export default function SatRCOperativo({ alCerrarSesion }) {
         </div>
       </div>
 
-      {/* 2. SEMÁFORO INTERACTIVO: LOS 4 BOTONES FILTRAN LA BANDEJA INFERIOR */}
+      {/* 2. SEMÁFORO INTERACTIVO CON BOTONES FILTRANTES */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        
-        {/* Nivel 4 */}
         <div 
           onClick={() => {
             setFiltroSemaforo('NIVEL4');
@@ -317,7 +410,6 @@ export default function SatRCOperativo({ alCerrarSesion }) {
           <span className="text-2xl font-black text-rose-400">{totalNivel4}</span>
         </div>
 
-        {/* Nivel 3 */}
         <div 
           onClick={() => {
             setFiltroSemaforo('NIVEL3');
@@ -338,7 +430,6 @@ export default function SatRCOperativo({ alCerrarSesion }) {
           <span className="text-2xl font-black text-orange-400">{totalNivel3}</span>
         </div>
 
-        {/* Nivel 2 */}
         <div 
           onClick={() => {
             setFiltroSemaforo('NIVEL2');
@@ -357,7 +448,6 @@ export default function SatRCOperativo({ alCerrarSesion }) {
           <span className="text-2xl font-bold text-amber-400">{totalNivel2}</span>
         </div>
 
-        {/* Nivel 1 */}
         <div 
           onClick={() => {
             setFiltroSemaforo('NIVEL1');
@@ -375,10 +465,9 @@ export default function SatRCOperativo({ alCerrarSesion }) {
           </div>
           <span className="text-2xl font-bold text-emerald-400">{totalNivel1}</span>
         </div>
-
       </div>
 
-      {/* 3. DÚO TÁCTICO: MAPA Y SATÉLITE LADO A LADO */}
+      {/* 3. DÚO TÁCTICO: MAPA Y SATÉLITE */}
       <div className="space-y-6">
         <RiskMap 
           evaluaciones={evaluaciones}
@@ -413,116 +502,124 @@ export default function SatRCOperativo({ alCerrarSesion }) {
 
         {bandejaAbierta && (
           <div className="border-t border-slate-800 animate-fade-in">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-950/70 text-slate-400 uppercase tracking-wider text-[10px] border-b border-slate-800">
-                  <tr>
-                    <th className="py-3 px-4">Severidad</th>
-                    <th className="py-3 px-3">Evolución</th>
-                    <th className="py-3 px-3">Comunidad</th>
-                    <th className="py-3 px-3">Municipio</th>
-                    <th className="py-3 px-3">Saturación Suelo</th>
-                    <th className="py-3 px-3">Relieve / Pendiente</th>
-                    <th className="py-3 px-3">Acceso Vial</th>
-                    <th className="py-3 px-3">Diagnóstico Físico</th>
-                    <th className="py-3 px-4 text-center">Acción</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800 text-slate-300">
-                  {itemsPaginados.map((item) => {
-                    const tendencia = obtenerTendencia(item);
-                    const IconoTendencia = tendencia.icono;
-
-                    return (
-                      <tr 
-                        key={item.localidad_id}
-                        onClick={() => setComunidadFoco(item)}
-                        className="hover:bg-slate-800/40 cursor-pointer transition-colors"
-                      >
-                        <td className="py-2.5 px-4">
-                          <span 
-                            className="text-[10px] font-black px-2 py-0.5 rounded text-white shadow"
-                            style={{ backgroundColor: item.color_alerta }}
-                          >
-                            Nivel {item.nivel_alerta}
-                          </span>
-                        </td>
-
-                        {/* Columna de Tendencia / Evolución */}
-                        <td className="py-2.5 px-3">
-                          <span className={`flex items-center gap-1 font-bold text-[10px] ${tendencia.color}`}>
-                            <IconoTendencia className="w-3.5 h-3.5" />
-                            {tendencia.texto}
-                          </span>
-                        </td>
-
-                        <td className="py-2.5 px-3 font-extrabold text-white">{item.nombre}</td>
-                        <td className="py-2.5 px-3 text-slate-400">{item.municipio}</td>
-                        <td className="py-2.5 px-3 font-mono font-bold text-amber-300">
-                          {item.impactoSistemico?.saturacionTotalSueloMm} mm
-                        </td>
-                        <td className="py-2.5 px-3">
-                          {item.geografia?.relieve} ({item.geografia?.pendienteMax}°)
-                        </td>
-                        <td className="py-2.5 px-3">
-                          <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
-                            item.impactoSistemico?.accesoVial?.includes('TERRACERIA') || item.impactoSistemico?.accesoVial?.includes('BRECHA')
-                              ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                              : 'text-slate-400'
-                          }`}>
-                            {item.impactoSistemico?.accesoVial}
-                          </span>
-                        </td>
-                        <td className="py-2.5 px-3 text-slate-200 truncate max-w-[200px]">
-                          {item.diagnostico?.titulo}
-                        </td>
-                        <td className="py-2.5 px-4 text-center">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setComunidadFoco(item);
-                              setComunidadDetalle(item);
-                            }}
-                            className="text-[11px] font-bold text-amber-400 hover:text-white bg-slate-800 hover:bg-amber-500 hover:text-slate-950 px-2.5 py-1 rounded-lg border border-slate-700 transition-all"
-                          >
-                            Auditar
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Paginación */}
-            <div className="p-3.5 bg-slate-950/80 border-t border-slate-800 flex justify-between items-center text-xs">
-              <span className="text-slate-400">
-                Mostrando <strong className="text-white">{(paginaActual - 1) * itemsPorPagina + 1}</strong> a <strong className="text-white">{Math.min(paginaActual * itemsPorPagina, comunidadesFiltradas.length)}</strong> de <strong className="text-white">{comunidadesFiltradas.length}</strong>
-              </span>
-
-              <div className="flex items-center gap-2">
-                <button
-                  disabled={paginaActual === 1}
-                  onClick={() => setPaginaActual(prev => Math.max(1, prev - 1))}
-                  className="flex items-center gap-1 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg font-bold text-slate-300"
-                >
-                  <ChevronLeft className="w-4 h-4" /> Anterior
-                </button>
-
-                <span className="font-mono text-slate-300 px-2 font-bold">
-                  {paginaActual} / {totalPaginas}
-                </span>
-
-                <button
-                  disabled={paginaActual === totalPaginas}
-                  onClick={() => setPaginaActual(prev => Math.min(totalPaginas, prev + 1))}
-                  className="flex items-center gap-1 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg font-bold text-slate-300"
-                >
-                  Siguiente <ChevronRight className="w-4 h-4" />
-                </button>
+            {cargandoEvaluacion ? (
+              <div className="p-12 text-center text-slate-400 flex flex-col items-center gap-2">
+                <div className="w-6 h-6 border-2 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
+                <p className="text-xs">Sincronizando comunidades diocesanas...</p>
               </div>
-            </div>
+            ) : (
+              <>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-950/70 text-slate-400 uppercase tracking-wider text-[10px] border-b border-slate-800">
+                      <tr>
+                        <th className="py-3 px-4">Severidad</th>
+                        <th className="py-3 px-3">Evolución</th>
+                        <th className="py-3 px-3">Comunidad</th>
+                        <th className="py-3 px-3">Municipio</th>
+                        <th className="py-3 px-3">Saturación Suelo</th>
+                        <th className="py-3 px-3">Relieve / Pendiente</th>
+                        <th className="py-3 px-3">Acceso Vial</th>
+                        <th className="py-3 px-3">Diagnóstico Físico</th>
+                        <th className="py-3 px-4 text-center">Acción</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800 text-slate-300">
+                      {itemsPaginados.map((item) => {
+                        const tendencia = obtenerTendencia(item);
+                        const IconoTendencia = tendencia.icono;
+
+                        return (
+                          <tr 
+                            key={item?.localidad_id || Math.random()}
+                            onClick={() => setComunidadFoco(item)}
+                            className="hover:bg-slate-800/40 cursor-pointer transition-colors"
+                          >
+                            <td className="py-2.5 px-4">
+                              <span 
+                                className="text-[10px] font-black px-2 py-0.5 rounded text-white shadow"
+                                style={{ backgroundColor: item?.color_alerta || '#10B981' }}
+                              >
+                                Nivel {item?.nivel_alerta || 1}
+                              </span>
+                            </td>
+
+                            <td className="py-2.5 px-3">
+                              <span className={`flex items-center gap-1 font-bold text-[10px] ${tendencia.color}`}>
+                                <IconoTendencia className="w-3.5 h-3.5" />
+                                {tendencia.texto}
+                              </span>
+                            </td>
+
+                            <td className="py-2.5 px-3 font-extrabold text-white">{item?.nombre}</td>
+                            <td className="py-2.5 px-3 text-slate-400">{item?.municipio}</td>
+                            <td className="py-2.5 px-3 font-mono font-bold text-amber-300">
+                              {item?.impactoSistemico?.saturacionTotalSueloMm ?? 0} mm
+                            </td>
+                            <td className="py-2.5 px-3">
+                              {item?.geografia?.relieve || 'MESETA'} ({item?.geografia?.pendienteMax ?? 0}°)
+                            </td>
+                            <td className="py-2.5 px-3">
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
+                                item?.impactoSistemico?.accesoVial?.includes('TERRACERIA') || item?.impactoSistemico?.accesoVial?.includes('BRECHA')
+                                  ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                                  : 'text-slate-400'
+                              }`}>
+                                {item?.impactoSistemico?.accesoVial || 'PAVIMENTADO'}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3 text-slate-200 truncate max-w-[200px]">
+                              {item?.diagnostico?.titulo || 'Normal'}
+                            </td>
+                            <td className="py-2.5 px-4 text-center">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setComunidadFoco(item);
+                                  setComunidadDetalle(item);
+                                }}
+                                className="text-[11px] font-bold text-amber-400 hover:text-white bg-slate-800 hover:bg-amber-500 hover:text-slate-950 px-2.5 py-1 rounded-lg border border-slate-700 transition-all"
+                              >
+                                Auditar
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Controles de Paginación */}
+                <div className="p-3.5 bg-slate-950/80 border-t border-slate-800 flex justify-between items-center text-xs">
+                  <span className="text-slate-400">
+                    Mostrando <strong className="text-white">{(paginaActual - 1) * itemsPorPagina + 1}</strong> a <strong className="text-white">{Math.min(paginaActual * itemsPorPagina, comunidadesFiltradas.length)}</strong> de <strong className="text-white">{comunidadesFiltradas.length}</strong>
+                  </span>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      disabled={paginaActual === 1}
+                      onClick={() => setPaginaActual(prev => Math.max(1, prev - 1))}
+                      className="flex items-center gap-1 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg font-bold text-slate-300"
+                    >
+                      <ChevronLeft className="w-4 h-4" /> Anterior
+                    </button>
+
+                    <span className="font-mono text-slate-300 px-2 font-bold">
+                      {paginaActual} / {totalPaginas}
+                    </span>
+
+                    <button
+                      disabled={paginaActual === totalPaginas}
+                      onClick={() => setPaginaActual(prev => Math.min(totalPaginas, prev + 1))}
+                      className="flex items-center gap-1 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg font-bold text-slate-300"
+                    >
+                      Siguiente <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         )}
       </div>
@@ -533,20 +630,20 @@ export default function SatRCOperativo({ alCerrarSesion }) {
           <div className="bg-slate-900 border-2 border-slate-700 max-w-3xl w-full rounded-2xl shadow-2xl overflow-hidden flex flex-col text-slate-200">
             <div 
               className="p-4 border-b border-slate-800 flex justify-between items-start"
-              style={{ backgroundColor: `${comunidadDetalle.color_alerta}20` }}
+              style={{ backgroundColor: `${comunidadDetalle?.color_alerta || '#10B981'}20` }}
             >
               <div>
                 <div className="flex items-center gap-2 mb-1">
                   <span 
                     className="text-xs font-black px-2.5 py-0.5 rounded text-white"
-                    style={{ backgroundColor: comunidadDetalle.color_alerta }}
+                    style={{ backgroundColor: comunidadDetalle?.color_alerta || '#10B981' }}
                   >
-                    NIVEL {comunidadDetalle.nivel_alerta} • {comunidadDetalle.estado_alerta}
+                    NIVEL {comunidadDetalle?.nivel_alerta || 1} • {comunidadDetalle?.estado_alerta || 'NORMAL'}
                   </span>
                   <span className="text-xs text-slate-400">Auditoría Diocesana de Campo</span>
                 </div>
-                <h2 className="text-xl font-black text-white">{comunidadDetalle.nombre}</h2>
-                <p className="text-xs text-slate-300">{comunidadDetalle.municipio}, {comunidadDetalle.estado} • Cuenca: {comunidadDetalle.geografia?.cuenca}</p>
+                <h2 className="text-xl font-black text-white">{comunidadDetalle?.nombre}</h2>
+                <p className="text-xs text-slate-300">{comunidadDetalle?.municipio}, {comunidadDetalle?.estado} • Cuenca: {comunidadDetalle?.geografia?.cuenca || 'Cuenca Regional'}</p>
               </div>
               <button onClick={() => setComunidadDetalle(null)} className="p-1.5 bg-slate-800 hover:bg-slate-700 rounded-xl text-slate-400 hover:text-white">
                 <X className="w-5 h-5" />
@@ -556,40 +653,40 @@ export default function SatRCOperativo({ alCerrarSesion }) {
             <div className="p-5 overflow-y-auto max-h-[70vh] space-y-4 text-xs">
               <div className="bg-slate-950/70 p-3.5 rounded-xl border border-slate-800 space-y-1">
                 <p className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">Diagnóstico Físico</p>
-                <p className="text-sm font-bold text-white">{comunidadDetalle.diagnostico?.titulo}</p>
-                <p className="text-xs text-slate-300 leading-relaxed">{comunidadDetalle.diagnostico?.causa}</p>
+                <p className="text-sm font-bold text-white">{comunidadDetalle?.diagnostico?.titulo}</p>
+                <p className="text-xs text-slate-300 leading-relaxed">{comunidadDetalle?.diagnostico?.causa}</p>
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
                   <span className="text-[10px] text-slate-400 uppercase font-semibold block">Pendiente Máx</span>
-                  <span className="text-base font-bold text-white">{comunidadDetalle.geografia?.pendienteMax}°</span>
-                  <span className="text-[10px] text-slate-400 block">{comunidadDetalle.geografia?.relieve}</span>
+                  <span className="text-base font-bold text-white">{comunidadDetalle?.geografia?.pendienteMax ?? 0}°</span>
+                  <span className="text-[10px] text-slate-400 block">{comunidadDetalle?.geografia?.relieve}</span>
                 </div>
                 <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
                   <span className="text-[10px] text-slate-400 uppercase font-semibold block">Acceso Vial</span>
-                  <span className="text-xs font-bold text-amber-300 block truncate">{comunidadDetalle.impactoSistemico?.accesoVial}</span>
+                  <span className="text-xs font-bold text-amber-300 block truncate">{comunidadDetalle?.impactoSistemico?.accesoVial}</span>
                   <span className="text-[10px] text-slate-400 block">Riesgo corte</span>
                 </div>
                 <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
                   <span className="text-[10px] text-slate-400 uppercase font-semibold block">Hospital Cercano</span>
-                  <span className="text-base font-bold text-white">{comunidadDetalle.impactoSistemico?.distanciaHospitalKm} km</span>
+                  <span className="text-base font-bold text-white">{comunidadDetalle?.impactoSistemico?.distanciaHospitalKm ?? 0} km</span>
                   <span className="text-[10px] text-slate-400 block">Vía terrestre</span>
                 </div>
                 <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
                   <span className="text-[10px] text-slate-400 uppercase font-semibold block">Ventana Acción</span>
-                  <span className="text-base font-bold text-emerald-400">{comunidadDetalle.tiempos?.ventanaAccionHoras} hrs</span>
+                  <span className="text-base font-bold text-emerald-400">{comunidadDetalle?.tiempos?.ventanaAccionHoras ?? 6} hrs</span>
                   <span className="text-[10px] text-slate-400 block">Tiempo concentración</span>
                 </div>
               </div>
 
               <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-center">
-                <p className="text-xs font-bold text-amber-300 italic">{comunidadDetalle.protocolo}</p>
+                <p className="text-xs font-bold text-amber-300 italic">{comunidadDetalle?.protocolo || "Consulte al coordinador de Cáritas"}</p>
               </div>
             </div>
 
             <div className="p-3.5 bg-slate-800/80 border-t border-slate-700 flex justify-between items-center text-xs">
-              <span className="text-slate-400">Población directa: <strong className="text-white">{comunidadDetalle.impactoSistemico?.poblacionDirecta?.toLocaleString()}</strong> habitantes</span>
+              <span className="text-slate-400">Población directa: <strong className="text-white">{comunidadDetalle?.impactoSistemico?.poblacionDirecta?.toLocaleString() ?? 0}</strong> habitantes</span>
               <button onClick={() => setComunidadDetalle(null)} className="px-4 py-1.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-xs font-bold">Cerrar</button>
             </div>
           </div>
