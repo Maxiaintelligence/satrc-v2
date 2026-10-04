@@ -6,42 +6,49 @@ import { evaluarLocalidad } from '../engine/riskEvaluator.js';
 import RiskMap from '../components/RiskMap.jsx';
 import SatelliteViewer from '../components/SatelliteViewer.jsx';
 import { 
-  ShieldAlert, 
-  AlertTriangle, 
-  Power, 
   Radio, 
+  Power, 
   Send, 
-  Layers, 
-  Users, 
+  Bot, 
+  ScrollText, 
   Clock, 
-  MapPin, 
-  FileText, 
-  X,
-  ArrowRight,
-  Filter,
-  AlertOctagon,
+  AlertOctagon, 
+  AlertTriangle, 
+  ChevronDown, 
+  ChevronUp, 
+  ChevronLeft, 
+  ChevronRight, 
+  X, 
+  ExternalLink,
   Mountain,
   Waves,
   Truck,
-  Bot,
-  ScrollText,
-  ShieldCheck
+  ShieldCheck,
+  CheckCircle2
 } from 'lucide-react';
 
 export default function SatRCOperativo({ alCerrarSesion }) {
   const todasLocalidades = db.localidades;
 
+  // Estados del Cuarto de Situación
   const [killSwitchActivo, setKillSwitchActivo] = useState(false);
   const [cargandoEvaluacion, setCargandoEvaluacion] = useState(true);
   const [evaluaciones, setEvaluaciones] = useState([]);
   const [comunidadFoco, setComunidadFoco] = useState(null);
-  const [filtroCrisis, setFiltroCrisis] = useState('CRISIS');
+
+  // Estados de la Bandeja Colapsable y Paginada
+  const [bandejaAbierta, setBandejaAbierta] = useState(false); // Contraída por defecto
+  const [paginaActual, setPaginaActual] = useState(1);
+  const itemsPorPagina = 10;
 
   // Estados de SARA
   const [dictamenSARA, setDictamenSARA] = useState(null);
   const [bitacoraSARA, setBitacoraSARA] = useState([]);
   const [modalBitacoraAbierto, setModalBitacoraAbierto] = useState(false);
   const [cargandoSARA, setCargandoSARA] = useState(true);
+
+  // Modal de Detalle Profundo
+  const [comunidadDetalle, setComunidadDetalle] = useState(null);
 
   // Alerta SMN
   const [alertaSMN, setAlertaSMN] = useState(null);
@@ -53,6 +60,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
   const [mensajeManual, setMensajeManual] = useState('');
   const [alertaManualEmitida, setAlertaManualEmitida] = useState(null);
 
+  // 1. Cargar Aviso del SMN
   useEffect(() => {
     fetch('/api/smn')
       .then(r => r.json())
@@ -60,6 +68,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
       .catch(() => null);
   }, []);
 
+  // 2. Escaneo Geofísico de las 405 Comunidades
   useEffect(() => {
     if (killSwitchActivo) {
       setCargandoEvaluacion(false);
@@ -70,7 +79,6 @@ export default function SatRCOperativo({ alCerrarSesion }) {
     async function correrEscaneo() {
       setCargandoEvaluacion(true);
 
-      // Consulta del nodo de la sierra
       const nodoSierra = db.localidades.find(l => l.nombre.toLowerCase().includes('huauchinango')) || db.localidades[0];
       const resMeteo = await consultarModelosDeterministas(nodoSierra.coords.lat, nodoSierra.coords.lon);
 
@@ -81,11 +89,9 @@ export default function SatRCOperativo({ alCerrarSesion }) {
         serieConsenso = generarConsensoDeterminista(resMeteo.datos_horarios);
       }
 
-      // Evaluación individualizada (CERO inyecciones globales de 85mm)
+      // Evaluación individualizada sin inyecciones arbitrarias
       const resultados = todasLocalidades.map(loc => {
-        return evaluarLocalidad(loc, serieConsenso, {
-          alertaSMN: alertaSMN
-        });
+        return evaluarLocalidad(loc, serieConsenso, { alertaSMN: alertaSMN });
       });
 
       resultados.sort((a, b) => {
@@ -98,7 +104,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
         setComunidadFoco(resultados[0] || null);
         setCargandoEvaluacion(false);
 
-        // Llamada a SARA (Groq Llama-3.3)
+        // Llamada a SARA
         const n4 = resultados.filter(e => e.nivel_alerta === 4).length;
         const n3 = resultados.filter(e => e.nivel_alerta === 3).length;
         const n1 = resultados.filter(e => e.nivel_alerta === 1).length;
@@ -128,16 +134,19 @@ export default function SatRCOperativo({ alCerrarSesion }) {
     return () => { cancelado = true; };
   }, [killSwitchActivo, alertaSMN]);
 
+  // Conteos
   const totalNivel4 = evaluaciones.filter(e => e.nivel_alerta === 4).length;
   const totalNivel3 = evaluaciones.filter(e => e.nivel_alerta === 3).length;
   const totalNivel2 = evaluaciones.filter(e => e.nivel_alerta === 2).length;
   const totalNivel1 = evaluaciones.filter(e => e.nivel_alerta === 1).length;
 
-  const comunidadesFiltradas = evaluaciones.filter(item => {
-    if (filtroCrisis === 'CRISIS') return item.nivel_alerta >= 3;
-    if (filtroCrisis === 'NIVEL4') return item.nivel_alerta === 4;
-    return true;
-  });
+  // Comunidades en riesgo real (Nivel 3 y 4) para la bandeja
+  const incidentesCriticos = evaluaciones.filter(e => e.nivel_alerta >= 3);
+  const totalPaginas = Math.ceil(incidentesCriticos.length / itemsPorPagina) || 1;
+  const incidentesPaginados = incidentesCriticos.slice(
+    (paginaActual - 1) * itemsPorPagina,
+    paginaActual * itemsPorPagina
+  );
 
   const emitirAlertaManual = (e) => {
     e.preventDefault();
@@ -155,7 +164,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
   return (
     <div className="space-y-6">
       
-      {/* 1. BARRA SUPERIOR DE MANDO */}
+      {/* 1. CABECERA LIMPIA: ESTADO DEL CUARTO + SARA (3 LÍNEAS) */}
       <div className="bg-slate-900 border-2 border-slate-800 p-4 rounded-2xl shadow-xl flex flex-col md:flex-row justify-between items-center gap-4">
         <div className="flex items-center gap-3">
           <div className="p-2.5 bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded-xl">
@@ -180,6 +189,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
           </div>
         </div>
 
+        {/* Acciones del Coordinador */}
         <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => setModalBitacoraAbierto(true)}
@@ -191,7 +201,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
 
           <button
             onClick={() => setKillSwitchActivo(!killSwitchActivo)}
-            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all border ${
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${
               killSwitchActivo
                 ? 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-500'
                 : 'bg-rose-600/20 hover:bg-rose-600 text-rose-300 hover:text-white border-rose-500/30'
@@ -203,7 +213,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
 
           <button
             onClick={() => setModoManual(!modoManual)}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl text-xs font-bold transition-all shadow"
+            className="flex items-center gap-1.5 px-3 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl text-xs font-bold transition-all shadow"
           >
             <Send className="w-3.5 h-3.5" />
             {modoManual ? 'Cerrar Aviso' : 'Emitir Aviso'}
@@ -218,374 +228,138 @@ export default function SatRCOperativo({ alCerrarSesion }) {
         </div>
       </div>
 
-      {/* Alerta Manual */}
-      {alertaManualEmitida && (
-        <div className="bg-rose-950/40 border-2 border-rose-500 p-4 rounded-2xl flex justify-between items-start gap-3">
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-black bg-rose-500 text-white px-2 py-0.5 rounded">
-                  AVISO DIOCESANO EMITIDO • NIVEL {alertaManualEmitida.nivel}
-                </span>
-                <span className="text-xs text-rose-300 font-semibold">{alertaManualEmitida.zona}</span>
-                <span className="text-[11px] text-slate-400">• {alertaManualEmitida.timestamp}</span>
-              </div>
-              <p className="text-sm font-medium text-white mt-1.5">{alertaManualEmitida.mensaje}</p>
-            </div>
-          </div>
-          <button onClick={() => setAlertaManualEmitida(null)} className="text-xs text-slate-400 hover:text-white px-2 py-1 bg-slate-800 rounded-lg">
-            Retirar
-          </button>
+      {/* Dictamen Sinóptico de SARA (3 Líneas Claras y Sobrias) */}
+      <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl shadow-lg flex items-start gap-3.5">
+        <div className="p-2.5 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-xl shrink-0 mt-0.5">
+          <Bot className="w-5 h-5 text-amber-400" />
         </div>
-      )}
-
-      {/* Formulario Manual */}
-      {modoManual && (
-        <div className="bg-slate-900 border border-amber-500/50 p-5 rounded-2xl shadow-2xl space-y-3">
-          <h3 className="text-sm font-bold text-amber-400 flex items-center gap-2">
-            <Send className="w-4 h-4" /> Formulario de Comunicación de Crisis Cáritas
-          </h3>
-          <form onSubmit={emitirAlertaManual} className="space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="text-[11px] font-semibold text-slate-400 block mb-1">Zona Pastoral</label>
-                <input
-                  type="text"
-                  value={zonaManual}
-                  onChange={(e) => setZonaManual(e.target.value)}
-                  placeholder="Sierra de Pahuatlán y Huauchinango"
-                  className="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-xs"
-                />
-              </div>
-
-              <div>
-                <label className="text-[11px] font-semibold text-slate-400 block mb-1">Nivel de Gravedad</label>
-                <select
-                  value={nivelManual}
-                  onChange={(e) => setNivelManual(Number(e.target.value))}
-                  className="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-xs font-bold"
+        <div className="flex-1 space-y-1">
+          <div className="flex flex-wrap justify-between items-center gap-2">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-black text-amber-400 uppercase tracking-wide">
+                Informe de Guardia • Agente SARA
+              </span>
+              {dictamenSARA && (
+                <span 
+                  className="text-[10px] font-black px-2 py-0.5 rounded text-white"
+                  style={{ backgroundColor: dictamenSARA.color }}
                 >
-                  <option value={4} className="text-rose-400 font-bold">Nivel 4 — Emergencia Crítica (Rojo)</option>
-                  <option value={3} className="text-orange-400 font-bold">Nivel 3 — Alerta Temprana (Naranja)</option>
-                  <option value={2} className="text-amber-400 font-bold">Nivel 2 — Vigilancia Preventiva (Amarillo)</option>
-                </select>
-              </div>
+                  {dictamenSARA.estado_situacion}
+                </span>
+              )}
             </div>
+            <span className="text-[11px] font-mono text-slate-400">
+              Corrida: <strong className="text-white">{dictamenSARA?.hora_evaluacion || '--:--'}</strong> • Próxima: {dictamenSARA?.proxima_evaluacion || '--:--'}
+            </span>
+          </div>
 
-            <div>
-              <label className="text-[11px] font-semibold text-slate-400 block mb-1">Instrucciones Operativas</label>
-              <textarea
-                rows={3}
-                placeholder="Instrucciones para párrocos y brigadistas..."
-                value={mensajeManual}
-                onChange={(e) => setMensajeManual(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl p-3 text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none"
-              />
-            </div>
-
-            <div className="flex justify-end gap-2">
-              <button type="button" onClick={() => setModoManual(false)} className="px-4 py-2 bg-slate-800 text-slate-400 rounded-xl text-xs">
-                Cancelar
-              </button>
-              <button type="submit" className="px-5 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl text-xs shadow-lg">
-                Transmitir Aviso Oficial
-              </button>
-            </div>
-          </form>
+          <p className="text-xs md:text-sm text-slate-200 leading-relaxed font-normal">
+            {dictamenSARA?.comentario_oficial || "Monitoreo diocesano activo. Evaluaciones físicas ejecutadas sobre las 405 comunidades."}
+          </p>
         </div>
-      )}
-
-      {/* 2. INFORME DE SITUACIÓN OFICIAL DE SARA */}
-      <div className="bg-slate-900 border-2 border-slate-800 rounded-2xl p-5 shadow-2xl space-y-3">
-        <div className="flex flex-wrap justify-between items-center gap-2 border-b border-slate-800 pb-3">
-          <div className="flex items-center gap-2">
-            <div className="p-1.5 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20">
-              <Bot className="w-5 h-5 text-amber-400" />
-            </div>
-            <div>
-              <h3 className="font-black text-sm md:text-base text-white flex items-center gap-2">
-                Informe de Situación • Agente SARA
-                {dictamenSARA && (
-                  <span 
-                    className="text-[10px] font-black px-2 py-0.5 rounded text-white"
-                    style={{ backgroundColor: dictamenSARA.color }}
-                  >
-                    {dictamenSARA.estado_situacion}
-                  </span>
-                )}
-              </h3>
-              <p className="text-[11px] text-slate-400">
-                Oficial Meteoróloga de Guardia • {dictamenSARA?.modelo_ia || "Groq Llama-3.3-70B"} • Ciclo de 3 Horas
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 font-mono text-xs text-slate-400">
-            <Clock className="w-3.5 h-3.5 text-amber-400" />
-            <span>Última corrida: <strong className="text-white">{dictamenSARA?.hora_evaluacion || '--:--'}</strong></span>
-            <span>•</span>
-            <span>Próxima: <strong className="text-slate-300">{dictamenSARA?.proxima_evaluacion || '--:--'}</strong></span>
-          </div>
-        </div>
-
-        {cargandoSARA && !dictamenSARA ? (
-          <div className="p-4 text-center text-slate-400 flex items-center justify-center gap-2 text-xs">
-            <div className="w-4 h-4 border-2 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
-            <span>SARA analizando la atmósfera y memoria de saturación...</span>
-          </div>
-        ) : (
-          <div className="bg-slate-950/70 p-4 rounded-xl border border-slate-800 space-y-1.5">
-            <p className="text-xs font-bold text-amber-400 uppercase tracking-wider">
-              {dictamenSARA?.titulo || "Evaluación Sinóptica Diocesana"}
-            </p>
-            <p className="text-xs md:text-sm text-slate-200 leading-relaxed font-normal">
-              {dictamenSARA?.comentario_oficial || "Monitoreo diocesano activo sobre las 405 comunidades."}
-            </p>
-          </div>
-        )}
       </div>
 
-      {/* 3. SEMÁFORO EJECUTIVO SANEADO (ALTO CONTRASTE) */}
+      {/* Semáforo Compacto de las 405 Localidades */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div 
-          onClick={() => setFiltroCrisis('NIVEL4')}
-          className={`cursor-pointer p-4 rounded-2xl border-2 transition-all shadow-lg ${
-            filtroCrisis === 'NIVEL4' ? 'bg-rose-950/80 border-rose-500 scale-[1.02]' : 'bg-slate-900 border-slate-800 hover:border-rose-500/50'
-          }`}
-        >
-          <div className="flex justify-between items-center">
-            <span className="text-xs font-black text-rose-400 uppercase tracking-wider flex items-center gap-1.5">
-              <AlertOctagon className="w-4 h-4" /> Emergencia (N4)
+        <div className="p-3.5 rounded-xl border bg-slate-900 border-rose-500/60 shadow flex justify-between items-center">
+          <div>
+            <span className="text-xs font-black text-rose-400 uppercase flex items-center gap-1">
+              <AlertOctagon className="w-3.5 h-3.5" /> Emergencia (N4)
             </span>
-            <span className="text-2xl font-black text-rose-400">{totalNivel4}</span>
+            <p className="text-[10px] text-slate-400 mt-0.5">Laderas al límite</p>
           </div>
-          <p className="text-[11px] text-slate-400 mt-1">Laderas al límite geomecánico</p>
+          <span className="text-2xl font-black text-rose-400">{totalNivel4}</span>
         </div>
 
-        <div 
-          onClick={() => setFiltroCrisis('CRISIS')}
-          className={`cursor-pointer p-4 rounded-2xl border-2 transition-all shadow-lg ${
-            filtroCrisis === 'CRISIS' ? 'bg-orange-950/70 border-orange-500 scale-[1.02]' : 'bg-slate-900 border-slate-800 hover:border-orange-500/50'
-          }`}
-        >
-          <div className="flex justify-between items-center">
-            <span className="text-xs font-black text-orange-400 uppercase tracking-wider flex items-center gap-1.5">
-              <AlertTriangle className="w-4 h-4" /> Alerta Temprana (N3)
+        <div className="p-3.5 rounded-xl border bg-slate-900 border-orange-500/60 shadow flex justify-between items-center">
+          <div>
+            <span className="text-xs font-black text-orange-400 uppercase flex items-center gap-1">
+              <AlertTriangle className="w-3.5 h-3.5" /> Alerta Temprana (N3)
             </span>
-            <span className="text-2xl font-black text-orange-400">{totalNivel3}</span>
+            <p className="text-[10px] text-slate-400 mt-0.5">Lluvia en laderas/caminos</p>
           </div>
-          <p className="text-[11px] text-slate-400 mt-1">Temporal activo sobre laderas y caminos</p>
+          <span className="text-2xl font-black text-orange-400">{totalNivel3}</span>
         </div>
 
-        <div onClick={() => setFiltroCrisis('TODOS')} className="cursor-pointer p-4 rounded-2xl border-2 bg-slate-900 border-slate-800 hover:border-amber-500/40">
-          <div className="flex justify-between items-center">
-            <span className="text-xs font-bold text-amber-400 uppercase tracking-wider">Vigilancia (N2)</span>
-            <span className="text-2xl font-bold text-amber-400">{totalNivel2}</span>
+        <div className="p-3.5 rounded-xl border bg-slate-900 border-slate-800 shadow flex justify-between items-center opacity-80">
+          <div>
+            <span className="text-xs font-bold text-amber-400 uppercase">Vigilancia (N2)</span>
+            <p className="text-[10px] text-slate-400 mt-0.5">Precipitación activa</p>
           </div>
-          <p className="text-[11px] text-slate-400 mt-1">Lluvia moderada sin colapso físico</p>
+          <span className="text-2xl font-bold text-amber-400">{totalNivel2}</span>
         </div>
 
-        <div onClick={() => setFiltroCrisis('TODOS')} className="cursor-pointer p-4 rounded-2xl border-2 bg-slate-900 border-slate-800 hover:border-emerald-500/40">
-          <div className="flex justify-between items-center">
-            <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider">Estables (N1)</span>
-            <span className="text-2xl font-bold text-emerald-400">{totalNivel1}</span>
+        <div className="p-3.5 rounded-xl border bg-slate-900 border-slate-800 shadow flex justify-between items-center opacity-80">
+          <div>
+            <span className="text-xs font-bold text-emerald-400 uppercase">Estables (N1)</span>
+            <p className="text-[10px] text-slate-400 mt-0.5">Altiplano y valles</p>
           </div>
-          <p className="text-[11px] text-slate-400 mt-1">Normalidad en el Altiplano y valles</p>
+          <span className="text-2xl font-bold text-emerald-400">{totalNivel1}</span>
         </div>
       </div>
 
-      {/* 4. FICHA EJECUTIVA DE LA COMUNIDAD EN FOCO */}
-      {comunidadFoco && (
-        <div 
-          className="bg-slate-900 border-2 rounded-2xl shadow-2xl overflow-hidden transition-all"
-          style={{ borderColor: comunidadFoco.color_alerta }}
-        >
-          <div 
-            className="p-4 flex flex-wrap justify-between items-center gap-3"
-            style={{ backgroundColor: `${comunidadFoco.color_alerta}20` }}
-          >
-            <div className="flex items-center gap-2.5">
-              <span 
-                className="text-xs font-black px-2.5 py-1 rounded-lg text-white shadow"
-                style={{ backgroundColor: comunidadFoco.color_alerta }}
-              >
-                NIVEL {comunidadFoco.nivel_alerta} • {comunidadFoco.estado_alerta}
-              </span>
-              <div>
-                <h3 className="text-lg font-black text-white">
-                  {comunidadFoco.nombre}, {comunidadFoco.municipio} ({comunidadFoco.estado})
-                </h3>
-                <p className="text-xs text-slate-300 font-semibold mt-0.5">
-                  {comunidadFoco.diagnostico?.titulo}
-                </p>
-              </div>
-            </div>
+      {/* 2. DÚO TÁCTICO OPERATIVO: EL MAPA Y EL SATÉLITE LADO A LADO */}
+      <div className="space-y-6">
+        
+        {/* A) Cartografía Táctica de Comunidades */}
+        <RiskMap 
+          evaluaciones={evaluaciones}
+          localidadFoco={comunidadFoco}
+          alSeleccionarLocalidad={(item) => {
+            setComunidadFoco(item);
+            setComunidadDetalle(item); // Abre la auditoría profunda
+          }}
+        />
 
-            <div className="text-right text-xs">
-              <span className="font-mono text-slate-300 font-bold block">
-                Cuenca: {comunidadFoco.geografia?.cuenca || comunidadFoco.donde?.subcuenca_nom}
-              </span>
-              <span className="text-[11px] text-amber-300 font-semibold italic">
-                {comunidadFoco.protocolo}
-              </span>
-            </div>
-          </div>
+        {/* B) Visor Satelital GOES-19 en Vivo (Los 5 Canales Limpios) */}
+        <SatelliteViewer />
 
-          <div className="p-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
-            <div className="bg-slate-950/70 p-3.5 rounded-xl border border-slate-800 space-y-2">
-              <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider block flex items-center gap-1">
-                <Mountain className="w-3.5 h-3.5" /> Dinámica del Terreno
-              </span>
-              <p className="text-slate-200 text-[11px] leading-relaxed">
-                {comunidadFoco.diagnostico?.causa}
-              </p>
-              <div className="pt-1 border-t border-slate-800 text-[11px] text-slate-400 flex justify-between">
-                <span>Relieve: <strong className="text-white">{comunidadFoco.geografia?.relieve}</strong></span>
-                <span>Pendiente: <strong className="text-rose-400">{comunidadFoco.geografia?.pendienteMax}°</strong></span>
-              </div>
-            </div>
+      </div>
 
-            <div className="bg-slate-950/70 p-3.5 rounded-xl border border-slate-800 space-y-2">
-              <span className="text-[10px] font-bold text-cyan-400 uppercase tracking-wider block flex items-center gap-1">
-                <Waves className="w-3.5 h-3.5" /> Memoria Hídrica
-              </span>
-              <div className="space-y-1">
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Previa (7 días):</span>
-                  <span className="font-mono font-bold text-white">{comunidadFoco.impactoSistemico?.apiPrevio7DiasMm} mm</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Evento Actual:</span>
-                  <span className="font-mono font-bold text-amber-300">{comunidadFoco.impactoSistemico?.lluviaEvento24hMm} mm</span>
-                </div>
-                <div className="flex justify-between pt-1 border-t border-slate-800 text-xs">
-                  <span className="text-slate-300 font-bold">Saturación Total:</span>
-                  <span className="font-mono font-black text-rose-400">{comunidadFoco.impactoSistemico?.saturacionTotalSueloMm} mm</span>
-                </div>
-              </div>
-              <p className="text-[10px] text-slate-500 italic">
-                Umbral crítico falla: {comunidadFoco.impactoSistemico?.umbralFisicoDeslaveMm} mm
-              </p>
-            </div>
-
-            <div className="bg-slate-950/70 p-3.5 rounded-xl border border-slate-800 space-y-2">
-              <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider block flex items-center gap-1">
-                <Clock className="w-3.5 h-3.5" /> Cronograma de Impacto
-              </span>
-              <div className="space-y-1">
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Inicio:</span>
-                  <span className="font-mono text-slate-200">{comunidadFoco.tiempos?.inicio}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Pico:</span>
-                  <span className="font-mono text-slate-200">{comunidadFoco.tiempos?.picoMaximo}</span>
-                </div>
-                <div className="pt-1 border-t border-slate-800">
-                  <span className="text-[10px] text-amber-400 uppercase block font-bold">Ventana de Evacuación</span>
-                  <span className="text-sm font-extrabold text-white">
-                    {comunidadFoco.tiempos?.ventanaAccionHoras} horas antes de la cresta
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-slate-950/70 p-3.5 rounded-xl border border-slate-800 space-y-2">
-              <span className="text-[10px] font-bold text-rose-400 uppercase tracking-wider block flex items-center gap-1">
-                <Truck className="w-3.5 h-3.5" /> Aislamiento y Logística
-              </span>
-              <div className="space-y-1">
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Población directa:</span>
-                  <span className="font-extrabold text-white">{comunidadFoco.impactoSistemico?.poblacionDirecta?.toLocaleString()} hab.</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Camino de acceso:</span>
-                  <span className="font-bold text-amber-300 truncate max-w-[120px]">{comunidadFoco.impactoSistemico?.accesoVial}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Hospital más cercano:</span>
-                  <span className="font-mono text-slate-200">{comunidadFoco.impactoSistemico?.distanciaHospitalKm} km</span>
-                </div>
-                <div className="flex justify-between pt-1 border-t border-slate-800">
-                  <span className="text-slate-400">Marginación social:</span>
-                  <span className="font-bold text-slate-300">{comunidadFoco.impactoSistemico?.marginacion}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 5. BANDEJA DISCRIMINANTE DE INCIDENTES CRÍTICOS */}
+      {/* 3. BANDEJA DE INCIDENTES CRÍTICOS (COLAPSABLE Y CON PAGINACIÓN DE 10 EN 10) */}
       <div className="bg-slate-900 border-2 border-slate-800 rounded-2xl overflow-hidden shadow-xl">
-        <div className="p-4 bg-slate-800/80 border-b border-slate-700 flex flex-wrap justify-between items-center gap-3">
+        
+        {/* Barra de Expansión / Contracción */}
+        <button
+          onClick={() => setBandejaAbierta(!bandejaAbierta)}
+          className="w-full p-4 bg-slate-800/90 hover:bg-slate-800 flex justify-between items-center transition-colors text-left"
+        >
           <div className="flex items-center gap-2">
-            <Filter className="w-4 h-4 text-amber-400" />
-            <h3 className="font-bold text-sm text-white">
-              Bandeja de Incidentes Críticos ({comunidadesFiltradas.length} encontradas)
-            </h3>
+            <span className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-1.5">
+              <AlertTriangle className="w-4 h-4 text-orange-400" />
+              Bandeja de Incidentes Prioritarios ({incidentesCriticos.length} comunidades en Nivel 3 y 4)
+            </span>
           </div>
 
-          <div className="flex items-center gap-1.5 text-xs">
-            <button
-              onClick={() => setFiltroCrisis('CRISIS')}
-              className={`px-3 py-1 rounded-lg font-bold transition-all ${
-                filtroCrisis === 'CRISIS' ? 'bg-orange-500 text-slate-950 shadow' : 'bg-slate-800 text-slate-400 hover:text-white'
-              }`}
-            >
-              Comunidades en Peligro (N3 y N4)
-            </button>
-            <button
-              onClick={() => setFiltroCrisis('NIVEL4')}
-              className={`px-3 py-1 rounded-lg font-bold transition-all ${
-                filtroCrisis === 'NIVEL4' ? 'bg-rose-600 text-white shadow' : 'bg-slate-800 text-slate-400 hover:text-white'
-              }`}
-            >
-              Solo Emergencias (N4)
-            </button>
-            <button
-              onClick={() => setFiltroCrisis('TODOS')}
-              className={`px-3 py-1 rounded-lg font-bold transition-all ${
-                filtroCrisis === 'TODOS' ? 'bg-slate-700 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'
-              }`}
-            >
-              Censo Completo (405)
-            </button>
+          <div className="flex items-center gap-2 text-xs font-bold text-amber-400">
+            <span>{bandejaAbierta ? 'Ocultar Bandeja' : 'Desplegar Listado'}</span>
+            {bandejaAbierta ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </div>
-        </div>
+        </button>
 
-        {cargandoEvaluacion ? (
-          <div className="p-16 text-center text-slate-400 flex flex-col items-center gap-3">
-            <div className="w-8 h-8 border-4 border-rose-500 border-t-transparent rounded-full animate-spin"></div>
-            <p className="text-sm font-mono">Ejecutando escaneo geofísico de laderas y cuencas...</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-950/70 text-slate-400 uppercase tracking-wider text-[10px] border-b border-slate-800">
-                <tr>
-                  <th className="py-3 px-4">Severidad</th>
-                  <th className="py-3 px-3">Comunidad</th>
-                  <th className="py-3 px-3">Municipio</th>
-                  <th className="py-3 px-3">Saturación Suelo</th>
-                  <th className="py-3 px-3">Relieve / Pendiente</th>
-                  <th className="py-3 px-3">Acceso Vial</th>
-                  <th className="py-3 px-3">Diagnóstico</th>
-                  <th className="py-3 px-4 text-center">Acción</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800 text-slate-300">
-                {comunidadesFiltradas.slice(0, 30).map((item) => {
-                  const esFoco = comunidadFoco?.localidad_id === item.localidad_id;
-                  return (
+        {/* Contenido Plegable con Paginación */}
+        {bandejaAbierta && (
+          <div className="border-t border-slate-800 animate-fade-in">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-950/70 text-slate-400 uppercase tracking-wider text-[10px] border-b border-slate-800">
+                  <tr>
+                    <th className="py-3 px-4">Severidad</th>
+                    <th className="py-3 px-3">Comunidad</th>
+                    <th className="py-3 px-3">Municipio</th>
+                    <th className="py-3 px-3">Saturación Suelo</th>
+                    <th className="py-3 px-3">Relieve / Pendiente</th>
+                    <th className="py-3 px-3">Acceso Vial</th>
+                    <th className="py-3 px-3">Amenaza Activa</th>
+                    <th className="py-3 px-4 text-center">Acción</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800 text-slate-300">
+                  {incidentesPaginados.map((item) => (
                     <tr 
                       key={item.localidad_id}
                       onClick={() => setComunidadFoco(item)}
-                      className={`cursor-pointer transition-colors ${
-                        esFoco ? 'bg-slate-800/80 border-l-4 border-rose-500' : 'hover:bg-slate-800/40'
-                      }`}
+                      className="hover:bg-slate-800/40 cursor-pointer transition-colors"
                     >
                       <td className="py-2.5 px-4">
                         <span 
@@ -620,34 +394,122 @@ export default function SatRCOperativo({ alCerrarSesion }) {
                           onClick={(e) => {
                             e.stopPropagation();
                             setComunidadFoco(item);
+                            setComunidadDetalle(item);
                           }}
                           className="text-[11px] font-bold text-amber-400 hover:text-white bg-slate-800 hover:bg-amber-500 hover:text-slate-950 px-2.5 py-1 rounded-lg border border-slate-700 transition-all"
                         >
-                          Enfocar
+                          Auditar
                         </button>
                       </td>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Controles de Paginación */}
+            <div className="p-3.5 bg-slate-950/80 border-t border-slate-800 flex justify-between items-center text-xs">
+              <span className="text-slate-400">
+                Mostrando <strong className="text-white">{(paginaActual - 1) * itemsPorPagina + 1}</strong> a <strong className="text-white">{Math.min(paginaActual * itemsPorPagina, incidentesCriticos.length)}</strong> de <strong className="text-white">{incidentesCriticos.length}</strong> incidentes
+              </span>
+
+              <div className="flex items-center gap-2">
+                <button
+                  disabled={paginaActual === 1}
+                  onClick={() => setPaginaActual(prev => Math.max(1, prev - 1))}
+                  className="flex items-center gap-1 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg font-bold text-slate-300"
+                >
+                  <ChevronLeft className="w-4 h-4" /> Anterior
+                </button>
+
+                <span className="font-mono text-slate-300 px-2 font-bold">
+                  {paginaActual} / {totalPaginas}
+                </span>
+
+                <button
+                  disabled={paginaActual === totalPaginas}
+                  onClick={() => setPaginaActual(prev => Math.min(totalPaginas, prev + 1))}
+                  className="flex items-center gap-1 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg font-bold text-slate-300"
+                >
+                  Siguiente <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
           </div>
         )}
+
       </div>
 
-      {/* 6. MAPA TÁCTICO */}
-      <RiskMap 
-        evaluaciones={comunidadesFiltradas}
-        localidadFoco={comunidadFoco}
-        alSeleccionarLocalidad={(item) => setComunidadFoco(item)}
-      />
+      {/* 4. MODAL DE AUDITORÍA PROFUNDA COMUNITARIA */}
+      {comunidadDetalle && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-fade-in">
+          <div className="bg-slate-900 border-2 border-slate-700 max-w-3xl w-full rounded-2xl shadow-2xl overflow-hidden flex flex-col text-slate-200">
+            <div 
+              className="p-4 border-b border-slate-800 flex justify-between items-start"
+              style={{ backgroundColor: `${comunidadDetalle.color_alerta}20` }}
+            >
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <span 
+                    className="text-xs font-black px-2.5 py-0.5 rounded text-white"
+                    style={{ backgroundColor: comunidadDetalle.color_alerta }}
+                  >
+                    NIVEL {comunidadDetalle.nivel_alerta} • {comunidadDetalle.estado_alerta}
+                  </span>
+                  <span className="text-xs text-slate-400">Auditoría Diocesana de Campo</span>
+                </div>
+                <h2 className="text-xl font-black text-white">{comunidadDetalle.nombre}</h2>
+                <p className="text-xs text-slate-300">{comunidadDetalle.municipio}, {comunidadDetalle.estado} • Cuenca: {comunidadDetalle.geografia?.cuenca}</p>
+              </div>
+              <button onClick={() => setComunidadDetalle(null)} className="p-1.5 bg-slate-800 hover:bg-slate-700 rounded-xl text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
 
-      {/* 7. VISOR SATELITAL AL FINAL */}
-      <div className="pt-2">
-        <SatelliteViewer />
-      </div>
+            <div className="p-5 overflow-y-auto max-h-[70vh] space-y-4 text-xs">
+              <div className="bg-slate-950/70 p-3.5 rounded-xl border border-slate-800 space-y-1">
+                <p className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">Diagnóstico Físico</p>
+                <p className="text-sm font-bold text-white">{comunidadDetalle.diagnostico?.titulo}</p>
+                <p className="text-xs text-slate-300 leading-relaxed">{comunidadDetalle.diagnostico?.causa}</p>
+              </div>
 
-      {/* 8. MODAL DE BITÁCORA AUDITABLE DE SARA */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
+                  <span className="text-[10px] text-slate-400 uppercase font-semibold block">Pendiente Máx</span>
+                  <span className="text-base font-bold text-white">{comunidadDetalle.geografia?.pendienteMax}°</span>
+                  <span className="text-[10px] text-slate-400 block">{comunidadDetalle.geografia?.relieve}</span>
+                </div>
+                <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
+                  <span className="text-[10px] text-slate-400 uppercase font-semibold block">Acceso Vial</span>
+                  <span className="text-xs font-bold text-amber-300 block truncate">{comunidadDetalle.impactoSistemico?.accesoVial}</span>
+                  <span className="text-[10px] text-slate-400 block">Riesgo corte</span>
+                </div>
+                <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
+                  <span className="text-[10px] text-slate-400 uppercase font-semibold block">Hospital Cercano</span>
+                  <span className="text-base font-bold text-white">{comunidadDetalle.impactoSistemico?.distanciaHospitalKm} km</span>
+                  <span className="text-[10px] text-slate-400 block">Vía terrestre</span>
+                </div>
+                <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
+                  <span className="text-[10px] text-slate-400 uppercase font-semibold block">Ventana Acción</span>
+                  <span className="text-base font-bold text-emerald-400">{comunidadDetalle.tiempos?.ventanaAccionHoras} hrs</span>
+                  <span className="text-[10px] text-slate-400 block">Tiempo concentración</span>
+                </div>
+              </div>
+
+              <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-center">
+                <p className="text-xs font-bold text-amber-300 italic">{comunidadDetalle.protocolo}</p>
+              </div>
+            </div>
+
+            <div className="p-3.5 bg-slate-800/80 border-t border-slate-700 flex justify-between items-center text-xs">
+              <span className="text-slate-400">Población directa: <strong className="text-white">{comunidadDetalle.impactoSistemico?.poblacionDirecta?.toLocaleString()}</strong> habitantes</span>
+              <button onClick={() => setComunidadDetalle(null)} className="px-4 py-1.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-xs font-bold">Cerrar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 5. MODAL DE BITÁCORA DE SARA */}
       {modalBitacoraAbierto && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md animate-fade-in">
           <div className="bg-slate-900 border-2 border-slate-700 max-w-4xl w-full rounded-2xl shadow-2xl overflow-hidden flex flex-col text-slate-200 max-h-[85vh]">
@@ -659,7 +521,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
                     Bitácora Auditable de Operaciones • Agente SARA
                   </h3>
                   <p className="text-[11px] text-slate-400">
-                    Registro inmutable con Hash SHA-256 encadenado • Artículo 5, Regla 3
+                    Registro inmutable con Hash SHA-256 encadenado
                   </p>
                 </div>
               </div>
