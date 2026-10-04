@@ -18,23 +18,19 @@ import {
   FileText, 
   X,
   ArrowRight,
-  Building2,
   Filter,
-  CheckCircle2,
   AlertOctagon,
   Mountain,
   Waves,
   Truck,
   Bot,
   ScrollText,
-  Hash,
   ShieldCheck
 } from 'lucide-react';
 
 export default function SatRCOperativo({ alCerrarSesion }) {
   const todasLocalidades = db.localidades;
 
-  // Estados del Cuarto de Situación
   const [killSwitchActivo, setKillSwitchActivo] = useState(false);
   const [cargandoEvaluacion, setCargandoEvaluacion] = useState(true);
   const [evaluaciones, setEvaluaciones] = useState([]);
@@ -57,7 +53,6 @@ export default function SatRCOperativo({ alCerrarSesion }) {
   const [mensajeManual, setMensajeManual] = useState('');
   const [alertaManualEmitida, setAlertaManualEmitida] = useState(null);
 
-  // 1. Cargar Aviso del SMN
   useEffect(() => {
     fetch('/api/smn')
       .then(r => r.json())
@@ -65,7 +60,6 @@ export default function SatRCOperativo({ alCerrarSesion }) {
       .catch(() => null);
   }, []);
 
-  // 2. Ejecutar Escaneo Geofísico de las 405 Comunidades
   useEffect(() => {
     if (killSwitchActivo) {
       setCargandoEvaluacion(false);
@@ -76,6 +70,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
     async function correrEscaneo() {
       setCargandoEvaluacion(true);
 
+      // Consulta del nodo de la sierra
       const nodoSierra = db.localidades.find(l => l.nombre.toLowerCase().includes('huauchinango')) || db.localidades[0];
       const resMeteo = await consultarModelosDeterministas(nodoSierra.coords.lat, nodoSierra.coords.lon);
 
@@ -86,11 +81,10 @@ export default function SatRCOperativo({ alCerrarSesion }) {
         serieConsenso = generarConsensoDeterminista(resMeteo.datos_horarios);
       }
 
-      // Evaluación individual objetiva
+      // Evaluación individualizada (CERO inyecciones globales de 85mm)
       const resultados = todasLocalidades.map(loc => {
         return evaluarLocalidad(loc, serieConsenso, {
-          alertaSMN: alertaSMN,
-          lluvia_cabecera_mm: alertaSMN ? 85.0 : 45.0
+          alertaSMN: alertaSMN
         });
       });
 
@@ -104,7 +98,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
         setComunidadFoco(resultados[0] || null);
         setCargandoEvaluacion(false);
 
-        // 3. Consultar a SARA (Groq Llama-3.3) con los resultados para generar el Dictamen de Crisis
+        // Llamada a SARA (Groq Llama-3.3)
         const n4 = resultados.filter(e => e.nivel_alerta === 4).length;
         const n3 = resultados.filter(e => e.nivel_alerta === 3).length;
         const n1 = resultados.filter(e => e.nivel_alerta === 1).length;
@@ -120,7 +114,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
         })
           .then(r => r.json())
           .then(data => {
-            if (data.exito) {
+            if (data.exito && data.dictamen) {
               setDictamenSARA(data.dictamen);
               setBitacoraSARA(data.bitacora || []);
             }
@@ -134,7 +128,6 @@ export default function SatRCOperativo({ alCerrarSesion }) {
     return () => { cancelado = true; };
   }, [killSwitchActivo, alertaSMN]);
 
-  // Conteos
   const totalNivel4 = evaluaciones.filter(e => e.nivel_alerta === 4).length;
   const totalNivel3 = evaluaciones.filter(e => e.nivel_alerta === 3).length;
   const totalNivel2 = evaluaciones.filter(e => e.nivel_alerta === 2).length;
@@ -162,9 +155,8 @@ export default function SatRCOperativo({ alCerrarSesion }) {
   return (
     <div className="space-y-6">
       
-      {/* 1. BARRA SUPERIOR DE MANDO DIOCESANO */}
+      {/* 1. BARRA SUPERIOR DE MANDO */}
       <div className="bg-slate-900 border-2 border-slate-800 p-4 rounded-2xl shadow-xl flex flex-col md:flex-row justify-between items-center gap-4">
-        
         <div className="flex items-center gap-3">
           <div className="p-2.5 bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded-xl">
             <Radio className="w-5 h-5 animate-pulse" />
@@ -188,9 +180,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
           </div>
         </div>
 
-        {/* Acciones de la Mesa de Crisis */}
         <div className="flex flex-wrap items-center gap-2">
-          {/* Botón Bitácora Auditable */}
           <button
             onClick={() => setModalBitacoraAbierto(true)}
             className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold rounded-xl text-xs border border-amber-500/30 transition-all shadow"
@@ -199,7 +189,6 @@ export default function SatRCOperativo({ alCerrarSesion }) {
             Bitácora de SARA ({bitacoraSARA.length})
           </button>
 
-          {/* Kill Switch */}
           <button
             onClick={() => setKillSwitchActivo(!killSwitchActivo)}
             className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all border ${
@@ -209,10 +198,9 @@ export default function SatRCOperativo({ alCerrarSesion }) {
             }`}
           >
             <Power className="w-3.5 h-3.5" />
-            {killSwitchActivo ? 'Reanudar Automático' : 'Paro General'}
+            {killSwitchActivo ? 'Reanudar' : 'Paro General'}
           </button>
 
-          {/* Emisión Pastoral */}
           <button
             onClick={() => setModoManual(!modoManual)}
             className="flex items-center gap-1.5 px-3.5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl text-xs font-bold transition-all shadow"
@@ -228,10 +216,87 @@ export default function SatRCOperativo({ alCerrarSesion }) {
             Salir
           </button>
         </div>
-
       </div>
 
-      {/* 2. INFORME DE SITUACIÓN OFICIAL DE SARA (EL CEREBRO DEL CUARTO) */}
+      {/* Alerta Manual */}
+      {alertaManualEmitida && (
+        <div className="bg-rose-950/40 border-2 border-rose-500 p-4 rounded-2xl flex justify-between items-start gap-3">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-black bg-rose-500 text-white px-2 py-0.5 rounded">
+                  AVISO DIOCESANO EMITIDO • NIVEL {alertaManualEmitida.nivel}
+                </span>
+                <span className="text-xs text-rose-300 font-semibold">{alertaManualEmitida.zona}</span>
+                <span className="text-[11px] text-slate-400">• {alertaManualEmitida.timestamp}</span>
+              </div>
+              <p className="text-sm font-medium text-white mt-1.5">{alertaManualEmitida.mensaje}</p>
+            </div>
+          </div>
+          <button onClick={() => setAlertaManualEmitida(null)} className="text-xs text-slate-400 hover:text-white px-2 py-1 bg-slate-800 rounded-lg">
+            Retirar
+          </button>
+        </div>
+      )}
+
+      {/* Formulario Manual */}
+      {modoManual && (
+        <div className="bg-slate-900 border border-amber-500/50 p-5 rounded-2xl shadow-2xl space-y-3">
+          <h3 className="text-sm font-bold text-amber-400 flex items-center gap-2">
+            <Send className="w-4 h-4" /> Formulario de Comunicación de Crisis Cáritas
+          </h3>
+          <form onSubmit={emitirAlertaManual} className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="text-[11px] font-semibold text-slate-400 block mb-1">Zona Pastoral</label>
+                <input
+                  type="text"
+                  value={zonaManual}
+                  onChange={(e) => setZonaManual(e.target.value)}
+                  placeholder="Sierra de Pahuatlán y Huauchinango"
+                  className="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-semibold text-slate-400 block mb-1">Nivel de Gravedad</label>
+                <select
+                  value={nivelManual}
+                  onChange={(e) => setNivelManual(Number(e.target.value))}
+                  className="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-xs font-bold"
+                >
+                  <option value={4} className="text-rose-400 font-bold">Nivel 4 — Emergencia Crítica (Rojo)</option>
+                  <option value={3} className="text-orange-400 font-bold">Nivel 3 — Alerta Temprana (Naranja)</option>
+                  <option value={2} className="text-amber-400 font-bold">Nivel 2 — Vigilancia Preventiva (Amarillo)</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-[11px] font-semibold text-slate-400 block mb-1">Instrucciones Operativas</label>
+              <textarea
+                rows={3}
+                placeholder="Instrucciones para párrocos y brigadistas..."
+                value={mensajeManual}
+                onChange={(e) => setMensajeManual(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl p-3 text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setModoManual(false)} className="px-4 py-2 bg-slate-800 text-slate-400 rounded-xl text-xs">
+                Cancelar
+              </button>
+              <button type="submit" className="px-5 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl text-xs shadow-lg">
+                Transmitir Aviso Oficial
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* 2. INFORME DE SITUACIÓN OFICIAL DE SARA */}
       <div className="bg-slate-900 border-2 border-slate-800 rounded-2xl p-5 shadow-2xl space-y-3">
         <div className="flex flex-wrap justify-between items-center gap-2 border-b border-slate-800 pb-3">
           <div className="flex items-center gap-2">
@@ -251,7 +316,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
                 )}
               </h3>
               <p className="text-[11px] text-slate-400">
-                Oficial Meteoróloga de Guardia • Groq Llama-3.3-70B • Ciclo de 3 Horas
+                Oficial Meteoróloga de Guardia • {dictamenSARA?.modelo_ia || "Groq Llama-3.3-70B"} • Ciclo de 3 Horas
               </p>
             </div>
           </div>
@@ -264,24 +329,24 @@ export default function SatRCOperativo({ alCerrarSesion }) {
           </div>
         </div>
 
-        {cargandoSARA ? (
-          <div className="p-6 text-center text-slate-400 flex items-center justify-center gap-2 text-xs">
+        {cargandoSARA && !dictamenSARA ? (
+          <div className="p-4 text-center text-slate-400 flex items-center justify-center gap-2 text-xs">
             <div className="w-4 h-4 border-2 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
-            <span>SARA analizando consistencia orográfica y memoria de saturación...</span>
+            <span>SARA analizando la atmósfera y memoria de saturación...</span>
           </div>
         ) : (
           <div className="bg-slate-950/70 p-4 rounded-xl border border-slate-800 space-y-1.5">
             <p className="text-xs font-bold text-amber-400 uppercase tracking-wider">
-              {dictamenSARA?.titulo || "Dictamen de Guardia"}
+              {dictamenSARA?.titulo || "Evaluación Sinóptica Diocesana"}
             </p>
             <p className="text-xs md:text-sm text-slate-200 leading-relaxed font-normal">
-              {dictamenSARA?.comentario_oficial}
+              {dictamenSARA?.comentario_oficial || "Monitoreo diocesano activo sobre las 405 comunidades."}
             </p>
           </div>
         )}
       </div>
 
-      {/* 3. SEMÁFORO EJECUTIVO DE LAS 405 COMUNIDADES */}
+      {/* 3. SEMÁFORO EJECUTIVO SANEADO (ALTO CONTRASTE) */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div 
           onClick={() => setFiltroCrisis('NIVEL4')}
@@ -295,7 +360,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
             </span>
             <span className="text-2xl font-black text-rose-400">{totalNivel4}</span>
           </div>
-          <p className="text-[11px] text-slate-400 mt-1">Laderas al límite o desbordamiento inminente</p>
+          <p className="text-[11px] text-slate-400 mt-1">Laderas al límite geomecánico</p>
         </div>
 
         <div 
@@ -310,7 +375,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
             </span>
             <span className="text-2xl font-black text-orange-400">{totalNivel3}</span>
           </div>
-          <p className="text-[11px] text-slate-400 mt-1">Lluvia continua sobre laderas y caminos</p>
+          <p className="text-[11px] text-slate-400 mt-1">Temporal activo sobre laderas y caminos</p>
         </div>
 
         <div onClick={() => setFiltroCrisis('TODOS')} className="cursor-pointer p-4 rounded-2xl border-2 bg-slate-900 border-slate-800 hover:border-amber-500/40">
@@ -318,7 +383,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
             <span className="text-xs font-bold text-amber-400 uppercase tracking-wider">Vigilancia (N2)</span>
             <span className="text-2xl font-bold text-amber-400">{totalNivel2}</span>
           </div>
-          <p className="text-[11px] text-slate-400 mt-1">Precipitación activa sin peligro geofísico</p>
+          <p className="text-[11px] text-slate-400 mt-1">Lluvia moderada sin colapso físico</p>
         </div>
 
         <div onClick={() => setFiltroCrisis('TODOS')} className="cursor-pointer p-4 rounded-2xl border-2 bg-slate-900 border-slate-800 hover:border-emerald-500/40">
@@ -326,7 +391,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
             <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider">Estables (N1)</span>
             <span className="text-2xl font-bold text-emerald-400">{totalNivel1}</span>
           </div>
-          <p className="text-[11px] text-slate-400 mt-1">Normalidad atmosférica (Altiplano y valles)</p>
+          <p className="text-[11px] text-slate-400 mt-1">Normalidad en el Altiplano y valles</p>
         </div>
       </div>
 
@@ -400,13 +465,13 @@ export default function SatRCOperativo({ alCerrarSesion }) {
                 </div>
               </div>
               <p className="text-[10px] text-slate-500 italic">
-                Umbral falla talud: {comunidadFoco.impactoSistemico?.umbralFisicoDeslaveMm} mm
+                Umbral crítico falla: {comunidadFoco.impactoSistemico?.umbralFisicoDeslaveMm} mm
               </p>
             </div>
 
             <div className="bg-slate-950/70 p-3.5 rounded-xl border border-slate-800 space-y-2">
               <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider block flex items-center gap-1">
-                <Clock className="w-3.5 h-3.5" /> Cronograma Operativo
+                <Clock className="w-3.5 h-3.5" /> Cronograma de Impacto
               </span>
               <div className="space-y-1">
                 <div className="flex justify-between">
@@ -418,7 +483,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
                   <span className="font-mono text-slate-200">{comunidadFoco.tiempos?.picoMaximo}</span>
                 </div>
                 <div className="pt-1 border-t border-slate-800">
-                  <span className="text-[10px] text-amber-400 uppercase block font-bold">Ventana de Acción</span>
+                  <span className="text-[10px] text-amber-400 uppercase block font-bold">Ventana de Evacuación</span>
                   <span className="text-sm font-extrabold text-white">
                     {comunidadFoco.tiempos?.ventanaAccionHoras} horas antes de la cresta
                   </span>
@@ -436,11 +501,11 @@ export default function SatRCOperativo({ alCerrarSesion }) {
                   <span className="font-extrabold text-white">{comunidadFoco.impactoSistemico?.poblacionDirecta?.toLocaleString()} hab.</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-400">Acceso vial:</span>
+                  <span className="text-slate-400">Camino de acceso:</span>
                   <span className="font-bold text-amber-300 truncate max-w-[120px]">{comunidadFoco.impactoSistemico?.accesoVial}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-400">Hospital cercano:</span>
+                  <span className="text-slate-400">Hospital más cercano:</span>
                   <span className="font-mono text-slate-200">{comunidadFoco.impactoSistemico?.distanciaHospitalKm} km</span>
                 </div>
                 <div className="flex justify-between pt-1 border-t border-slate-800">
@@ -449,7 +514,6 @@ export default function SatRCOperativo({ alCerrarSesion }) {
                 </div>
               </div>
             </div>
-
           </div>
         </div>
       )}
@@ -479,7 +543,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
                 filtroCrisis === 'NIVEL4' ? 'bg-rose-600 text-white shadow' : 'bg-slate-800 text-slate-400 hover:text-white'
               }`}
             >
-              Solo Emergencias (Nivel 4)
+              Solo Emergencias (N4)
             </button>
             <button
               onClick={() => setFiltroCrisis('TODOS')}
@@ -487,7 +551,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
                 filtroCrisis === 'TODOS' ? 'bg-slate-700 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'
               }`}
             >
-              Censo Diocesano (405)
+              Censo Completo (405)
             </button>
           </div>
         </div>
@@ -583,14 +647,10 @@ export default function SatRCOperativo({ alCerrarSesion }) {
         <SatelliteViewer />
       </div>
 
-      {/* ========================================================== */}
-      {/* 8. MODAL DE BITÁCORA AUDITABLE DE SARA (R3 CON HASH SHA-256) */}
-      {/* ========================================================== */}
+      {/* 8. MODAL DE BITÁCORA AUDITABLE DE SARA */}
       {modalBitacoraAbierto && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md animate-fade-in">
           <div className="bg-slate-900 border-2 border-slate-700 max-w-4xl w-full rounded-2xl shadow-2xl overflow-hidden flex flex-col text-slate-200 max-h-[85vh]">
-            
-            {/* Cabecera Bitácora */}
             <div className="p-4 bg-slate-800 border-b border-slate-700 flex justify-between items-center">
               <div className="flex items-center gap-2.5">
                 <ScrollText className="w-5 h-5 text-amber-400" />
@@ -603,16 +663,11 @@ export default function SatRCOperativo({ alCerrarSesion }) {
                   </p>
                 </div>
               </div>
-
-              <button
-                onClick={() => setModalBitacoraAbierto(false)}
-                className="p-1.5 bg-slate-700 hover:bg-slate-600 rounded-xl text-slate-300 hover:text-white"
-              >
+              <button onClick={() => setModalBitacoraAbierto(false)} className="p-1.5 bg-slate-700 hover:bg-slate-600 rounded-xl text-slate-300 hover:text-white">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Listado de Entradas Auditables */}
             <div className="p-4 overflow-y-auto space-y-3 font-mono text-xs">
               {bitacoraSARA.length === 0 ? (
                 <div className="p-8 text-center text-slate-500">
@@ -637,17 +692,12 @@ export default function SatRCOperativo({ alCerrarSesion }) {
               )}
             </div>
 
-            {/* Pie Bitácora */}
             <div className="p-3 bg-slate-950 border-t border-slate-800 flex justify-between items-center text-[11px] text-slate-500 px-4">
-              <span>Cadena de bloques criptográfica interna de Cáritas Tulancingo.</span>
-              <button
-                onClick={() => setModalBitacoraAbierto(false)}
-                className="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-bold"
-              >
+              <span>Trazabilidad garantizada para Cáritas Pastoral Social y Protección Civil.</span>
+              <button onClick={() => setModalBitacoraAbierto(false)} className="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-bold">
                 Cerrar
               </button>
             </div>
-
           </div>
         </div>
       )}

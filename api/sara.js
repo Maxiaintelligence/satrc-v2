@@ -2,14 +2,13 @@ import crypto from 'crypto';
 
 /**
  * SatRC V2.0 - SARA: Sistema de Alerta y Respuesta Automatizada
- * Motor de IA con Groq Llama-3.3-70B, Bitácora Inmutable SHA-256 y Ciclo de 3 Horas.
+ * Inferencia con Groq LPU (Llama-3.3-70B) y Bitácora Inmutable SHA-256
  */
 
-// Memoria volátil de guardia en Edge (Cache de 3 horas)
 let cacheDictamenSARA = null;
 let ultimaEjecucionTimestamp = 0;
 let bitacoraEncadenada = [];
-let hashAnterior = "0000000000000000000000000000000000000000000000000000000000000000"; // Bloque Génesis
+let hashAnterior = "0000000000000000000000000000000000000000000000000000000000000000";
 
 function generarHashSHA256(prevHash, timestamp, datos) {
   return crypto.createHash('sha256')
@@ -21,67 +20,64 @@ export default async function handler(req, res) {
   const ahora = Date.now();
   const TRES_HORAS_MS = 3 * 60 * 60 * 1000;
 
-  // Si tenemos un dictamen reciente generado hace menos de 3 horas, lo servimos de inmediato (20ms)
+  // Servir caché si tiene menos de 3 horas y no se forzó refresco
   if (cacheDictamenSARA && (ahora - ultimaEjecucionTimestamp < TRES_HORAS_MS) && req.query.forzar !== 'true') {
     res.setHeader("Cache-Control", "s-maxage=10800, stale-while-revalidate=1800");
     return res.json({
       exito: true,
       origen: "CACHE_GUARDIA_3H",
       dictamen: cacheDictamenSARA,
-      bitacora: bitacoraEncadenada.slice(-15) // Últimas 15 entradas auditables
+      bitacora: bitacoraEncadenada.slice(-15)
     });
   }
 
-  // Datos contextuales del cuerpo de la petición (enviados por el motor de la app)
   const contexto = req.body || {};
   const { alertaSMN, resumenSeveridad } = contexto;
-
   const apiKeyGroq = process.env.GROQ_API_KEY;
 
-  // Fallback si no hay clave registrada en Vercel
-  if (!apiKeyGroq) {
-    const dictamenFallback = {
-      estado_situacion: resumenSeveridad?.totalNivel4 > 0 ? "SITUACION_CRITICA" : (resumenSeveridad?.totalNivel3 > 0 ? "SITUACION_GRAVE" : "SITUACION_NORMAL"),
-      color: resumenSeveridad?.totalNivel4 > 0 ? "#EF4444" : (resumenSeveridad?.totalNivel3 > 0 ? "#F97316" : "#10B981"),
-      titulo: resumenSeveridad?.totalNivel4 > 0 ? "Situación Crítica en Sierra" : "Situación de Normalidad y Vigilancia",
-      comentario_oficial: "Monitoreo diocesano activo. Evaluaciones físicas ejecutadas sobre las 405 localidades en base a modelos meteorológicos oficiales y avisos de CONAGUA.",
+  // Fallback determinista seguro si no hay clave
+  const generarDictamenFallback = () => {
+    const hayCriticas = (resumenSeveridad?.totalNivel4 || 0) > 0;
+    const hayAlerta = (resumenSeveridad?.totalNivel3 || 0) > 0;
+    return {
+      estado_situacion: hayCriticas ? "SITUACION_CRITICA" : (hayAlerta ? "SITUACION_GRAVE" : "SITUACION_NORMAL"),
+      color: hayCriticas ? "#EF4444" : (hayAlerta ? "#F97316" : "#10B981"),
+      titulo: hayCriticas ? "Emergencia por Temporal en Sierra" : (hayAlerta ? "Alerta Temprana por Sistema Frontal" : "Situación Normal y Estable"),
+      comentario_oficial: hayCriticas 
+        ? `Aviso de Frente Frío en interacción con el Golfo. Vigilancia prioritaria en ${resumenSeveridad?.criticasNombres?.slice(0, 3).join(', ') || 'laderas de la Sierra de Puebla'}. Altiplano central en calma.`
+        : "Condiciones de estabilidad en la Arquidiócesis. Suelos con drenaje adecuado y cuencas en niveles base.",
+      hora_evaluacion: new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: true }),
       proxima_evaluacion: new Date(ahora + TRES_HORAS_MS).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: true }),
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      modelo_ia: "SARA Core Determinista"
     };
-    return res.json({ exito: true, origen: "FALLBACK_DETERMINISTA", dictamen: dictamenFallback, bitacora: [] });
+  };
+
+  if (!apiKeyGroq) {
+    const dictamenFallback = generarDictamenFallback();
+    return res.json({ exito: true, origen: "FALLBACK_SIN_KEY", dictamen: dictamenFallback, bitacora: [] });
   }
 
-  // Prompt Táctico para SARA (R1: Redactora y Auditora de Formato, NO decide niveles)
-  const systemPrompt = `Eres SARA (Sistema de Alerta y Respuesta Automatizada), la Oficial y Analista Meteoróloga de Guardia de Cáritas Pastoral Social en la Arquidiócesis de Tulancingo (Hidalgo y Sierra Norte de Puebla).
-Tienes maestría práctica en la meteorología de montaña de la Sierra Madre Oriental.
-Tu rol es redactar con tono profesional, sobrio, sereno y pastoral.
-REGLA TAXATIVA:
-1. No cambias números ni niveles calculados por la física.
-2. Eres objetiva: ni alarmismo injustificado que genere pánico, ni negligencia en no vigilar.
-3. El estado óptimo del Cuarto de Situación es cuando NO hay problemas.
-4. Responde ÚNICAMENTE un objeto JSON válido sin texto adicional.`;
+  const systemPrompt = `Eres SARA (Sistema de Alerta y Respuesta Automatizada), la Oficial Meteoróloga de Guardia de Cáritas Tulancingo.
+Tu rol es redactar una síntesis sinóptica breve, profesional, sobria y pastoral.
+REGLAS:
+1. No cambias números ni niveles calculados.
+2. Reconoce que el Altiplano (Pachuca, Tizayuca, Apan) está en calma y que el temporal del Frente Frío 1 afecta a la Sierra (Huauchinango, Pahuatlán, Zihuateutla).
+3. Responde ÚNICAMENTE un JSON válido con estas claves:
+{"estado_situacion": "...", "color": "...", "titulo": "...", "comentario_oficial": "..."}`;
 
-  const userPrompt = `Contexto actual:
-Aviso SMN: ${alertaSMN ? alertaSMN.titulo + " (" + alertaSMN.rango_lluvia_min_mm + "-" + alertaSMN.rango_lluvia_max_mm + " mm)" : "Sin aviso severo activo"}.
+  const userPrompt = `Situación:
+Aviso SMN: ${alertaSMN ? alertaSMN.titulo : "Sin aviso severo"}.
 Comunidades en Emergencia N4: ${resumenSeveridad?.totalNivel4 || 0}.
 Comunidades en Alerta Temprana N3: ${resumenSeveridad?.totalNivel3 || 0}.
-Comunidades en Normalidad: ${resumenSeveridad?.totalNivel1 || 400}.
-Localidades bajo mayor tensión: ${JSON.stringify(resumenSeveridad?.criticasNombres || [])}.
-
-Genera el dictamen en este formato JSON exacto:
-{
-  "estado_situacion": "SITUACION_NORMAL" | "SITUACION_ALERTA_PREPARACION" | "SITUACION_GRAVE" | "SITUACION_CRITICA",
-  "color": "#10B981" | "#F59E0B" | "#F97316" | "#EF4444",
-  "titulo": "Título de la situación diocesana en 6 palabras",
-  "comentario_oficial": "Párrafo ejecutivo de 3 líneas resumiendo qué pasa en la atmósfera, descartando zonas sin riesgo (Altiplano) y focalizando las laderas o cañadas bajo observación.",
-  "nota_monitor_publico": "Nota de 2 líneas para el ciudadano común explicando cómo actuar con tranquilidad."
-}`;
+Comunidades Estables N1: ${resumenSeveridad?.totalNivel1 || 350}.
+Focos prioritarios de sierra: ${JSON.stringify(resumenSeveridad?.criticasNombres || [])}.`;
 
   try {
     const respuestaGroq = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${apiKeyGroq}`,
+        "Authorization": `Bearer ${apiKeyGroq.trim()}`,
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
@@ -102,7 +98,6 @@ Genera el dictamen en este formato JSON exacto:
     const resultado = await respuestaGroq.json();
     const contenidoSARA = JSON.parse(resultado.choices[0].message.content);
 
-    // Enriquecer el dictamen con metadatos oficiales
     const dictamenFinal = {
       ...contenidoSARA,
       timestamp: new Date().toISOString(),
@@ -111,11 +106,9 @@ Genera el dictamen en este formato JSON exacto:
       modelo_ia: "Groq Llama-3.3-70B LPU"
     };
 
-    // R3: Generar registro inmutable de Bitácora con Hash SHA-256 encadenado
     const nuevoHash = generarHashSHA256(hashAnterior, dictamenFinal.timestamp, {
       estado: dictamenFinal.estado_situacion,
-      nivel4: resumenSeveridad?.totalNivel4,
-      nivel3: resumenSeveridad?.totalNivel3
+      nivel4: resumenSeveridad?.totalNivel4
     });
 
     const entradaBitacora = {
@@ -133,20 +126,25 @@ Genera el dictamen en este formato JSON exacto:
     hashAnterior = nuevoHash;
     bitacoraEncadenada.push(entradaBitacora);
 
-    // Guardar en cache de 3 horas
     cacheDictamenSARA = dictamenFinal;
     ultimaEjecucionTimestamp = ahora;
 
     res.setHeader("Cache-Control", "s-maxage=10800, stale-while-revalidate=1800");
     return res.json({
       exito: true,
-      origen: "SARA_GROQ_LPU_FRESCO",
+      origen: "GROQ_LLAMA33_EN_VIVO",
       dictamen: dictamenFinal,
       bitacora: bitacoraEncadenada.slice(-15)
     });
 
   } catch (error) {
-    console.error("Error al ejecutar SARA con Groq:", error);
-    res.status(500).json({ error: "No se pudo completar el análisis de SARA" });
+    console.error("Fallo al consultar Groq, activando fallback:", error);
+    const dictamenFallback = generarDictamenFallback();
+    return res.json({
+      exito: true,
+      origen: "FALLBACK_POR_ERROR_GROQ",
+      dictamen: dictamenFallback,
+      bitacora: bitacoraEncadenada.slice(-15)
+    });
   }
 }

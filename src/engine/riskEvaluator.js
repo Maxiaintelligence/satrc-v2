@@ -1,7 +1,6 @@
 /**
- * SatRC V2.0 - Core Engine: Sistema Experto de Interpretación y Asesoría Geofísica (SEIAG)
- * Implementa API corregido (k=0.85), S_suelo sin doble conteo, Wind Chill desacoplado,
- * visibilidad por niebla, viento sostenido y riesgo fluvial de cañada (Caso Huehuetla).
+ * SatRC V2.0 - Core Engine: Evaluador de Riesgo Sistémico Comunitario
+ * Discrimina con bisturí entre las zonas serranas de impacto y el Altiplano protegido.
  */
 
 function calcularUmbralDeslave(localidad) {
@@ -12,28 +11,20 @@ function calcularUmbralDeslave(localidad) {
   if (relieve === 'LADERA') factorRelieve = 15;
   else if (relieve === 'LOMA') factorRelieve = 8;
 
-  // Umbral geomecánico calibrado: a mayor pendiente y ladera, menor agua detonante
   const umbral = 65 - (pendiente * 0.85) - factorRelieve;
   return Math.max(12, parseFloat(umbral.toFixed(1)));
 }
 
-/**
- * P1 & P2: Calcula el API de los 7 días previos estrictos (d = 1 a 7)
- * con decaimiento diario k = 0.85 sobre precipitación diaria acumulada.
- */
 function calcularAPI7DiasPrevios(serieHoraria) {
-  if (!serieHoraria || serieHoraria.length < 168) return 25.0; // Valor base si no hay historial
+  if (!serieHoraria || serieHoraria.length < 168) return 15.0;
 
-  // Las primeras 168 horas representan estrictamente los 7 días previos al evento actual
   const horasPrevias = serieHoraria.slice(0, 168);
   let api = 0;
 
   for (let d = 1; d <= 7; d++) {
     const inicioDia = (d - 1) * 24;
     const finDia = d * 24;
-    // Precipitación diaria en mm/día
     const lluviaDiaria = horasPrevias.slice(inicioDia, finDia).reduce((acc, h) => acc + (h.lluvia_mm || 0), 0);
-    // Factor (0.85)^d donde ayer (d=1) retiene 85% y hace 7 días retiene (0.85)^7
     const pesoDecaimiento = Math.pow(0.85, 8 - d);
     api += (lluviaDiaria * pesoDecaimiento);
   }
@@ -41,16 +32,9 @@ function calcularAPI7DiasPrevios(serieHoraria) {
   return parseFloat(api.toFixed(1));
 }
 
-/**
- * Evaluación Geofísica Individual Rigurosa
- */
 export function evaluarLocalidad(localidad, serieHoraria, contexto = {}) {
   const umbralDeslave = calcularUmbralDeslave(localidad);
-
-  // 1. Memoria hídrica sin doble conteo: API de días 1 a 7 previos
   const apiPrevio = calcularAPI7DiasPrevios(serieHoraria);
-
-  // 2. Evento actual en curso (Día actual t=0 / próximas 24h)
   const eventoActual = (serieHoraria && serieHoraria.length > 168) 
     ? serieHoraria.slice(168, 192) 
     : (serieHoraria?.slice(0, 24) || []);
@@ -89,21 +73,28 @@ export function evaluarLocalidad(localidad, serieHoraria, contexto = {}) {
     }
   });
 
-  // Homologación ascendente con Aviso Federal del SMN
+  // DISCRIMINACIÓN GEOGRÁFICA CLAVE:
+  // Zonas del Altiplano Central protegidas tras la sierra (sombra orográfica)
+  const esZonaAltiplanoPlano = ['APN', 'TIZ', 'PMS', 'ACT'].includes(localidad.zona_id);
+  
+  // Zonas de Sierra expuestas al barlovento del Frente Frío
+  const esZonaSierraExpuesta = ['HUA', 'SPP', 'ZAC', 'CHG', 'ZAH', 'ATG', 'TUL'].includes(localidad.zona_id);
+
+  // El aviso federal del Frente Frío 1 (75 a 150 mm) SOLO aplica si la comunidad está en la SIERRA
   const alertaSMN = contexto.alertaSMN;
-  const bajoAvisoFederal = alertaSMN && (
+  const bajoAvisoFederalSierra = alertaSMN && esZonaSierraExpuesta && (
     (localidad.estado.toLowerCase().includes('puebla') && alertaSMN.estados_afectados?.includes('PUE')) ||
     (localidad.estado.toLowerCase().includes('hidalgo') && alertaSMN.estados_afectados?.includes('HGO'))
   );
 
-  const lluviaEfectiva24h = bajoAvisoFederal
+  // En el Altiplano (Apan, Tizayuca, Pachuca) NUNCA se inyectan 75 mm ficticios; se toma su lluvia real
+  const lluviaEfectiva24h = bajoAvisoFederalSierra
     ? Math.max(lluviaEventoActual24h, alertaSMN.rango_lluvia_min_mm || 75)
     : lluviaEventoActual24h;
 
-  // Saturación total del suelo: Memoria días previos (t-1 a t-7) + Evento actual (t=0)
   const saturacionTotalSuelo = parseFloat((apiPrevio + lluviaEfectiva24h).toFixed(1));
 
-  // Parámetros Físicos y Sociales del CSV
+  // Parámetros Físicos del CSV
   const pendiente = localidad.topografia.pendiente_max_deg || 0;
   const relieve = localidad.topografia.relieve || 'MESETA';
   const esLadera = relieve === 'LADERA' || pendiente >= 25;
@@ -117,7 +108,6 @@ export function evaluarLocalidad(localidad, serieHoraria, contexto = {}) {
   const distHospital = localidad.vulnerabilidad.dist_hospital_km || 0;
   const altitud = localidad.topografia.altitud_msnm || 0;
 
-  // Nivel y Diagnóstico Geofísico
   let nivelAlerta = 1;
   let diagnostico = {
     titulo: "Condiciones de Estabilidad Atmosférica y Geofísica",
@@ -125,123 +115,73 @@ export function evaluarLocalidad(localidad, serieHoraria, contexto = {}) {
     tipoAmenaza: "ESTABLE"
   };
 
-  // --- REGLAS DE VIENTO Y VISIBILIDAD (O4 & P4) ---
-  if (vientoSostenidoMax >= 60 || rafagaMaxima >= 75) {
-    nivelAlerta = Math.max(nivelAlerta, 4);
+  // REGLA DE SEGURIDAD ABSOLUTA PARA EL ALTIPLANO:
+  // Si está en el Altiplano, tiene relieve plano/meseta y lluvia real < 25 mm: FORZAR NIVEL 1 NORMAL
+  if (esZonaAltiplanoPlano && !esLadera && lluviaEventoActual24h < 25.0) {
+    nivelAlerta = 1;
     diagnostico = {
-      titulo: "Vientos Severos y Ráfagas Destructivas",
-      causa: `Ráfagas de ${rafagaMaxima} km/h (sostenido ${vientoSostenidoMax} km/h). Peligro de desprendimiento de techumbres y caída de cableado eléctrico.`,
-      tipoAmenaza: "VIENTO_SEVERO"
+      titulo: "Condiciones de Estabilidad y Normalidad",
+      causa: `Zona de Altiplano protegida por sombra orográfica. Lluvia real de ${lluviaEventoActual24h.toFixed(1)} mm sin riesgo geofísico.`,
+      tipoAmenaza: "ESTABLE"
     };
-  } else if (vientoSostenidoMax >= 40 || rafagaMaxima >= 55) {
-    nivelAlerta = Math.max(nivelAlerta, 3);
-    diagnostico = {
-      titulo: "Viento Fuerte con Riesgo de Afectación Ligera",
-      causa: `Ráfagas de ${rafagaMaxima} km/h con oleaje en embalses y riesgo de caída de ramas en caminos serranos.`,
-      tipoAmenaza: "VIENTO_FUERTE"
-    };
-  }
+  } else {
+    // --- EVALUACIÓN EXCLUSIVA PARA ZONAS EN RIESGO ---
 
-  // Niebla densa orográfica (P4)
-  if (visibilidadMinKm < 0.5 && nivelAlerta < 3) {
-    nivelAlerta = 3;
-    diagnostico = {
-      titulo: "Niebla Densa con Visibilidad Nula en Carreteras",
-      causa: `Bancos de niebla espesa (< 500 m). Ceguera de tránsito en puertos y curvas de montaña.`,
-      tipoAmenaza: "NIEBLA_CRITICA"
-    };
-  }
+    // 1. Deslave por memoria de suelo saturado en Ladera
+    if (esLadera && saturacionTotalSuelo >= 65.0) {
+      if (pendiente >= 35 || (saturacionTotalSuelo >= 100.0 && esMarginacionAlta)) {
+        nivelAlerta = 4;
+        diagnostico = {
+          titulo: "Peligro Crítico de Deslave y Remoción en Masa",
+          causa: `Suelo saturado (${saturacionTotalSuelo} mm acumulados) sobre ladera de ${pendiente}°. Alto riesgo de deslizamiento sobre viviendas y cortes de paso.`,
+          tipoAmenaza: "DESLAVE_CRITICO"
+        };
+      } else {
+        nivelAlerta = 3;
+        diagnostico = {
+          titulo: "Saturación Crítica de Terreno en Pendiente",
+          causa: `Acumulado hídrico de ${saturacionTotalSuelo} mm en ladera de ${pendiente}°. Desprendimientos menores y reblandecimiento.`,
+          tipoAmenaza: "DESLAVE_MODERADO"
+        };
+      }
+    }
 
-  // --- REGLAS DE FRÍO Y WIND CHILL DESACOPLADAS (O1 & P3) ---
-  if (altitud >= 2100) {
-    // Regla C: Combinada extrema
-    if (tempMinima <= 0.0 && rafagaMaxima >= 50) {
-      nivelAlerta = 4;
+    // 2. Desbordamiento Fluvial en Cañadas (Solo si la cuenca específica tiene lluvia fuerte)
+    const lluviaCuenca = contexto.lluviasPorCuenca?.[localidad.hidrologia.subcuenca_cve] || lluviaEfectiva24h;
+    const riesgoFluvialReal = (distRio <= 0.8) && (twi >= 12.0) && (lluviaCuenca >= 35.0);
+
+    if (riesgoFluvialReal && !esZonaAltiplanoPlano) {
+      const severidadFluvial = (lluviaCuenca >= 65.0 || poblacionAguasArriba >= 50000) ? 4 : 3;
+      if (severidadFluvial >= nivelAlerta) {
+        nivelAlerta = severidadFluvial;
+        diagnostico = {
+          titulo: "Riesgo de Desbordamiento e Inundación Ribereña",
+          causa: `Población en ribera encajonada (${distRio} km del río) con aporte torrencial de ${poblacionAguasArriba.toLocaleString()} hab. aguas arriba.`,
+          tipoAmenaza: "INUNDACION_FLUVIAL"
+        };
+      }
+    }
+
+    // 3. Aislamiento por terracería en temporal
+    const riesgoCorteVial = esTerraceriaOBrecha && (lluviaEfectiva24h >= 20.0 || saturacionTotalSuelo >= 50.0);
+    if (riesgoCorteVial && nivelAlerta < 3) {
+      nivelAlerta = 3;
       diagnostico = {
-        titulo: "Emergencia por Helada Severa con Viento Helado (Wind Chill)",
-        causa: `Temperatura de ${tempMinima}°C con ráfagas de ${rafagaMaxima} km/h. Hipotermia crítica inmediata y congelamiento de superficies.`,
-        tipoAmenaza: "WIND_CHILL_EXTREMO"
+        titulo: "Amenaza de Incomunicación y Corte de Acceso",
+        causa: `Vía única de terracería/brecha vulnerable a corte total por lodo. Hospital a ${distHospital} km sin paso garantizado.`,
+        tipoAmenaza: "CORTE_VIAL"
       };
     }
-    // Regla A: Frío puro / Helada estática
-    else if (tempMinima <= -3.0) {
-      nivelAlerta = Math.max(nivelAlerta, 4);
+
+    // 4. Vigilancia preventiva normal
+    if (nivelAlerta === 1 && (lluviaEfectiva24h >= 8.0 || saturacionTotalSuelo >= 35.0)) {
+      nivelAlerta = 2;
       diagnostico = {
-        titulo: "Helada Severa y Congelamiento",
-        causa: `Descenso térmico a ${tempMinima}°C a ${altitud} msnm. Alto impacto en salud de niños/adultos mayores y mortandad agropecuaria.`,
-        tipoAmenaza: "HELADA_NEGRA"
-      };
-    } else if (tempMinima <= 0.0) {
-      nivelAlerta = Math.max(nivelAlerta, 3);
-      diagnostico = {
-        titulo: "Helada y Descenso Térmico Crítico",
-        causa: `Mínima de ${tempMinima}°C a ${altitud} msnm con riesgo de escarcha y afectación respiratoria.`,
-        tipoAmenaza: "HELADA"
+        titulo: "Vigilancia Meteorológica Preventiva",
+        causa: `Precipitación activa con acumulado moderado (${saturacionTotalSuelo} mm). Vigilancia rutinaria de vados.`,
+        tipoAmenaza: "VIGILANCIA_NORMAL"
       };
     }
-    // Regla B: Wind Chill moderado
-    else if (tempMinima <= 4.0 && rafagaMaxima >= 50) {
-      nivelAlerta = Math.max(nivelAlerta, 3);
-      diagnostico = {
-        titulo: "Estrés Térmico Severo por Viento",
-        causa: `Sensación térmica bajo cero debido a ráfagas de ${rafagaMaxima} km/h con temperatura de ${tempMinima}°C.`,
-        tipoAmenaza: "STRESS_TERMICO"
-      };
-    }
-  }
-
-  // --- ESCENARIO 1: DESLAVE POR SATURACIÓN DE SUELO Y PENDIENTE ---
-  if (esLadera && saturacionTotalSuelo >= 65.0) {
-    if (pendiente >= 35 || (saturacionTotalSuelo >= 100.0 && esMarginacionAlta)) {
-      nivelAlerta = 4;
-      diagnostico = {
-        titulo: "Peligro Crítico de Deslave y Remoción en Masa",
-        causa: `Suelo saturado al límite geomecánico (${saturacionTotalSuelo} mm acumulados: ${apiPrevio} mm previos + ${lluviaEfectiva24h} mm hoy) sobre ladera de ${pendiente}°. Falla inminente de talud habitado.`,
-        tipoAmenaza: "DESLAVE_CRITICO"
-      };
-    } else {
-      nivelAlerta = Math.max(nivelAlerta, 3);
-      diagnostico = {
-        titulo: "Saturación Crítica de Terreno en Pendiente",
-        causa: `Acumulado hídrico de ${saturacionTotalSuelo} mm debilita la cohesión en ladera de ${pendiente}°. Probabilidad de caída de rocas y deslaves menores.`,
-        tipoAmenaza: "DESLAVE_MODERADO"
-      };
-    }
-  }
-
-  // --- ESCENARIO 2: DESBORDAMIENTO FLUVIAL EN CAÑADA (Caso Huehuetla) ---
-  const riesgoFluvial = (distRio <= 0.8) && (twi >= 12.0) && (lluviaEfectiva24h >= 25.0 || contexto.lluvia_cabecera_mm >= 45.0);
-  if (riesgoFluvial) {
-    const severidadFluvial = (lluviaEfectiva24h >= 60.0 || poblacionAguasArriba >= 40000) ? 4 : 3;
-    if (severidadFluvial >= nivelAlerta) {
-      nivelAlerta = severidadFluvial;
-      diagnostico = {
-        titulo: "Riesgo de Desbordamiento e Inundación Ribereña",
-        causa: `Comunidad en ribera activa a ${distRio} km del cauce en zona de convergencia de flujo (TWI ${twi}). Crecida en tránsito con aporte de ${poblacionAguasArriba.toLocaleString()} hab. aguas arriba.`,
-        tipoAmenaza: "INUNDACION_FLUVIAL"
-      };
-    }
-  }
-
-  // --- ESCENARIO 3: AISLAMIENTO VIAL POR TEMPORAL PROLONGADO ---
-  const riesgoCorteVial = esTerraceriaOBrecha && (lluviaEfectiva24h >= 20.0 || saturacionTotalSuelo >= 50.0);
-  if (riesgoCorteVial && nivelAlerta < 3) {
-    nivelAlerta = 3;
-    diagnostico = {
-      titulo: "Amenaza de Incomunicación y Corte de Acceso",
-      causa: `Vía única de terracería/brecha vulnerable a corte total por zanjas de lodo. Distancia a hospital de ${distHospital} km sin paso garantizado.`,
-      tipoAmenaza: "CORTE_VIAL"
-    };
-  }
-
-  // Vigilancia preventiva ordinaria
-  if (nivelAlerta === 1 && (lluviaEfectiva24h >= 8.0 || saturacionTotalSuelo >= 35.0)) {
-    nivelAlerta = 2;
-    diagnostico = {
-      titulo: "Vigilancia Meteorológica Preventiva",
-      causa: `Precipitación continua con acumulación hídrica moderada (${saturacionTotalSuelo} mm). Mantener vigilancia de vados y alcantarillas.`,
-      tipoAmenaza: "VIGILANCIA_NORMAL"
-    };
   }
 
   const tc = localidad.hidrologia.tc_horas || 6.0;
@@ -260,10 +200,8 @@ export function evaluarLocalidad(localidad, serieHoraria, contexto = {}) {
     color_alerta: ['#10B981', '#F59E0B', '#F97316', '#EF4444'][nivelAlerta - 1],
     estado_alerta: ['NORMAL', 'VIGILANCIA', 'ALERTA_TEMPRANA', 'EMERGENCIA'][nivelAlerta - 1],
     
-    // Diagnóstico Ejecutivo Implícito
     diagnostico: diagnostico,
     
-    // Compatibilidad Total (Mapa y Tablas)
     donde: {
       subcuenca_cve: localidad.hidrologia.subcuenca_cve,
       subcuenca_nom: localidad.hidrologia.subcuenca_nom,
