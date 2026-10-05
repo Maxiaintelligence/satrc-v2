@@ -53,22 +53,34 @@ export default function SatRCOperativo({ alCerrarSesion }) {
   const [disparandoManual, setDisparandoManual] = useState(false);
   const [comunidadDetalle, setComunidadDetalle] = useState(null);
 
-  // Función de Respaldo Local (Garantiza que el panel JAMÁS quede en ceros)
-  const ejecutarEvaluacionRespaldoLocal = (alertaSMN = null) => {
-    const resLocal = todasLocalidades.map(loc => {
+  // Evaluación con datos meteorológicos reales de Open-Meteo (Cero arrays vacíos)
+  const ejecutarEvaluacionRealEnVivo = async (alertaSMN = null) => {
+    const nodoSierra = todasLocalidades.find(l => l.nombre.toLowerCase().includes('huauchinango')) || todasLocalidades[0];
+    let serieConsenso = [];
+
+    try {
+      const resM = await consultarModelosDeterministas(nodoSierra.coords.lat, nodoSierra.coords.lon);
+      if (resM?.exito && resM?.datos_horarios) {
+        serieConsenso = generarConsensoDeterminista(resM.datos_horarios);
+      }
+    } catch (e) {
+      console.warn("Fallo temporal meteo:", e);
+    }
+
+    const resEvaluadas = todasLocalidades.map(loc => {
       try {
-        return evaluarLocalidad(loc, [], { alertaSMN });
-      } catch (e) {
+        return evaluarLocalidad(loc, serieConsenso, { alertaSMN });
+      } catch (err) {
         return null;
       }
     }).filter(Boolean);
 
-    resLocal.sort((a, b) => b.nivel_alerta - a.nivel_alerta);
-    setEvaluaciones(resLocal);
-    setComunidadFoco(resLocal[0] || null);
+    resEvaluadas.sort((a, b) => b.nivel_alerta - a.nivel_alerta);
+    setEvaluaciones(resEvaluadas);
+    setComunidadFoco(resEvaluadas[0] || null);
   };
 
-  // Cargar Estado desde el Servidor
+  // Cargar Estado desde el Servidor Vercel Blob
   const cargarEstadoServidor = async () => {
     setCargando(true);
     try {
@@ -78,20 +90,19 @@ export default function SatRCOperativo({ alCerrarSesion }) {
         if (data.dictamen) setDictamenSARA(data.dictamen);
         if (data.bitacora) setBitacoraSARA(data.bitacora);
 
-        // Si el servidor ya tiene las evaluaciones procesadas, las usamos
         if (data.evaluaciones && data.evaluaciones.length > 0) {
           setEvaluaciones(data.evaluaciones);
           setComunidadFoco(data.evaluaciones[0] || null);
         } else {
-          // Si el blob aún no se escribe, la salvaguarda local llena el mapa y el semáforo al instante
-          ejecutarEvaluacionRespaldoLocal(data.dictamen);
+          // Si el Blob aún no tiene el estado, ejecuta la evaluación meteorológica real
+          await ejecutarEvaluacionRealEnVivo(data.dictamen);
         }
       } else {
-        ejecutarEvaluacionRespaldoLocal();
+        await ejecutarEvaluacionRealEnVivo();
       }
     } catch (e) {
-      console.warn("Activando salvaguarda local:", e);
-      ejecutarEvaluacionRespaldoLocal();
+      console.warn("Ejecutando evaluación local en vivo:", e);
+      await ejecutarEvaluacionRealEnVivo();
     }
     setCargando(false);
   };
@@ -100,13 +111,13 @@ export default function SatRCOperativo({ alCerrarSesion }) {
     cargarEstadoServidor();
   }, []);
 
-  // Botón Push de Actualización Manual
+  // Botón de Actualización Manual (Despierta a GitHub Actions)
   const forzarActualizacionManual = async () => {
     setDisparandoManual(true);
     try {
       const res = await fetch('/api/disparar-workflow', { method: 'POST' });
       if (res.ok) {
-        alert("🛰️ SARA: Workflow activado en GitHub Actions. Procesando cuencas y actualizando Blob en la nube...");
+        alert("🛰️ SARA: Workflow activado en GitHub Actions. Procesando cuencas y guardando con allowOverwrite en la nube...");
         setTimeout(cargarEstadoServidor, 35000);
       } else {
         await fetch(`/api/sara?forzar=true&t=${Date.now()}`, { method: 'POST' });
@@ -186,7 +197,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {/* BOTÓN PUSH DE ACTUALIZACIÓN MANUAL EN VIVO */}
+          {/* BOTÓN PUSH MANUAL */}
           <button
             onClick={forzarActualizacionManual}
             disabled={disparandoManual}
@@ -213,7 +224,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
         </div>
       </div>
 
-      {/* 2. REPORTE MULTIMODAL DIOCESANO DE SARA CON HORA EXACTA DE MÉXICO */}
+      {/* 2. REPORTE MULTIMODAL DIOCESANO DE SARA */}
       <div className="bg-slate-900 border-2 border-slate-800 rounded-2xl p-5 shadow-2xl space-y-3">
         <div className="flex flex-wrap justify-between items-center gap-2 border-b border-slate-800 pb-3">
           <div className="flex items-center gap-2">
@@ -258,7 +269,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
         </div>
       </div>
 
-      {/* 3. SEMÁFORO INTERACTIVO DINÁMICO (NUNCA EN CERO) */}
+      {/* 3. SEMÁFORO INTERACTIVO DINÁMICO */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div 
           onClick={() => { setFiltroSemaforo('NIVEL4'); setPaginaActual(1); }}
@@ -416,7 +427,6 @@ export default function SatRCOperativo({ alCerrarSesion }) {
               </table>
             </div>
 
-            {/* Paginación */}
             <div className="p-3.5 bg-slate-950/80 border-t border-slate-800 flex justify-between items-center text-xs">
               <span className="text-slate-400">
                 Mostrando <strong className="text-white">{(paginaActual - 1) * itemsPorPagina + 1}</strong> a <strong className="text-white">{Math.min(paginaActual * itemsPorPagina, comunidadesFiltradas.length)}</strong> de <strong className="text-white">{comunidadesFiltradas.length}</strong>
@@ -448,7 +458,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
       {comunidadDetalle && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-fade-in">
           <div className="bg-slate-900 border-2 border-slate-700 max-w-3xl w-full rounded-2xl shadow-2xl overflow-hidden flex flex-col text-slate-200">
-            <div className="p-4 border-b border-slate-800 flex justify-between items-start" style={{ backgroundColor: `${comunidadDetalle?.color_alerta}20` }}>
+            <div className="p-4 border-b border-slate-800 flex justify-between items-start" style={{ backgroundColor: `${comunidadDetalle?.color_alerta || '#10B981'}20` }}>
               <div>
                 <span className="text-xs font-black px-2.5 py-0.5 rounded text-white" style={{ backgroundColor: comunidadDetalle?.color_alerta }}>
                   NIVEL {comunidadDetalle?.nivel_alerta} • {comunidadDetalle?.estado_alerta}
@@ -472,6 +482,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
                 <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
                   <span className="text-[10px] text-slate-400 uppercase font-semibold block">Pendiente Máx</span>
                   <span className="text-base font-bold text-white">{comunidadDetalle?.geografia?.pendienteMax ?? 0}°</span>
+                  <span className="text-[10px] text-slate-400 block">{comunidadDetalle?.geografia?.relieve}</span>
                 </div>
                 <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
                   <span className="text-[10px] text-slate-400 uppercase font-semibold block">Acceso Vial</span>

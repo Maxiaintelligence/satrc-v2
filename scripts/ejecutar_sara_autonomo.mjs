@@ -282,7 +282,7 @@ Comunidades críticas: ${JSON.stringify(criticas)}.`
     hash_completo: nuevoHash
   });
 
-  // 6. Publicar Estado Maestro y Bitácora en Vercel Blob
+  // 6. Publicar en Vercel Blob CON allowOverwrite: true (DESBLOQUEO TOTAL)
   const paqueteMaestro = {
     actualizado_iso: ahora.toISOString(),
     hora_local_mexico: horaMexicoStr,
@@ -292,11 +292,22 @@ Comunidades críticas: ${JSON.stringify(criticas)}.`
   };
 
   try {
-    await put('estado_diocesano.json', JSON.stringify(paqueteMaestro), { access: 'public', addRandomSuffix: false });
-    await put('bitacora_sara.json', JSON.stringify({ bitacora: bitacoraHistorial, ultimo_dictamen: dictamenSARA }), { access: 'public', addRandomSuffix: false });
-    console.log(`✅ [SARA RUNNER] Publicado con éxito a las ${horaMexicoStr}. N4: ${n4}, N3: ${n3}, N2: ${n2}, N1: ${n1}`);
+    await put('estado_diocesano.json', JSON.stringify(paqueteMaestro), {
+      access: 'public',
+      addRandomSuffix: false,
+      allowOverwrite: true // ◄◄◄ DESBLOQUEO OBLIGATORIO DE VERCEL BLOB
+    });
+
+    await put('bitacora_sara.json', JSON.stringify({ bitacora: bitacoraHistorial, ultimo_dictamen: dictamenSARA }), {
+      access: 'public',
+      addRandomSuffix: false,
+      allowOverwrite: true // ◄◄◄ DESBLOQUEO OBLIGATORIO DE VERCEL BLOB
+    });
+
+    console.log(`✅ [SARA RUNNER] Guardado exitoso en Vercel Blob a las ${horaMexicoStr}. N4: ${n4}, N3: ${n3}, N2: ${n2}, N1: ${n1}`);
   } catch (e) {
     console.error("Error al publicar en Vercel Blob:", e);
+    process.exit(1); // Falla explícita si no pudo guardar
   }
 }
 

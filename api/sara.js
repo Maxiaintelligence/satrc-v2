@@ -1,11 +1,6 @@
 import crypto from 'crypto';
 import { put, list } from '@vercel/blob';
 
-/**
- * SatRC V2.0 - SARA: Sistema de Alerta y Respuesta Automatizada
- * Resuelve la URL real dinámica de Vercel Blob y fija la zona horaria America/Mexico_City.
- */
-
 const BLOQUE_GENESIS = "0000000000000000000000000000000000000000000000000000000000000000";
 
 function generarHashSHA256(prevHash, timestamp, datos) {
@@ -31,7 +26,6 @@ export default async function handler(req, res) {
   const ahora = new Date();
   const horaMexicoStr = obtenerHoraMexico(ahora);
 
-  // 1. Resolver Dinámicamente la URL Real de Vercel Blob usando list()
   let estadoMaestro = null;
   let historialBitacora = [];
   let ultimoDictamen = null;
@@ -40,7 +34,6 @@ export default async function handler(req, res) {
     const listadoBlobs = await list();
     const blobs = listadoBlobs?.blobs || [];
 
-    // Buscar el archivo maestro de las 405 localidades
     const blobEstado = blobs.find(b => b.pathname.includes('estado_diocesano.json'));
     if (blobEstado) {
       const resBlob = await fetch(`${blobEstado.url}?t=${ahora.getTime()}`, { cache: 'no-store' });
@@ -49,7 +42,6 @@ export default async function handler(req, res) {
       }
     }
 
-    // Buscar la bitácora histórica
     const blobBitacora = blobs.find(b => b.pathname.includes('bitacora_sara.json'));
     if (blobBitacora) {
       const resBit = await fetch(`${blobBitacora.url}?t=${ahora.getTime()}`, { cache: 'no-store' });
@@ -60,15 +52,15 @@ export default async function handler(req, res) {
       }
     }
   } catch (errBlob) {
-    console.warn("Aviso al listar Vercel Blob:", errBlob.message);
+    console.warn("Aviso Vercel Blob:", errBlob.message);
   }
 
-  // Si tenemos el estado maestro guardado en Blob, lo servimos de inmediato
+  // Si tenemos el estado maestro guardado en Blob y no es forzado, servirlo
   if (estadoMaestro && estadoMaestro.evaluaciones && estadoMaestro.evaluaciones.length > 0 && req.query.forzar !== 'true') {
     return res.json({
       exito: true,
-      origen: "VERCEL_BLOB_DINAMICO",
-      hora_servidor_mexico: horaMexicoStr,
+      origen: "VERCEL_BLOB_ACTUALIZADO",
+      hora_servidor_mexico: estadoMaestro.hora_local_mexico || horaMexicoStr,
       dictamen: estadoMaestro.dictamen || ultimoDictamen,
       semaforo: estadoMaestro.semaforo,
       evaluaciones: estadoMaestro.evaluaciones,
@@ -76,22 +68,21 @@ export default async function handler(req, res) {
     });
   }
 
-  // 2. Si no hay archivo en Blob aún (primera corrida o forzado en vivo), evaluar con Groq
+  // Evaluación en vivo con Groq si se forzó o si el Blob está vacío
   const contexto = req.body || {};
   const { alertaSMN, resumenSeveridad } = contexto;
   const apiKeyGroq = process.env.GROQ_API_KEY;
-
   const proximaCorridaStr = obtenerHoraMexico(new Date(ahora.getTime() + 3 * 3600000));
 
   let dictamenFinal = {
     estado_situacion: (resumenSeveridad?.totalNivel4 || 0) > 0 ? "SITUACION_CRITICA" : "SITUACION_NORMAL",
     color: (resumenSeveridad?.totalNivel4 || 0) > 0 ? "#EF4444" : "#10B981",
     titulo: (resumenSeveridad?.totalNivel4 || 0) > 0 ? "Emergencia por Temporal en Sierra" : "Situación Diocesana de Calma",
-    comentario_oficial: `Monitoreo en vivo (${horaMexicoStr}): Sincronización oficial con CONAGUA/SMN. Vigilancia prioritaria en la Sierra Madre Oriental. Altiplano en calma.`,
+    comentario_oficial: `Monitoreo en vivo (${horaMexicoStr}): Sincronización oficial con CONAGUA/SMN. Vigilancia prioritaria en comunidades de ladera de la Sierra. Altiplano central en calma.`,
     hora_evaluacion: horaMexicoStr,
     proxima_evaluacion: proximaCorridaStr,
     timestamp: ahora.toISOString(),
-    modelo_ia: "SARA Core en Vivo (Hora México)"
+    modelo_ia: "SARA Core en Vivo"
   };
 
   if (apiKeyGroq) {
@@ -107,7 +98,7 @@ export default async function handler(req, res) {
             {
               role: "system",
               content: `Eres SARA, Oficial Meteoróloga de Guardia de Cáritas Tulancingo. Hora oficial de México: ${horaMexicoStr}.
-Genera el informe diocesano en formato JSON con claves: estado_situacion, color, titulo, comentario_oficial.`
+Genera el informe diocesano en JSON con claves: estado_situacion, color, titulo, comentario_oficial.`
             },
             {
               role: "user",
@@ -135,7 +126,7 @@ Comunidades críticas: ${JSON.stringify(resumenSeveridad?.criticasNombres || [])
     }
   }
 
-  // 3. Bitácora con Hash SHA-256
+  // Bitácora SHA-256
   const prevHash = historialBitacora.length > 0 ? historialBitacora[historialBitacora.length - 1].hash_completo : BLOQUE_GENESIS;
   const nuevoHash = generarHashSHA256(prevHash, dictamenFinal.timestamp, {
     estado: dictamenFinal.estado_situacion,
@@ -153,6 +144,17 @@ Comunidades críticas: ${JSON.stringify(resumenSeveridad?.criticasNombres || [])
     hash: nuevoHash.slice(0, 16) + "...",
     hash_completo: nuevoHash
   });
+
+  // Guardar en Blob CON allowOverwrite: true
+  try {
+    await put('bitacora_sara.json', JSON.stringify({ bitacora: historialBitacora, ultimo_dictamen: dictamenFinal }), {
+      access: 'public',
+      addRandomSuffix: false,
+      allowOverwrite: true // ◄◄◄ DESBLOQUEO OBLIGATORIO
+    });
+  } catch (e) {
+    console.error("Error al actualizar bitacora Blob:", e);
+  }
 
   return res.json({
     exito: true,
