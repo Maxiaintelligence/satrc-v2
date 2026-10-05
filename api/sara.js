@@ -72,11 +72,12 @@ export default async function handler(req, res) {
   const contexto = req.body || {};
   const { alertaSMN, resumenSeveridad } = contexto;
   const apiKeyGroq = process.env.GROQ_API_KEY;
+  const killSwitchActivo = process.env.SARA_LLM_KILL_SWITCH === 'DISABLED';
   const proximaCorridaStr = obtenerHoraMexico(new Date(ahora.getTime() + 3 * 3600000));
 
   let dictamenFinal = {
-    estado_situacion: (resumenSeveridad?.totalNivel4 || 0) > 0 ? "SITUACION_CRITICA" : "SITUACION_NORMAL",
-    color: (resumenSeveridad?.totalNivel4 || 0) > 0 ? "#EF4444" : "#10B981",
+    estado_situacion: (resumenSeveridad?.totalNivel4 || 0) > 0 ? "SITUACION_CRITICA" : ((resumenSeveridad?.totalNivel3 || 0) > 0 ? "SITUACION_GRAVE" : "SITUACION_NORMAL"),
+    color: (resumenSeveridad?.totalNivel4 || 0) > 0 ? "#EF4444" : ((resumenSeveridad?.totalNivel3 || 0) > 0 ? "#F97316" : "#10B981"),
     titulo: (resumenSeveridad?.totalNivel4 || 0) > 0 ? "Emergencia por Temporal en Sierra" : "Situación Diocesana de Calma",
     comentario_oficial: `Monitoreo en vivo (${horaMexicoStr}): Sincronización oficial con CONAGUA/SMN. Vigilancia prioritaria en comunidades de ladera de la Sierra. Altiplano central en calma.`,
     hora_evaluacion: horaMexicoStr,
@@ -85,7 +86,8 @@ export default async function handler(req, res) {
     modelo_ia: "SARA Core en Vivo"
   };
 
-  if (apiKeyGroq) {
+  // Solo si Groq está activo y el KILL_SWITCH no está forzado a DISABLED
+  if (apiKeyGroq && !killSwitchActivo) {
     try {
       const resG = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
@@ -122,7 +124,7 @@ Comunidades críticas: ${JSON.stringify(resumenSeveridad?.criticasNombres || [])
         };
       }
     } catch (e) {
-      console.warn("Fallo Groq en vivo:", e);
+      console.warn("Fallo Groq en vivo, recurriendo a plantilla segura:", e);
     }
   }
 
@@ -145,12 +147,11 @@ Comunidades críticas: ${JSON.stringify(resumenSeveridad?.criticasNombres || [])
     hash_completo: nuevoHash
   });
 
-  // Guardar en Blob CON allowOverwrite: true
   try {
     await put('bitacora_sara.json', JSON.stringify({ bitacora: historialBitacora, ultimo_dictamen: dictamenFinal }), {
       access: 'public',
       addRandomSuffix: false,
-      allowOverwrite: true // ◄◄◄ DESBLOQUEO OBLIGATORIO
+      allowOverwrite: true
     });
   } catch (e) {
     console.error("Error al actualizar bitacora Blob:", e);
