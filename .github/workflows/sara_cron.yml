@@ -4,7 +4,7 @@ on:
   schedule:
     # Corre al minuto 21 de cada 3 horas (00:21, 03:21, 06:21, 09:21, 12:21, 15:21, 18:21, 21:21 UTC)
     - cron: '21 */3 * * *'
-  workflow_dispatch: # Permite ejecución manual inmediata desde la app web
+  workflow_dispatch:
 
 jobs:
   ejecutar_analisis_sara:
@@ -14,10 +14,10 @@ jobs:
       - name: Descargar Código del Repositorio
         uses: actions/checkout@v4
 
-      - name: Configurar Node.js v20
+      - name: Configurar Node.js v22
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Instalar Dependencias del Motor
         run: npm install @vercel/blob
