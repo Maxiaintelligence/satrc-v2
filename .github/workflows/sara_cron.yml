@@ -1,0 +1,29 @@
+name: SARA Cronjob Autónomo Diocesano
+
+on:
+  schedule:
+    # Corre al minuto 21 de cada 3 horas (00:21, 03:21, 06:21, 09:21, 12:21, 15:21, 18:21, 21:21 UTC)
+    - cron: '21 */3 * * *'
+  workflow_dispatch: # Permite ejecución manual inmediata desde la app web
+
+jobs:
+  ejecutar_analisis_sara:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Descargar Código del Repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js v20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Instalar Dependencias del Motor
+        run: npm install @vercel/blob
+
+      - name: Ejecutar Motor Autónomo Multivectorial SARA
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+        run: node scripts/ejecutar_sara_autonomo.mjs
