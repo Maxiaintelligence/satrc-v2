@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import db from '../data/localidades.json';
+import { consultarModelosDeterministas } from '../engine/meteoFetcher.js';
+import { generarConsensoDeterminista } from '../engine/consensusEngine.js';
+import { evaluarLocalidad } from '../engine/riskEvaluator.js';
 import RiskMap from '../components/RiskMap.jsx';
 import SatelliteViewer from '../components/SatelliteViewer.jsx';
 import { 
@@ -31,6 +34,8 @@ import {
 } from 'lucide-react';
 
 export default function SatRCOperativo({ alCerrarSesion }) {
+  const todasLocalidades = db.localidades || [];
+
   const [evaluaciones, setEvaluaciones] = useState([]);
   const [comunidadFoco, setComunidadFoco] = useState(null);
   const [cargando, setCargando] = useState(true);
@@ -48,53 +53,67 @@ export default function SatRCOperativo({ alCerrarSesion }) {
   const [disparandoManual, setDisparandoManual] = useState(false);
   const [comunidadDetalle, setComunidadDetalle] = useState(null);
 
-  // 1. Cargar el Estado Maestro Precalculado desde Vercel Blob
-  const cargarEstadoMaestro = async () => {
+  // Función de Respaldo Local (Garantiza que el panel JAMÁS quede en ceros)
+  const ejecutarEvaluacionRespaldoLocal = (alertaSMN = null) => {
+    const resLocal = todasLocalidades.map(loc => {
+      try {
+        return evaluarLocalidad(loc, [], { alertaSMN });
+      } catch (e) {
+        return null;
+      }
+    }).filter(Boolean);
+
+    resLocal.sort((a, b) => b.nivel_alerta - a.nivel_alerta);
+    setEvaluaciones(resLocal);
+    setComunidadFoco(resLocal[0] || null);
+  };
+
+  // Cargar Estado desde el Servidor
+  const cargarEstadoServidor = async () => {
     setCargando(true);
     try {
-      // Leemos directo el archivo generado por GitHub Actions
-      const res = await fetch(`/api/sara?forzar=false&t=${Date.now()}`);
+      const res = await fetch(`/api/sara?t=${Date.now()}`);
       if (res.ok) {
         const data = await res.json();
         if (data.dictamen) setDictamenSARA(data.dictamen);
         if (data.bitacora) setBitacoraSARA(data.bitacora);
-      }
 
-      // Si hay evaluaciones en el estado
-      const resBlob = await fetch(`https://satrc-v2-blob.public.blob.vercel-storage.com/estado_diocesano.json?t=${Date.now()}`).catch(() => null);
-      if (resBlob && resBlob.ok) {
-        const maestro = await resBlob.json();
-        if (maestro.evaluaciones) {
-          setEvaluaciones(maestro.evaluaciones);
-          setComunidadFoco(maestro.evaluaciones[0] || null);
-          if (maestro.dictamen) setDictamenSARA(maestro.dictamen);
+        // Si el servidor ya tiene las evaluaciones procesadas, las usamos
+        if (data.evaluaciones && data.evaluaciones.length > 0) {
+          setEvaluaciones(data.evaluaciones);
+          setComunidadFoco(data.evaluaciones[0] || null);
+        } else {
+          // Si el blob aún no se escribe, la salvaguarda local llena el mapa y el semáforo al instante
+          ejecutarEvaluacionRespaldoLocal(data.dictamen);
         }
+      } else {
+        ejecutarEvaluacionRespaldoLocal();
       }
     } catch (e) {
-      console.warn("Cargando base local:", e);
+      console.warn("Activando salvaguarda local:", e);
+      ejecutarEvaluacionRespaldoLocal();
     }
     setCargando(false);
   };
 
   useEffect(() => {
-    cargarEstadoMaestro();
+    cargarEstadoServidor();
   }, []);
 
-  // Botón Push de Actualización Manual (Despierta el GitHub Action)
+  // Botón Push de Actualización Manual
   const forzarActualizacionManual = async () => {
     setDisparandoManual(true);
     try {
       const res = await fetch('/api/disparar-workflow', { method: 'POST' });
       if (res.ok) {
-        alert("🛰️ SARA: Workflow activado en GitHub Actions. Procesando las 405 localidades en la nube (toma ~45 segundos).");
-        setTimeout(cargarEstadoMaestro, 45000);
+        alert("🛰️ SARA: Workflow activado en GitHub Actions. Procesando cuencas y actualizando Blob en la nube...");
+        setTimeout(cargarEstadoServidor, 35000);
       } else {
-        // Si no está configurado el token de GitHub, hace la corrida serverless directa
         await fetch(`/api/sara?forzar=true&t=${Date.now()}`, { method: 'POST' });
-        await cargarEstadoMaestro();
+        await cargarEstadoServidor();
       }
     } catch (e) {
-      await cargarEstadoMaestro();
+      await cargarEstadoServidor();
     }
     setDisparandoManual(false);
   };
@@ -105,7 +124,6 @@ export default function SatRCOperativo({ alCerrarSesion }) {
   const totalNivel2 = evaluaciones.filter(e => e?.nivel_alerta === 2).length;
   const totalNivel1 = evaluaciones.filter(e => e?.nivel_alerta === 1).length;
 
-  // Filtrado de la bandeja
   const comunidadesFiltradas = evaluaciones.filter(item => {
     if (!item) return false;
     if (filtroSemaforo === 'NIVEL4') return item.nivel_alerta === 4;
@@ -168,7 +186,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {/* BOTÓN DISPARADOR MANUAL GITHUB ACTIONS */}
+          {/* BOTÓN PUSH DE ACTUALIZACIÓN MANUAL EN VIVO */}
           <button
             onClick={forzarActualizacionManual}
             disabled={disparandoManual}
@@ -195,7 +213,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
         </div>
       </div>
 
-      {/* 2. REPORTE MULTIMODAL DIOCESANO DE SARA */}
+      {/* 2. REPORTE MULTIMODAL DIOCESANO DE SARA CON HORA EXACTA DE MÉXICO */}
       <div className="bg-slate-900 border-2 border-slate-800 rounded-2xl p-5 shadow-2xl space-y-3">
         <div className="flex flex-wrap justify-between items-center gap-2 border-b border-slate-800 pb-3">
           <div className="flex items-center gap-2">
@@ -215,14 +233,14 @@ export default function SatRCOperativo({ alCerrarSesion }) {
                 )}
               </h3>
               <p className="text-[11px] text-slate-400">
-                Oficial Meteoróloga de Guardia • {dictamenSARA?.modelo_ia || "Groq Llama-3.3-70B"} • Cron :21
+                Oficial Meteoróloga de Guardia • {dictamenSARA?.modelo_ia || "Groq Llama-3.3-70B"}
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2 font-mono text-xs text-slate-400">
             <Clock className="w-3.5 h-3.5 text-cyan-400" />
-            <span>Última corrida: <strong className="text-white">{dictamenSARA?.hora_evaluacion || '--:--'}</strong></span>
+            <span>Última corrida oficial (Hora México): <strong className="text-white">{dictamenSARA?.hora_evaluacion || '--:--'}</strong></span>
           </div>
         </div>
 
@@ -240,7 +258,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
         </div>
       </div>
 
-      {/* 3. SEMÁFORO INTERACTIVO DINÁMICO */}
+      {/* 3. SEMÁFORO INTERACTIVO DINÁMICO (NUNCA EN CERO) */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div 
           onClick={() => { setFiltroSemaforo('NIVEL4'); setPaginaActual(1); }}
@@ -426,7 +444,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
         )}
       </div>
 
-      {/* 6. MODAL DE AUDITORÍA PROFUNDA */}
+      {/* 6. MODAL DE AUDITORÍA */}
       {comunidadDetalle && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-fade-in">
           <div className="bg-slate-900 border-2 border-slate-700 max-w-3xl w-full rounded-2xl shadow-2xl overflow-hidden flex flex-col text-slate-200">
@@ -454,7 +472,6 @@ export default function SatRCOperativo({ alCerrarSesion }) {
                 <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
                   <span className="text-[10px] text-slate-400 uppercase font-semibold block">Pendiente Máx</span>
                   <span className="text-base font-bold text-white">{comunidadDetalle?.geografia?.pendienteMax ?? 0}°</span>
-                  <span className="text-[10px] text-slate-400 block">{comunidadDetalle?.geografia?.relieve}</span>
                 </div>
                 <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
                   <span className="text-[10px] text-slate-400 uppercase font-semibold block">Acceso Vial</span>

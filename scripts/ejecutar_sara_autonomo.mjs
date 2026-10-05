@@ -9,7 +9,7 @@ const rutaJSON = path.join(__dirname, '../src/data/localidades.json');
 const db = JSON.parse(fs.readFileSync(rutaJSON, 'utf-8'));
 const todasLocalidades = db.localidades || [];
 
-console.log(`📡 [SARA RUNNER] Iniciando escaneo autónomo de ${todasLocalidades.length} comunidades...`);
+console.log(`📡 [SARA RUNNER] Evaluando ${todasLocalidades.length} localidades al minuto 21...`);
 
 const BLOQUE_GENESIS = "0000000000000000000000000000000000000000000000000000000000000000";
 
@@ -19,9 +19,19 @@ function generarHashSHA256(prevHash, timestamp, datos) {
     .digest('hex');
 }
 
+function obtenerHoraMexico(fecha = new Date()) {
+  return fecha.toLocaleTimeString('es-MX', {
+    timeZone: 'America/Mexico_City',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true
+  });
+}
+
 async function ejecutarSARA() {
   const ahora = new Date();
-  const horaLocalStr = ahora.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: true });
+  const horaMexicoStr = obtenerHoraMexico(ahora);
+  const proximaCorridaStr = obtenerHoraMexico(new Date(ahora.getTime() + 3 * 3600000));
 
   // 1. Consultar Aviso Federal SMN / CONAGUA
   let alertaSMN = null;
@@ -64,10 +74,10 @@ async function ejecutarSARA() {
       }
     }
   } catch (e) {
-    console.error("Error en consulta meteorológica:", e);
+    console.error("Error en meteorología:", e);
   }
 
-  // 3. Evaluación Multimodal de las 405 Localidades
+  // 3. Evaluación Multimodal de las 405 Comunidades
   const evaluaciones = todasLocalidades.map(loc => {
     const esAltiplano = ['APN', 'TIZ', 'PMS', 'ACT'].includes(loc.zona_id);
     const esSierra = ['HUA', 'SPP', 'ZAC', 'CHG', 'ZAH', 'ATG', 'TUL'].includes(loc.zona_id);
@@ -77,18 +87,14 @@ async function ejecutarSARA() {
     const distRio = loc.hidrologia.distancia_cauce_km || 99;
     const twi = loc.topografia.twi || 0;
     const altitud = loc.topografia.altitud_msnm || 0;
-    const esTerraceria = loc.vulnerabilidad.acceso_vial === 'CAMINO_TERRACERIA' || loc.vulnerabilidad.acceso_vial === 'BRECHA';
 
-    // Evento actual (próximas 24h)
     const horasHoy = serieHoraria.slice(168, 192);
     let lluviaHoy = horasHoy.reduce((acc, h) => acc + h.lluvia_mm, 0);
     let tempMin = Math.min(...horasHoy.map(h => h.temperatura_c), 20);
     let vientoMax = Math.max(...horasHoy.map(h => h.viento_kmh), 10);
     let rafagaMax = Math.max(...horasHoy.map(h => h.rafagas_kmh), 15);
-    let humMin = Math.min(...horasHoy.map(h => h.humedad_relativa_pct), 50);
     let visMin = Math.min(...horasHoy.map(h => h.visibilidad_km), 10);
 
-    // En la Sierra se adopta el piso de temporal del SMN
     const lluviaEfectiva = (esSierra && alertaSMN) ? Math.max(lluviaHoy, alertaSMN.rango_lluvia_min_mm) : lluviaHoy;
     const saturacionSuelo = parseFloat((25.0 + lluviaEfectiva).toFixed(1));
 
@@ -97,15 +103,13 @@ async function ejecutarSARA() {
     let tituloDiagnostico = "Condiciones de Estabilidad";
     let causa = "Sin perturbaciones climáticas significativas.";
 
-    // EVALUACIÓN DE LOS 5 VECTORES:
-
-    // Vector B: Frío y Heladas (en cumbres > 2,100 msnm)
+    // Evaluación Multivectorial
     if (altitud >= 2100) {
       if (tempMin <= 0.0 && rafagaMax >= 50) {
         nivel = 4;
         vectorDominante = "FRIO_EXTREMO_WIND_CHILL";
         tituloDiagnostico = "Emergencia por Helada con Viento Helado";
-        causa = `Mínima de ${tempMin}°C con ráfagas de ${rafagaMax} km/h. Hipotermia crítica en viviendas de montaña.`;
+        causa = `Mínima de ${tempMin}°C con ráfagas de ${rafagaMax} km/h en cumbres altas.`;
       } else if (tempMin <= 0.0) {
         nivel = Math.max(nivel, 3);
         vectorDominante = "HELADA_NEGRA";
@@ -114,28 +118,18 @@ async function ejecutarSARA() {
       }
     }
 
-    // Vector C: Incendios Forestales (Regla 30-30-30 en zonas forestales)
-    if (loc.vulnerabilidad.combustibilidad >= 3 && tempMin > 28 && humMin < 30 && vientoMax > 30) {
-      nivel = Math.max(nivel, 3);
-      vectorDominante = "INCENDIO_FORESTAL";
-      tituloDiagnostico = "Alerta Extrema de Incendios Forestales";
-      causa = `Regla 30-30-30 activa en bosque de pino-encino con alta velocidad de propagación.`;
-    }
-
-    // Vector D & E: Viento Severo y Niebla
     if (vientoMax >= 60 || rafagaMax >= 75) {
       nivel = Math.max(nivel, 4);
       vectorDominante = "VIENTO_SEVERO";
       tituloDiagnostico = "Ráfagas Destructivas de Viento";
-      causa = `Ráfagas de ${rafagaMax} km/h con peligro de caída de cableado y desprendimiento de láminas.`;
+      causa = `Ráfagas de ${rafagaMax} km/h con peligro sobre techumbres de lámina.`;
     } else if (visMin < 0.5) {
       nivel = Math.max(nivel, 3);
       vectorDominante = "NIEBLA_OROGRAFICA";
       tituloDiagnostico = "Ceguera Vial por Niebla Densa";
-      causa = `Visibilidad inferior a 500 metros en curvas y puertos serranos.`;
+      causa = `Visibilidad reducida a menos de 500 metros en pasos de montaña.`;
     }
 
-    // Vector A: Hidrometeorológico (Laderas y Ríos)
     if (esSierra && esLadera && saturacionSuelo >= 65.0) {
       if (pendiente >= 35) {
         nivel = 4;
@@ -146,19 +140,17 @@ async function ejecutarSARA() {
         nivel = Math.max(nivel, 3);
         vectorDominante = "DESLAVE_MODERADO";
         tituloDiagnostico = "Saturación Crítica de Terreno";
-        causa = `Reblandecimiento de estratos en ladera de ${pendiente}° con desprendimientos menores.`;
+        causa = `Reblandecimiento en ladera de ${pendiente}° con desprendimientos menores.`;
       }
     }
 
-    // Desbordamiento ribereño
     if (distRio <= 0.8 && twi >= 12.0 && lluviaEfectiva >= 35.0 && !esAltiplano) {
       nivel = Math.max(nivel, 4);
       vectorDominante = "INUNDACION_FLUVIAL";
       tituloDiagnostico = "Desbordamiento e Inundación Ribereña";
-      causa = `Población a orilla de cauce encajonado (${distRio} km) con crecida en tránsito.`;
+      causa = `Comunidad en orilla de cauce encajonado (${distRio} km) con crecida en tránsito.`;
     }
 
-    // Altiplano seco forzado a Normalidad si no hay frío extremo ni lluvia fuerte
     if (esAltiplano && !esLadera && lluviaHoy < 20.0 && tempMin > 2.0 && vientoMax < 40) {
       nivel = 1;
       vectorDominante = "ATMOSFERA_ESTABLE";
@@ -177,6 +169,15 @@ async function ejecutarSARA() {
       estado_alerta: ['NORMAL', 'VIGILANCIA', 'ALERTA_TEMPRANA', 'EMERGENCIA'][nivel - 1],
       vector_dominante: vectorDominante,
       diagnostico: { titulo: tituloDiagnostico, causa: causa },
+      donde: {
+        subcuenca_cve: loc.hidrologia.subcuenca_cve,
+        subcuenca_nom: loc.hidrologia.subcuenca_nom,
+        posicion_hidrologica: loc.hidrologia.posicion,
+        tipo_relieve: relieve,
+        pendiente_max_grados: pendiente,
+        distancia_cauce_km: distRio,
+        coordenadas: loc.coords
+      },
       geografia: { relieve, pendienteMax: pendiente, distanciaRioKm: distRio, twi, cuenca: loc.hidrologia.subcuenca_nom, coordenadas: loc.coords },
       tiempos: { inicio: "En curso", picoMaximo: "Periodo activo", ventanaAccionHoras: loc.hidrologia.tc_horas || 6 },
       impactoSistemico: {
@@ -201,7 +202,7 @@ async function ejecutarSARA() {
   const n1 = evaluaciones.filter(e => e.nivel_alerta === 1).length;
   const criticas = evaluaciones.filter(e => e.nivel_alerta >= 3).slice(0, 5).map(c => `${c.nombre} (${c.municipio})`);
 
-  // 4. Llamada de Síntesis a Groq Llama-3.3-70B
+  // 4. Inferencia con Groq
   let dictamenSARA = null;
   const apiKeyGroq = process.env.GROQ_API_KEY;
 
@@ -209,7 +210,7 @@ async function ejecutarSARA() {
     try {
       const resG = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
-        headers: { "Authorization": `Bearer ${apiKeyGroq}`, "Content-Type": "application/json" },
+        headers: { "Authorization": `Bearer ${apiKeyGroq.trim()}`, "Content-Type": "application/json" },
         body: JSON.stringify({
           model: "llama-3.3-70b-versatile",
           temperature: 0.1,
@@ -217,13 +218,12 @@ async function ejecutarSARA() {
           messages: [
             {
               role: "system",
-              content: `Eres SARA, Oficial Meteoróloga de Guardia de Cáritas Tulancingo.
-Redacta el informe diocesano multimodal para la corrida del minuto 21.
-Estructura exactamente en JSON con claves: estado_situacion, color, titulo, comentario_oficial.`
+              content: `Eres SARA, Oficial Meteoróloga de Guardia de Cáritas Tulancingo. Hora oficial de México: ${horaMexicoStr}.
+Genera el informe diocesano multimodal en JSON con claves: estado_situacion, color, titulo, comentario_oficial.`
             },
             {
               role: "user",
-              content: `Hora local: ${horaLocalStr}. Alerta SMN: ${alertaSMN ? alertaSMN.titulo : 'Normal'}.
+              content: `Hora México: ${horaMexicoStr}. Aviso SMN: ${alertaSMN ? alertaSMN.titulo : 'Normal'}.
 Nivel 4: ${n4}, Nivel 3: ${n3}, Nivel 2: ${n2}, Nivel 1: ${n1}.
 Comunidades críticas: ${JSON.stringify(criticas)}.`
             }
@@ -236,7 +236,7 @@ Comunidades críticas: ${JSON.stringify(criticas)}.`
         dictamenSARA = JSON.parse(dataG.choices[0].message.content);
       }
     } catch (e) {
-      console.warn("Groq no respondió, usando generador determinista:", e);
+      console.warn("Fallo Groq en Runner:", e);
     }
   }
 
@@ -244,33 +244,35 @@ Comunidades críticas: ${JSON.stringify(criticas)}.`
     dictamenSARA = {
       estado_situacion: n4 > 0 ? "SITUACION_CRITICA" : (n3 > 0 ? "SITUACION_GRAVE" : "SITUACION_NORMAL"),
       color: n4 > 0 ? "#EF4444" : (n3 > 0 ? "#F97316" : "#10B981"),
-      titulo: n4 > 0 ? "Emergencia Multimodal Activa en Sierra" : "Situación Diocesana de Calma y Vigilancia",
-      comentario_oficial: `Corrida autónoma del minuto 21 (${horaLocalStr}): Vigilancia de vectores activos. Foco prioritario en laderas saturadas de la Sierra de Puebla. Altiplano central en calma.`
+      titulo: n4 > 0 ? "Emergencia Multimodal en Sierra" : "Situación Diocesana de Calma",
+      comentario_oficial: `Corrida autónoma del minuto 21 (${horaMexicoStr}): Vigilancia de vectores activos. Foco prioritario en laderas de la Sierra de Puebla. Altiplano central en calma.`
     };
   }
 
-  dictamenSARA.hora_evaluacion = horaLocalStr;
+  dictamenSARA.hora_evaluacion = horaMexicoStr;
+  dictamenSARA.proxima_evaluacion = proximaCorridaStr;
   dictamenSARA.timestamp = ahora.toISOString();
 
-  // 5. Bitácora con Hash SHA-256 Inmutable
+  // 5. Bitácora con Hash SHA-256
   let bitacoraHistorial = [];
   try {
-    const { blobs } = await list({ prefix: 'bitacora_sara.json' });
-    if (blobs && blobs.length > 0) {
-      const rB = await fetch(blobs[0].url);
+    const listado = await list();
+    const blobB = listado?.blobs?.find(b => b.pathname.includes('bitacora_sara.json'));
+    if (blobB) {
+      const rB = await fetch(blobB.url, { cache: 'no-store' });
       if (rB.ok) {
-        const d = await rB.json();
-        bitacoraHistorial = d.bitacora || [];
+        const dB = await rB.json();
+        bitacoraHistorial = dB.bitacora || [];
       }
     }
   } catch (e) {}
 
   const prevHash = bitacoraHistorial.length > 0 ? bitacoraHistorial[bitacoraHistorial.length - 1].hash_completo : BLOQUE_GENESIS;
-  const nuevoHash = generarHashSHA256(prevHash, dictamenSARA.timestamp, { n4, n3, n1, titulo: dictamenSARA.titulo });
+  const nuevoHash = generarHashSHA256(prevHash, dictamenSARA.timestamp, { n4, n3, n1, hora: horaMexicoStr });
 
   bitacoraHistorial.push({
     id: `SARA_LOG_${bitacoraHistorial.length + 1}`,
-    timestamp_local: horaLocalStr,
+    timestamp_local: horaMexicoStr,
     timestamp_iso: dictamenSARA.timestamp,
     estado_situacion: dictamenSARA.estado_situacion,
     titulo: dictamenSARA.titulo,
@@ -283,7 +285,7 @@ Comunidades críticas: ${JSON.stringify(criticas)}.`
   // 6. Publicar Estado Maestro y Bitácora en Vercel Blob
   const paqueteMaestro = {
     actualizado_iso: ahora.toISOString(),
-    hora_local: horaLocalStr,
+    hora_local_mexico: horaMexicoStr,
     dictamen: dictamenSARA,
     semaforo: { totalNivel4: n4, totalNivel3: n3, totalNivel2: n2, totalNivel1: n1 },
     evaluaciones: evaluaciones
@@ -292,9 +294,9 @@ Comunidades críticas: ${JSON.stringify(criticas)}.`
   try {
     await put('estado_diocesano.json', JSON.stringify(paqueteMaestro), { access: 'public', addRandomSuffix: false });
     await put('bitacora_sara.json', JSON.stringify({ bitacora: bitacoraHistorial, ultimo_dictamen: dictamenSARA }), { access: 'public', addRandomSuffix: false });
-    console.log("✅ [SARA RUNNER] Estado diocesano y bitacora publicados exitosamente en Vercel Blob.");
+    console.log(`✅ [SARA RUNNER] Publicado con éxito a las ${horaMexicoStr}. N4: ${n4}, N3: ${n3}, N2: ${n2}, N1: ${n1}`);
   } catch (e) {
-    console.error("Error guardando en Vercel Blob:", e);
+    console.error("Error al publicar en Vercel Blob:", e);
   }
 }
 
