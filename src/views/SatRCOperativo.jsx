@@ -28,13 +28,14 @@ import {
   TrendingDown, 
   Minus,
   Download,
-  Layers
+  Layers,
+  RotateCw,
+  ShieldAlert
 } from 'lucide-react';
 
 export default function SatRCOperativo({ alCerrarSesion }) {
   const todasLocalidades = db.localidades || [];
 
-  // Estados del Cuarto de Situación
   const [killSwitchActivo, setKillSwitchActivo] = useState(false);
   const [cargandoEvaluacion, setCargandoEvaluacion] = useState(true);
   const [evaluaciones, setEvaluaciones] = useState([]);
@@ -42,7 +43,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
 
   // Filtro activo del Semáforo
   const [filtroSemaforo, setFiltroSemaforo] = useState('NIVEL4');
-  const [bandejaAbierta, setBandejaAbierta] = useState(true);
+  const [bandejaAbierta, setBandejaAbierta] = useState(false); // Inicia contraída
   const [paginaActual, setPaginaActual] = useState(1);
   const itemsPorPagina = 10;
 
@@ -51,12 +52,13 @@ export default function SatRCOperativo({ alCerrarSesion }) {
   const [bitacoraSARA, setBitacoraSARA] = useState([]);
   const [modalBitacoraAbierto, setModalBitacoraAbierto] = useState(false);
   const [cargandoSARA, setCargandoSARA] = useState(true);
-
-  // Modal de Detalle Profundo
-  const [comunidadDetalle, setComunidadDetalle] = useState(null);
+  const [sincronizandoVivo, setSincronizandoVivo] = useState(false);
 
   // Alerta SMN
   const [alertaSMN, setAlertaSMN] = useState(null);
+
+  // Modal de Detalle
+  const [comunidadDetalle, setComunidadDetalle] = useState(null);
 
   // Emisión Manual Pastoral
   const [modoManual, setModoManual] = useState(false);
@@ -73,95 +75,88 @@ export default function SatRCOperativo({ alCerrarSesion }) {
       .catch(() => null);
   }, []);
 
-  // 2. Escaneo Geofísico de las 405 Comunidades
-  useEffect(() => {
-    if (killSwitchActivo) {
+  // 2. Función Central de Escaneo y Llamada a SARA
+  const ejecutarAnalisis = async (forzarEnVivo = false) => {
+    if (forzarEnVivo) setSincronizandoVivo(true);
+    else setCargandoEvaluacion(true);
+
+    const nodoSierra = todasLocalidades.find(l => l.nombre.toLowerCase().includes('huauchinango')) || todasLocalidades[0];
+    if (!nodoSierra?.coords) {
       setCargandoEvaluacion(false);
+      setSincronizandoVivo(false);
       return;
     }
 
-    let cancelado = false;
-    async function correrEscaneo() {
-      setCargandoEvaluacion(true);
-
-      const nodoSierra = todasLocalidades.find(l => l.nombre.toLowerCase().includes('huauchinango')) || todasLocalidades[0];
-      if (!nodoSierra?.coords) {
-        setCargandoEvaluacion(false);
-        return;
-      }
-
-      const resMeteo = await consultarModelosDeterministas(nodoSierra.coords.lat, nodoSierra.coords.lon);
-
-      if (cancelado) return;
-
-      let serieConsenso = [];
-      if (resMeteo?.exito && resMeteo?.datos_horarios) {
-        serieConsenso = generarConsensoDeterminista(resMeteo.datos_horarios);
-      }
-
-      // Evaluación individualizada segura
-      const resultados = todasLocalidades.map(loc => {
-        try {
-          return evaluarLocalidad(loc, serieConsenso, { alertaSMN: alertaSMN });
-        } catch (e) {
-          console.error("Error evaluando:", loc?.nombre, e);
-          return null;
-        }
-      }).filter(Boolean);
-
-      // Ordenar con protección contra nulos
-      resultados.sort((a, b) => {
-        const nivelA = a?.nivel_alerta ?? 1;
-        const nivelB = b?.nivel_alerta ?? 1;
-        if (nivelB !== nivelA) return nivelB - nivelA;
-
-        const satA = a?.impactoSistemico?.saturacionTotalSueloMm ?? 0;
-        const satB = b?.impactoSistemico?.saturacionTotalSueloMm ?? 0;
-        return satB - satA;
-      });
-
-      if (!cancelado) {
-        setEvaluaciones(resultados);
-        setComunidadFoco(resultados[0] || null);
-        setCargandoEvaluacion(false);
-
-        // Llamar a SARA
-        const n4 = resultados.filter(e => e?.nivel_alerta === 4).length;
-        const n3 = resultados.filter(e => e?.nivel_alerta === 3).length;
-        const n1 = resultados.filter(e => e?.nivel_alerta === 1).length;
-        const criticas = resultados.filter(e => (e?.nivel_alerta ?? 1) >= 3).slice(0, 6).map(c => `${c?.nombre} (${c?.municipio})`);
-
-        fetch('/api/sara', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            alertaSMN: alertaSMN,
-            resumenSeveridad: { totalNivel4: n4, totalNivel3: n3, totalNivel1: n1, criticasNombres: criticas }
-          })
-        })
-          .then(r => r.json())
-          .then(data => {
-            if (data?.exito && data?.dictamen) {
-              setDictamenSARA(data.dictamen);
-              setBitacoraSARA(data.bitacora || []);
-            }
-            setCargandoSARA(false);
-          })
-          .catch(() => setCargandoSARA(false));
-      }
+    const resMeteo = await consultarModelosDeterministas(nodoSierra.coords.lat, nodoSierra.coords.lon);
+    let serieConsenso = [];
+    if (resMeteo?.exito && resMeteo?.datos_horarios) {
+      serieConsenso = generarConsensoDeterminista(resMeteo.datos_horarios);
     }
 
-    correrEscaneo();
-    return () => { cancelado = true; };
+    const resultados = todasLocalidades.map(loc => {
+      try {
+        return evaluarLocalidad(loc, serieConsenso, { alertaSMN: alertaSMN });
+      } catch (e) {
+        return null;
+      }
+    }).filter(Boolean);
+
+    resultados.sort((a, b) => {
+      const nivelA = a?.nivel_alerta ?? 1;
+      const nivelB = b?.nivel_alerta ?? 1;
+      if (nivelB !== nivelA) return nivelB - nivelA;
+      const satA = a?.impactoSistemico?.saturacionTotalSueloMm ?? 0;
+      const satB = b?.impactoSistemico?.saturacionTotalSueloMm ?? 0;
+      return satB - satA;
+    });
+
+    setEvaluaciones(resultados);
+    setComunidadFoco(resultados[0] || null);
+    setCargandoEvaluacion(false);
+
+    // Llamar a SARA (Con bypass de caché si es forzado)
+    const n4 = resultados.filter(e => e?.nivel_alerta === 4).length;
+    const n3 = resultados.filter(e => e?.nivel_alerta === 3).length;
+    const n1 = resultados.filter(e => e?.nivel_alerta === 1).length;
+    const criticas = resultados.filter(e => (e?.nivel_alerta ?? 1) >= 3).slice(0, 6).map(c => `${c?.nombre} (${c?.municipio})`);
+
+    const endpointSARA = forzarEnVivo ? `/api/sara?forzar=true&t=${Date.now()}` : '/api/sara';
+
+    fetch(endpointSARA, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        alertaSMN: alertaSMN,
+        resumenSeveridad: { totalNivel4: n4, totalNivel3: n3, totalNivel1: n1, criticasNombres: criticas }
+      })
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data?.exito && data?.dictamen) {
+          setDictamenSARA(data.dictamen);
+          setBitacoraSARA(data.bitacora || []);
+        }
+        setCargandoSARA(false);
+        setSincronizandoVivo(false);
+      })
+      .catch(() => {
+        setCargandoSARA(false);
+        setSincronizandoVivo(false);
+      });
+  };
+
+  useEffect(() => {
+    if (!killSwitchActivo) {
+      ejecutarAnalisis(false);
+    }
   }, [killSwitchActivo, alertaSMN]);
 
-  // Conteos seguros
+  // Conteos
   const totalNivel4 = evaluaciones.filter(e => e?.nivel_alerta === 4).length;
   const totalNivel3 = evaluaciones.filter(e => e?.nivel_alerta === 3).length;
   const totalNivel2 = evaluaciones.filter(e => e?.nivel_alerta === 2).length;
   const totalNivel1 = evaluaciones.filter(e => e?.nivel_alerta === 1).length;
 
-  // Filtrado Seguro del Semáforo
   const comunidadesFiltradas = evaluaciones.filter(item => {
     if (!item) return false;
     if (filtroSemaforo === 'NIVEL4') return item.nivel_alerta === 4;
@@ -177,7 +172,6 @@ export default function SatRCOperativo({ alCerrarSesion }) {
     paginaActual * itemsPorPagina
   );
 
-  // Cálculo Seguro de Tendencia
   const obtenerTendencia = (item) => {
     const sat = item?.impactoSistemico?.saturacionTotalSueloMm ?? 0;
     const nivel = item?.nivel_alerta ?? 1;
@@ -194,7 +188,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(bitacoraSARA, null, 2));
     const downloadAnchor = document.createElement('a');
     downloadAnchor.setAttribute("href", dataStr);
-    downloadAnchor.setAttribute("download", `bitacora_sara_caritas_${new Date().toISOString().slice(0, 10)}.json`);
+    downloadAnchor.setAttribute("download", `bitacora_sara_${new Date().toISOString().slice(0, 10)}.json`);
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
     downloadAnchor.remove();
@@ -241,13 +235,25 @@ export default function SatRCOperativo({ alCerrarSesion }) {
           </div>
         </div>
 
+        {/* Acciones de Mando con Botón Push en Vivo */}
         <div className="flex flex-wrap items-center gap-2">
+          {/* BOTÓN PUSH DE ACTUALIZACIÓN FORZADA EN VIVO */}
+          <button
+            onClick={() => ejecutarAnalisis(true)}
+            disabled={sincronizandoVivo}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-xl text-xs transition-all shadow-lg shadow-cyan-600/20 border border-cyan-400"
+            title="Recalcular atmósfera con datos vivos ahora"
+          >
+            <RotateCw className={`w-3.5 h-3.5 ${sincronizandoVivo ? 'animate-spin' : ''}`} />
+            <span>{sincronizandoVivo ? 'Analizando en vivo...' : 'Forzar Análisis en Vivo'}</span>
+          </button>
+
           <button
             onClick={() => setModalBitacoraAbierto(true)}
             className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold rounded-xl text-xs border border-amber-500/30 transition-all shadow"
           >
             <ScrollText className="w-3.5 h-3.5 text-amber-400" />
-            Bitácora de SARA ({bitacoraSARA.length})
+            Bitácora SARA ({bitacoraSARA.length})
           </button>
 
           <button
@@ -264,7 +270,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
 
           <button
             onClick={() => setModoManual(!modoManual)}
-            className="flex items-center gap-1.5 px-3 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl text-xs font-bold transition-all shadow"
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl text-xs font-bold transition-all shadow"
           >
             <Send className="w-3.5 h-3.5" />
             {modoManual ? 'Cerrar Aviso' : 'Emitir Aviso'}
@@ -357,106 +363,119 @@ export default function SatRCOperativo({ alCerrarSesion }) {
         </div>
       )}
 
-      {/* Dictamen Sinóptico de SARA */}
-      <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl shadow-lg flex items-start gap-3.5">
-        <div className="p-2.5 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-xl shrink-0 mt-0.5">
-          <Bot className="w-5 h-5 text-amber-400" />
-        </div>
-        <div className="flex-1 space-y-1">
-          <div className="flex flex-wrap justify-between items-center gap-2">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-black text-amber-400 uppercase tracking-wide">
-                Informe de Situación • Agente SARA
-              </span>
-              {dictamenSARA?.color && (
-                <span 
-                  className="text-[10px] font-black px-2 py-0.5 rounded text-white"
-                  style={{ backgroundColor: dictamenSARA.color }}
-                >
-                  {dictamenSARA.estado_situacion || "SITUACION_DIOCESANA"}
-                </span>
-              )}
+      {/* 2. REPORTE DIOCESANO DE SITUACIÓN • OFICIALÍA DE GUARDIA SARA */}
+      <div className="bg-slate-900 border-2 border-slate-800 rounded-2xl p-5 shadow-2xl space-y-4">
+        <div className="flex flex-wrap justify-between items-center gap-2 border-b border-slate-800 pb-3">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20">
+              <Bot className="w-5 h-5 text-amber-400" />
             </div>
-            <span className="text-[11px] font-mono text-slate-400">
-              Corrida: <strong className="text-white">{dictamenSARA?.hora_evaluacion || '--:--'}</strong> • Próxima: {dictamenSARA?.proxima_evaluacion || '--:--'}
-            </span>
+            <div>
+              <h3 className="font-black text-sm md:text-base text-white flex items-center gap-2">
+                Reporte de Situación Diocesana • Agente SARA
+                {dictamenSARA?.color && (
+                  <span 
+                    className="text-[10px] font-black px-2 py-0.5 rounded text-white shadow"
+                    style={{ backgroundColor: dictamenSARA.color }}
+                  >
+                    {dictamenSARA.estado_situacion || "SITUACION_DIOCESANA"}
+                  </span>
+                )}
+              </h3>
+              <p className="text-[11px] text-slate-400">
+                Oficial Meteoróloga de Guardia • {dictamenSARA?.modelo_ia || "Groq Llama-3.3-70B"}
+              </p>
+            </div>
           </div>
 
-          <p className="text-xs md:text-sm text-slate-200 leading-relaxed font-normal">
-            {dictamenSARA?.comentario_oficial || "Monitoreo diocesano activo. Evaluaciones físicas ejecutadas sobre las 405 comunidades."}
-          </p>
+          <div className="flex items-center gap-2 font-mono text-xs text-slate-400">
+            <Clock className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Última corrida viva: <strong className="text-white">{dictamenSARA?.hora_evaluacion || '--:--'}</strong></span>
+            <span>•</span>
+            <span>Próxima programada: <strong className="text-slate-300">{dictamenSARA?.proxima_evaluacion || '--:--'}</strong></span>
+          </div>
         </div>
+
+        {cargandoSARA && !dictamenSARA ? (
+          <div className="p-6 text-center text-slate-400 flex items-center justify-center gap-2 text-xs">
+            <div className="w-4 h-4 border-2 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
+            <span>SARA analizando datos de cuencas en tiempo real...</span>
+          </div>
+        ) : (
+          <div className="space-y-3 text-xs">
+            {/* Título Ejecutivo */}
+            <p className="text-sm font-black text-amber-400 uppercase tracking-wide">
+              {dictamenSARA?.titulo || "Evaluación Sinóptica Diocesana"}
+            </p>
+
+            {/* Diagnóstico Sinóptico */}
+            <div className="bg-slate-950/70 p-3.5 rounded-xl border border-slate-800/80 leading-relaxed text-slate-200">
+              {dictamenSARA?.comentario_oficial}
+            </div>
+
+            {/* Aviso Institucional y Deslinde Oficial en Español */}
+            <div className="p-3 bg-slate-950/90 rounded-xl border border-slate-800 text-[11px] text-slate-400 space-y-1">
+              <span className="font-bold text-slate-300 flex items-center gap-1">
+                <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
+                Aviso Institucional y Coordinación con Protección Civil:
+              </span>
+              <p className="leading-snug">
+                El presente informe es una síntesis técnica elaborada por SatRC V2.0 de Cáritas Pastoral Social (Arquidiócesis de Tulancingo) para auxilio humanitario. Este documento no sustituye los avisos, alertas ni órdenes de evacuación de la Coordinación Nacional de Protección Civil (CNPC), Protección Civil Estatal/Municipal ni de la CONAGUA, cuyas disposiciones son de carácter prioritario y de obligatorio acatamiento.
+              </p>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* 2. SEMÁFORO INTERACTIVO CON BOTONES FILTRANTES */}
+      {/* 3. SEMÁFORO INTERACTIVO: LOS 4 BOTONES FILTRAN LA BANDEJA */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div 
-          onClick={() => {
-            setFiltroSemaforo('NIVEL4');
-            setPaginaActual(1);
-          }}
+          onClick={() => { setFiltroSemaforo('NIVEL4'); setPaginaActual(1); }}
           className={`cursor-pointer p-3.5 rounded-xl border-2 transition-all shadow flex justify-between items-center ${
-            filtroSemaforo === 'NIVEL4'
-              ? 'bg-rose-950/90 border-rose-500 scale-[1.02] shadow-rose-900/30'
-              : 'bg-slate-900 border-rose-500/40 hover:border-rose-500'
+            filtroSemaforo === 'NIVEL4' ? 'bg-rose-950/90 border-rose-500 scale-[1.02] shadow-rose-900/30' : 'bg-slate-900 border-rose-500/40 hover:border-rose-500'
           }`}
         >
           <div>
             <span className="text-xs font-black text-rose-400 uppercase flex items-center gap-1">
               <AlertOctagon className="w-3.5 h-3.5" /> Emergencia (N4)
             </span>
-            <p className="text-[10px] text-slate-400 mt-0.5">Filtrar tabla</p>
+            <p className="text-[10px] text-slate-400 mt-0.5">Filtrar lista</p>
           </div>
           <span className="text-2xl font-black text-rose-400">{totalNivel4}</span>
         </div>
 
         <div 
-          onClick={() => {
-            setFiltroSemaforo('NIVEL3');
-            setPaginaActual(1);
-          }}
+          onClick={() => { setFiltroSemaforo('NIVEL3'); setPaginaActual(1); }}
           className={`cursor-pointer p-3.5 rounded-xl border-2 transition-all shadow flex justify-between items-center ${
-            filtroSemaforo === 'NIVEL3'
-              ? 'bg-orange-950/90 border-orange-500 scale-[1.02] shadow-orange-900/30'
-              : 'bg-slate-900 border-orange-500/40 hover:border-orange-500'
+            filtroSemaforo === 'NIVEL3' ? 'bg-orange-950/90 border-orange-500 scale-[1.02] shadow-orange-900/30' : 'bg-slate-900 border-orange-500/40 hover:border-orange-500'
           }`}
         >
           <div>
             <span className="text-xs font-black text-orange-400 uppercase flex items-center gap-1">
               <AlertTriangle className="w-3.5 h-3.5" /> Alerta Temprana (N3)
             </span>
-            <p className="text-[10px] text-slate-400 mt-0.5">Filtrar tabla</p>
+            <p className="text-[10px] text-slate-400 mt-0.5">Filtrar lista</p>
           </div>
           <span className="text-2xl font-black text-orange-400">{totalNivel3}</span>
         </div>
 
         <div 
-          onClick={() => {
-            setFiltroSemaforo('NIVEL2');
-            setPaginaActual(1);
-          }}
+          onClick={() => { setFiltroSemaforo('NIVEL2'); setPaginaActual(1); }}
           className={`cursor-pointer p-3.5 rounded-xl border-2 transition-all shadow flex justify-between items-center ${
-            filtroSemaforo === 'NIVEL2'
-              ? 'bg-amber-950/90 border-amber-500 scale-[1.02]'
-              : 'bg-slate-900 border-slate-800 hover:border-amber-500/60'
+            filtroSemaforo === 'NIVEL2' ? 'bg-amber-950/90 border-amber-500 scale-[1.02]' : 'bg-slate-900 border-slate-800 hover:border-amber-500/60'
           }`}
         >
           <div>
             <span className="text-xs font-bold text-amber-400 uppercase">Vigilancia (N2)</span>
-            <p className="text-[10px] text-slate-400 mt-0.5">Filtrar tabla</p>
+            <p className="text-[10px] text-slate-400 mt-0.5">Filtrar lista</p>
           </div>
           <span className="text-2xl font-bold text-amber-400">{totalNivel2}</span>
         </div>
 
         <div 
-          onClick={() => {
-            setFiltroSemaforo('NIVEL1');
-            setPaginaActual(1);
-          }}
+          onClick={() => { setFiltroSemaforo('NIVEL1'); setPaginaActual(1); }}
           className={`cursor-pointer p-3.5 rounded-xl border-2 transition-all shadow flex justify-between items-center ${
-            filtroSemaforo === 'NIVEL1'
-              ? 'bg-emerald-950/90 border-emerald-500 scale-[1.02]'
-              : 'bg-slate-900 border-slate-800 hover:border-emerald-500/60'
+            filtroSemaforo === 'NIVEL1' ? 'bg-emerald-950/90 border-emerald-500 scale-[1.02]' : 'bg-slate-900 border-slate-800 hover:border-emerald-500/60'
           }`}
         >
           <div>
@@ -467,7 +486,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
         </div>
       </div>
 
-      {/* 3. DÚO TÁCTICO: MAPA Y SATÉLITE */}
+      {/* 4. DÚO TÁCTICO OPERATIVO: MAPA Y SATÉLITE LADO A LADO */}
       <div className="space-y-6">
         <RiskMap 
           evaluaciones={evaluaciones}
@@ -481,7 +500,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
         <SatelliteViewer />
       </div>
 
-      {/* 4. BANDEJA DE COMUNIDADES CON COLUMNA DE EVOLUCIÓN / TENDENCIA Y PAGINACIÓN */}
+      {/* 5. BANDEJA DE COMUNIDADES CON COLAPSO Y PAGINACIÓN */}
       <div className="bg-slate-900 border-2 border-slate-800 rounded-2xl overflow-hidden shadow-xl">
         <button
           onClick={() => setBandejaAbierta(!bandejaAbierta)}
@@ -505,7 +524,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
             {cargandoEvaluacion ? (
               <div className="p-12 text-center text-slate-400 flex flex-col items-center gap-2">
                 <div className="w-6 h-6 border-2 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
-                <p className="text-xs">Sincronizando comunidades diocesanas...</p>
+                <p className="text-xs font-mono">Sincronizando comunidades diocesanas...</p>
               </div>
             ) : (
               <>
@@ -590,7 +609,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
                   </table>
                 </div>
 
-                {/* Controles de Paginación */}
+                {/* Paginación */}
                 <div className="p-3.5 bg-slate-950/80 border-t border-slate-800 flex justify-between items-center text-xs">
                   <span className="text-slate-400">
                     Mostrando <strong className="text-white">{(paginaActual - 1) * itemsPorPagina + 1}</strong> a <strong className="text-white">{Math.min(paginaActual * itemsPorPagina, comunidadesFiltradas.length)}</strong> de <strong className="text-white">{comunidadesFiltradas.length}</strong>
@@ -624,7 +643,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
         )}
       </div>
 
-      {/* 5. MODAL DE AUDITORÍA PROFUNDA */}
+      {/* 6. MODAL DE AUDITORÍA PROFUNDA */}
       {comunidadDetalle && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-fade-in">
           <div className="bg-slate-900 border-2 border-slate-700 max-w-3xl w-full rounded-2xl shadow-2xl overflow-hidden flex flex-col text-slate-200">
@@ -693,7 +712,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
         </div>
       )}
 
-      {/* 6. MODAL DE BITÁCORA PERMANENTE DE SARA */}
+      {/* 7. MODAL DE BITÁCORA DE SARA */}
       {modalBitacoraAbierto && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md animate-fade-in">
           <div className="bg-slate-900 border-2 border-slate-700 max-w-4xl w-full rounded-2xl shadow-2xl overflow-hidden flex flex-col text-slate-200 max-h-[85vh]">

@@ -3,7 +3,7 @@ import { put, list } from '@vercel/blob';
 
 /**
  * SatRC V2.0 - SARA: Sistema de Alerta y Respuesta Automatizada
- * Persistencia permanente en Vercel Blob, Groq Llama-3.3-70B e Inmutabilidad SHA-256.
+ * Cero congelamiento: Cache-Control estricto (no-store), lectura fresca de Blob y Groq Llama-3.3.
  */
 
 const NOMBRE_ARCHIVO_BLOB = 'bitacora_sara.json';
@@ -16,10 +16,16 @@ function generarHashSHA256(prevHash, timestamp, datos) {
 }
 
 export default async function handler(req, res) {
+  // REGLA FUNDAMENTAL: Prohibir cualquier congelamiento en la red Edge/CDN de Vercel
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+
   const ahora = Date.now();
   const TRES_HORAS_MS = 3 * 60 * 60 * 1000;
+  const esForzado = req.query.forzar === 'true' || req.method === 'GET';
 
-  // 1. Recuperar la Bitácora Histórica Permanente desde Vercel Blob
+  // 1. Recuperar la Bitácora Histórica desde Vercel Blob SIN CACHÉ (Lectura Viva)
   let historialBitacora = [];
   let ultimoDictamen = null;
   let hashUltimo = BLOQUE_GENESIS;
@@ -27,7 +33,8 @@ export default async function handler(req, res) {
   try {
     const { blobs } = await list({ prefix: NOMBRE_ARCHIVO_BLOB });
     if (blobs && blobs.length > 0) {
-      const respuestaBlob = await fetch(blobs[0].url);
+      // cache: 'no-store' asegura leer la versión fresca del disco en la nube
+      const respuestaBlob = await fetch(`${blobs[0].url}?t=${ahora}`, { cache: 'no-store' });
       if (respuestaBlob.ok) {
         const datosAlmacenados = await respuestaBlob.json();
         historialBitacora = datosAlmacenados.bitacora || [];
@@ -38,27 +45,36 @@ export default async function handler(req, res) {
       }
     }
   } catch (errorBlob) {
-    console.warn("Aviso: Iniciando almacén Blob por primera vez:", errorBlob.message);
+    console.warn("Aviso Blob:", errorBlob.message);
   }
 
-  // Si tenemos un dictamen guardado de hace menos de 3 horas, servirlo de inmediato (0ms de latencia)
+  // Si NO es forzado y el dictamen tiene menos de 3 horas reales, entregarlo
   const tiempoUltima = ultimoDictamen?.timestamp_ms || 0;
-  if (ultimoDictamen && (ahora - tiempoUltima < TRES_HORAS_MS) && req.query.forzar !== 'true') {
-    res.setHeader("Cache-Control", "s-maxage=10800, stale-while-revalidate=1800");
+  if (!esForzado && ultimoDictamen && (ahora - tiempoUltima < TRES_HORAS_MS)) {
     return res.json({
       exito: true,
-      origen: "VERCEL_BLOB_CACHE_3H",
+      origen: "MEMORIA_SERVIDOR_3H",
       dictamen: ultimoDictamen,
       bitacora: historialBitacora
     });
   }
 
-  // 2. Ejecutar la Evaluación con SARA (Groq Llama-3.3)
+  // 2. Preparar Evaluación en Tiempo Real con Groq Llama-3.3
   const contexto = req.body || {};
   const { alertaSMN, resumenSeveridad } = contexto;
   const apiKeyGroq = process.env.GROQ_API_KEY;
 
-  // Fallback seguro si no hay API Key de Groq
+  const horaLocalStr = new Date().toLocaleTimeString('es-MX', { 
+    hour: '2-digit', 
+    minute: '2-digit', 
+    hour12: true 
+  });
+  const proximaCorridaStr = new Date(ahora + TRES_HORAS_MS).toLocaleTimeString('es-MX', { 
+    hour: '2-digit', 
+    minute: '2-digit', 
+    hour12: true 
+  });
+
   const generarDictamenFallback = () => {
     const hayCriticas = (resumenSeveridad?.totalNivel4 || 0) > 0;
     const hayAlerta = (resumenSeveridad?.totalNivel3 || 0) > 0;
@@ -67,13 +83,13 @@ export default async function handler(req, res) {
       color: hayCriticas ? "#EF4444" : (hayAlerta ? "#F97316" : "#10B981"),
       titulo: hayCriticas ? "Emergencia por Temporal en Sierra" : (hayAlerta ? "Alerta Temprana por Sistema Frontal" : "Situación Normal y Estable"),
       comentario_oficial: hayCriticas 
-        ? `Aviso de Frente Frío en interacción con el Golfo. Vigilancia prioritaria en ${resumenSeveridad?.criticasNombres?.slice(0, 3).join(', ') || 'laderas de la Sierra de Puebla'}. Altiplano central en calma.`
-        : "Condiciones de estabilidad en la Arquidiócesis. Suelos con drenaje adecuado y cuencas en niveles base.",
-      hora_evaluacion: new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: true }),
-      proxima_evaluacion: new Date(ahora + TRES_HORAS_MS).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: true }),
+        ? `Monitoreo en vivo (${horaLocalStr}): Sistema frontal activo en interacción con humedad del Golfo. Vigilancia prioritaria en comunidades de ladera escarpada y cuencas serranas. Altiplano central en calma.`
+        : `Monitoreo en vivo (${horaLocalStr}): Atmósfera estable sobre la Arquidiócesis. Suelos con capacidad de drenaje y ríos en niveles base.`,
+      hora_evaluacion: horaLocalStr,
+      proxima_evaluacion: proximaCorridaStr,
       timestamp: new Date().toISOString(),
       timestamp_ms: ahora,
-      modelo_ia: "SARA Core Determinista"
+      modelo_ia: "SARA Core Determinista en Vivo"
     };
   };
 
@@ -83,19 +99,19 @@ export default async function handler(req, res) {
     dictamenFinal = generarDictamenFallback();
   } else {
     const systemPrompt = `Eres SARA (Sistema de Alerta y Respuesta Automatizada), la Oficial Meteoróloga de Guardia de Cáritas Tulancingo.
-Tu rol es redactar una síntesis sinóptica breve, profesional, sobria y pastoral.
+Tu rol es redactar una síntesis sinóptica breve, profesional, sobria y pastoral para este preciso momento (${horaLocalStr}).
 REGLAS:
 1. No cambias números ni niveles calculados.
 2. Reconoce que el Altiplano (Pachuca, Tizayuca, Apan) está en calma y que el temporal del Frente Frío afecta a la Sierra de Puebla e Hidalgo.
 3. Responde ÚNICAMENTE un JSON válido con estas claves:
 {"estado_situacion": "...", "color": "...", "titulo": "...", "comentario_oficial": "..."}`;
 
-    const userPrompt = `Situación:
-Aviso SMN: ${alertaSMN ? alertaSMN.titulo : "Sin aviso severo"}.
+    const userPrompt = `Hora actual de consulta: ${horaLocalStr}.
+Aviso oficial CONAGUA/SMN: ${alertaSMN ? alertaSMN.titulo : "Sin aviso extraordinario"}.
 Comunidades en Emergencia N4: ${resumenSeveridad?.totalNivel4 || 0}.
 Comunidades en Alerta Temprana N3: ${resumenSeveridad?.totalNivel3 || 0}.
-Comunidades Estables N1: ${resumenSeveridad?.totalNivel1 || 350}.
-Focos prioritarios de sierra: ${JSON.stringify(resumenSeveridad?.criticasNombres || [])}.`;
+Comunidades Estables N1: ${resumenSeveridad?.totalNivel1 || 300}.
+Localidades bajo mayor tensión: ${JSON.stringify(resumenSeveridad?.criticasNombres || [])}.`;
 
     try {
       const respuestaGroq = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -122,24 +138,24 @@ Focos prioritarios de sierra: ${JSON.stringify(resumenSeveridad?.criticasNombres
           ...contenido,
           timestamp: new Date().toISOString(),
           timestamp_ms: ahora,
-          hora_evaluacion: new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: true }),
-          proxima_evaluacion: new Date(ahora + TRES_HORAS_MS).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: true }),
+          hora_evaluacion: horaLocalStr,
+          proxima_evaluacion: proximaCorridaStr,
           modelo_ia: "Groq Llama-3.3-70B LPU"
         };
       } else {
         dictamenFinal = generarDictamenFallback();
       }
     } catch (e) {
-      console.error("Error en inferencia Groq:", e);
+      console.error("Fallo llamada Groq:", e);
       dictamenFinal = generarDictamenFallback();
     }
   }
 
-  // 3. Encadenar el nuevo bloque a la Bitácora con Hash SHA-256
+  // 3. Registrar en la Bitácora Inmutable SHA-256
   const nuevoHash = generarHashSHA256(hashUltimo, dictamenFinal.timestamp, {
     estado: dictamenFinal.estado_situacion,
     nivel4: resumenSeveridad?.totalNivel4,
-    nivel3: resumenSeveridad?.totalNivel3
+    hora: dictamenFinal.hora_evaluacion
   });
 
   const entradaNueva = {
@@ -156,7 +172,7 @@ Focos prioritarios de sierra: ${JSON.stringify(resumenSeveridad?.criticasNombres
 
   historialBitacora.push(entradaNueva);
 
-  // 4. Guardar en Vercel Blob de Forma Permanente (Inmutable)
+  // 4. Guardar en Vercel Blob de Forma Permanente
   try {
     const estructuraGuardar = {
       actualizado_iso: new Date().toISOString(),
@@ -167,16 +183,15 @@ Focos prioritarios de sierra: ${JSON.stringify(resumenSeveridad?.criticasNombres
 
     await put(NOMBRE_ARCHIVO_BLOB, JSON.stringify(estructuraGuardar, null, 2), {
       access: 'public',
-      addRandomSuffix: false // Conserva el nombre para persistencia
+      addRandomSuffix: false
     });
   } catch (errGuardar) {
-    console.error("Error al persistir en Vercel Blob:", errGuardar);
+    console.error("Error guardando Blob:", errGuardar);
   }
 
-  res.setHeader("Cache-Control", "s-maxage=10800, stale-while-revalidate=1800");
   return res.json({
     exito: true,
-    origen: "VERCEL_BLOB_NUEVO_BLOQUE",
+    origen: esForzado ? "FORZADO_EN_VIVO" : "CORRIDA_ACTUALIZADA",
     dictamen: dictamenFinal,
     bitacora: historialBitacora
   });
