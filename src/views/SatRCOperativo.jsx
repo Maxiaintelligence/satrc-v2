@@ -35,7 +35,7 @@ import {
   Sparkles,
   Share2,
   Check,
-  Calendar
+  ShieldCheck
 } from 'lucide-react';
 
 export default function SatRCOperativo({ alCerrarSesion }) {
@@ -63,7 +63,9 @@ export default function SatRCOperativo({ alCerrarSesion }) {
   const [generandoOnDemand, setGenerandoOnDemand] = useState(false);
   const [reporteVigente, setReporteVigente] = useState(null);
 
-  // Evaluación Local de Respaldo en Vivo
+  // Token de administración para operaciones privilegiadas
+  const ADMIN_TOKEN = "CaritasAdmin2026";
+
   const ejecutarEvaluacionRealEnVivo = async (alertaSMN = null) => {
     const nodoSierra = todasLocalidades.find(l => l.nombre.toLowerCase().includes('huauchinango')) || todasLocalidades[0];
     let serieConsenso = [];
@@ -88,7 +90,6 @@ export default function SatRCOperativo({ alCerrarSesion }) {
     setComunidadFoco(resEvaluadas[0] || null);
   };
 
-  // Cargar Estado desde el Servidor Vercel Blob
   const cargarEstadoServidor = async () => {
     setCargando(true);
     try {
@@ -118,7 +119,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
     cargarEstadoServidor();
   }, []);
 
-  // Generar Nuevo Reporte On-Demand (Llamada a Groq y guardado en Blob)
+  // Generar Reporte On-Demand con Cabecera x-admin-token
   const generarReporteOnDemand = async () => {
     setGenerandoOnDemand(true);
     setModalReporteOnDemandAbierto(true);
@@ -138,7 +139,10 @@ export default function SatRCOperativo({ alCerrarSesion }) {
     try {
       const res = await fetch('/api/reporte-ondemand', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-admin-token': ADMIN_TOKEN // Cabecera de autenticación requerida
+        },
         body: JSON.stringify({
           resumenSeveridad: { totalNivel4: n4, totalNivel3: n3, totalNivel1: n1 },
           focosCriticos: focos
@@ -147,22 +151,23 @@ export default function SatRCOperativo({ alCerrarSesion }) {
 
       if (res.ok) {
         const data = await res.json();
-        if (data.reporte_guardado) {
-          setReporteVigente(data.reporte_guardado);
+        if (data.reporte_guardado) setReporteVigente(data.reporte_guardado);
+        if (data.registro_bitacora) {
+          setBitacoraSARA(prev => [...prev, data.registro_bitacora]);
         }
-        if (data.bitacora_actualizada) {
-          setBitacoraSARA(data.bitacora_actualizada);
-        }
+      } else {
+        const err = await res.json();
+        alert(`Aviso de seguridad: ${err.error || 'No se pudo generar el reporte'}`);
       }
     } catch (e) {
-      console.error("Error al generar reporte On-Demand:", e);
+      console.error("Error generando reporte On-Demand:", e);
     }
     setGenerandoOnDemand(false);
   };
 
-  // Botón Compartir Directo en WhatsApp (Protocolo wa.me infalible)
+  // Botón Compartir Directo en WhatsApp
   const compartirPorWhatsApp = () => {
-    if (!reporteVigente) return;
+    if (!reporteVigente?.reporte) return;
     const r = reporteVigente.reporte;
     const textoMensaje = `🏛️ *REPORTE DIOCESANO DE SITUACIÓN • CÁRITAS TULANCINGO*\n` +
       `📅 *Emisión:* ${reporteVigente.fecha_dia_mexico} (${reporteVigente.hora_exacta_mexico} hrs)\n\n` +
@@ -175,9 +180,9 @@ export default function SatRCOperativo({ alCerrarSesion }) {
     window.open(urlWhatsApp, '_blank');
   };
 
-  // Botón Descargar Documento Oficial Formateado (.txt)
+  // Botón Descargar Documento Oficial (.txt)
   const descargarDocumentoOficial = () => {
-    if (!reporteVigente) return;
+    if (!reporteVigente?.reporte) return;
     const r = reporteVigente.reporte;
     const contenidoDoc = `================================================================================
 CÁRITAS PASTORAL SOCIAL • ARQUIDIÓCESIS DE TULANCINGO
@@ -210,7 +215,7 @@ ${r.seccion_VI_deslinde}
 
 --------------------------------------------------------------------------------
 Instrucción Diocesana: "Consulte al coordinador de Cáritas"
-Documento oficial para párrocos, brigadistas y autoridades de auxilio.
+Documento oficial emitido para párrocos, brigadistas y autoridades de auxilio.
 ================================================================================`;
 
     const blob = new Blob([contenidoDoc], { type: 'text/plain;charset=utf-8' });
@@ -281,7 +286,6 @@ Documento oficial para párrocos, brigadistas y autoridades de auxilio.
           </div>
         </div>
 
-        {/* Acciones de Mando con Botón ON-DEMAND */}
         <div className="flex flex-wrap items-center gap-2">
           {/* BOTÓN REPORTE DIOCESANO ON-DEMAND */}
           <button
@@ -310,7 +314,7 @@ Documento oficial para párrocos, brigadistas y autoridades de auxilio.
         </div>
       </div>
 
-      {/* 2. TARJETA PERMANENTE DEL ÚLTIMO REPORTE DIOCESANO GUARDADO EN BLOB */}
+      {/* 2. TARJETA DEL ÚLTIMO REPORTE DIOCESANO GUARDADO EN BLOB */}
       {reporteVigente && (
         <div className="bg-slate-900 border-2 border-amber-500/40 p-4 rounded-2xl shadow-xl flex flex-wrap justify-between items-center gap-3">
           <div className="flex items-center gap-3">
@@ -332,9 +336,7 @@ Documento oficial para párrocos, brigadistas y autoridades de auxilio.
 
           <div className="flex items-center gap-2">
             <button
-              onClick={() => {
-                setModalReporteOnDemandAbierto(true);
-              }}
+              onClick={() => setModalReporteOnDemandAbierto(true)}
               className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl transition-all shadow"
             >
               Consultar / Exportar
@@ -384,7 +386,7 @@ Documento oficial para párrocos, brigadistas y autoridades de auxilio.
         <SatelliteViewer />
       </div>
 
-      {/* 5. BANDEJA DE COMUNIDADES */}
+      {/* 5. BANDEJA DE COMUNIDADES PAGINADA */}
       <div className="bg-slate-900 border-2 border-slate-800 rounded-2xl overflow-hidden shadow-xl">
         <button onClick={() => setBandejaAbierta(!bandejaAbierta)} className="w-full p-4 bg-slate-800/90 hover:bg-slate-800 flex justify-between items-center transition-colors text-left">
           <span className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-1.5">
@@ -449,45 +451,36 @@ Documento oficial para párrocos, brigadistas y autoridades de auxilio.
         )}
       </div>
 
-      {/* ========================================================== */}
-      {/* 6. MODAL DE REPORTE DIOCESANO ON-DEMAND FORMAL             */}
-      {/* ========================================================== */}
+      {/* 6. MODAL DE REPORTE DIOCESANO ON-DEMAND FORMAL */}
       {modalReporteOnDemandAbierto && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md animate-fade-in print:p-0 print:bg-white">
           <div className="bg-slate-900 border-2 border-slate-700 max-w-4xl w-full rounded-2xl shadow-2xl overflow-hidden flex flex-col text-slate-200 max-h-[92vh] print:max-h-none print:border-0 print:shadow-none print:text-black print:bg-white">
             
-            {/* Cabecera del Reporte On-Demand */}
             <div className="p-4 bg-slate-800 border-b border-slate-700 flex flex-wrap justify-between items-center gap-2 print:hidden">
               <div className="flex items-center gap-2">
                 <FileText className="w-5 h-5 text-amber-400" />
                 <h3 className="font-bold text-sm text-white">Reporte Diocesano Oficial • On-Demand (En Vivo)</h3>
               </div>
 
-              {/* Botones de Exportación Operativos */}
               <div className="flex items-center gap-2">
-                {/* 1. WHATSAPP DIRECTO */}
                 <button
                   onClick={compartirPorWhatsApp}
                   disabled={generandoOnDemand || !reporteVigente}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-all shadow"
-                  title="Abrir WhatsApp para enviar"
                 >
                   <Share2 className="w-3.5 h-3.5" />
                   <span>Enviar WhatsApp</span>
                 </button>
 
-                {/* 2. DESCARGAR DOCUMENTO (.TXT) */}
                 <button
                   onClick={descargarDocumentoOficial}
                   disabled={generandoOnDemand || !reporteVigente}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-xs font-bold transition-all border border-slate-600"
-                  title="Descargar archivo oficial de texto"
                 >
                   <Download className="w-3.5 h-3.5 text-amber-400" />
                   <span>Descargar Doc</span>
                 </button>
 
-                {/* 3. IMPRIMIR / PDF */}
                 <button
                   onClick={() => window.print()}
                   disabled={generandoOnDemand || !reporteVigente}
@@ -503,7 +496,6 @@ Documento oficial para párrocos, brigadistas y autoridades de auxilio.
               </div>
             </div>
 
-            {/* Contenido Formal del Documento */}
             <div className="p-6 overflow-y-auto space-y-5 text-xs leading-relaxed font-sans print:p-6 print:text-xs">
               {generandoOnDemand ? (
                 <div className="p-16 text-center text-slate-400 flex flex-col items-center justify-center gap-3">
@@ -513,7 +505,6 @@ Documento oficial para párrocos, brigadistas y autoridades de auxilio.
                 </div>
               ) : reporteVigente ? (
                 <>
-                  {/* Membrete Oficial */}
                   <div className="border-b-2 border-amber-500 pb-3 flex justify-between items-start">
                     <div>
                       <h1 className="text-base md:text-lg font-black text-white uppercase tracking-tight print:text-black">
@@ -529,7 +520,6 @@ Documento oficial para párrocos, brigadistas y autoridades de auxilio.
                     </div>
                   </div>
 
-                  {/* I. Dinámica Atmosférica Regional */}
                   <div className="space-y-1">
                     <h4 className="font-black text-amber-400 uppercase tracking-wider text-[11px] print:text-amber-900">
                       I. Dinámica Atmosférica Regional
@@ -539,7 +529,6 @@ Documento oficial para párrocos, brigadistas y autoridades de auxilio.
                     </div>
                   </div>
 
-                  {/* II. Focos de Tensión en la Sierra */}
                   <div className="space-y-1">
                     <h4 className="font-black text-rose-400 uppercase tracking-wider text-[11px] print:text-rose-900">
                       II. Focos Prioritarios de Tensión en la Sierra (Nivel 4 y Nivel 3)
@@ -549,7 +538,6 @@ Documento oficial para párrocos, brigadistas y autoridades de auxilio.
                     </div>
                   </div>
 
-                  {/* III. Condiciones en Altiplano */}
                   <div className="space-y-1">
                     <h4 className="font-black text-emerald-400 uppercase tracking-wider text-[11px] print:text-emerald-900">
                       III. Condiciones en el Altiplano y Valles (Zonas en Estabilidad)
@@ -559,7 +547,6 @@ Documento oficial para párrocos, brigadistas y autoridades de auxilio.
                     </div>
                   </div>
 
-                  {/* IV. Pronóstico de Evolución */}
                   <div className="space-y-1">
                     <h4 className="font-black text-cyan-400 uppercase tracking-wider text-[11px] print:text-cyan-900">
                       IV. Pronóstico de Evolución (Próximas 12 a 24 Horas)
@@ -569,7 +556,6 @@ Documento oficial para párrocos, brigadistas y autoridades de auxilio.
                     </div>
                   </div>
 
-                  {/* V. Recomendaciones Tácticas Comunitarias */}
                   <div className="space-y-1">
                     <h4 className="font-black text-amber-300 uppercase tracking-wider text-[11px] print:text-amber-900">
                       V. Recomendaciones Tácticas según Condiciones Activas
@@ -579,13 +565,11 @@ Documento oficial para párrocos, brigadistas y autoridades de auxilio.
                     </div>
                   </div>
 
-                  {/* VI. Deslinde Oficial */}
                   <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 text-[10px] text-slate-400 space-y-1 print:bg-gray-50 print:border-gray-200 print:text-gray-600">
                     <p className="font-bold text-slate-300 print:text-black">VI. Aviso Institucional y Coordinación con Protección Civil:</p>
                     <p>{reporteVigente.reporte?.seccion_VI_deslinde}</p>
                   </div>
 
-                  {/* Pie de Firma */}
                   <div className="pt-3 border-t border-slate-800 flex justify-between items-end text-[10px] text-slate-500 print:border-gray-300 print:text-gray-600">
                     <p className="font-semibold text-amber-400 print:text-amber-900">Instrucción diocesana: "Consulte al coordinador de Cáritas"</p>
                     <div className="text-center font-mono">
@@ -601,48 +585,7 @@ Documento oficial para párrocos, brigadistas y autoridades de auxilio.
         </div>
       )}
 
-      {/* 7. MODAL DE BITÁCORA */}
-      {modalBitacoraAbierto && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md animate-fade-in">
-          <div className="bg-slate-900 border-2 border-slate-700 max-w-4xl w-full rounded-2xl shadow-2xl overflow-hidden flex flex-col text-slate-200 max-h-[85vh]">
-            <div className="p-4 bg-slate-800 border-b border-slate-700 flex justify-between items-center">
-              <div className="flex items-center gap-2.5">
-                <ScrollText className="w-5 h-5 text-amber-400" />
-                <div>
-                  <h3 className="font-black text-sm md:text-base text-white">Bitácora Auditable de Operaciones • Agente SARA</h3>
-                  <p className="text-[11px] text-slate-400">Almacén en Vercel Blob • Hash SHA-256 encadenado</p>
-                </div>
-              </div>
-              <button onClick={() => setModalBitacoraAbierto(false)} className="p-1.5 bg-slate-700 hover:bg-slate-600 rounded-xl text-slate-300 hover:text-white"><X className="w-5 h-5" /></button>
-            </div>
-
-            <div className="p-4 overflow-y-auto space-y-3 font-mono text-xs">
-              {bitacoraSARA.map((entry) => (
-                <div key={entry.id} className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-1.5">
-                  <div className="flex justify-between items-center text-[11px]">
-                    <span className="text-amber-400 font-bold">{entry.fecha_dia_mexico ? `${entry.fecha_dia_mexico} • ${entry.hora_exacta_mexico}` : entry.timestamp_local} ({entry.id})</span>
-                    <span className="text-slate-400 text-[10px]">Hash: <strong className="text-emerald-400">{entry.hash}</strong></span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[9px] bg-slate-800 text-cyan-300 px-1.5 py-0.5 rounded font-bold">
-                      {entry.origen_evento || "PROGRAMADO_CRON_21"}
-                    </span>
-                    <p className="text-white font-bold text-xs">{entry.titulo}</p>
-                  </div>
-                  <p className="text-slate-300 text-[11px] font-sans leading-relaxed">{entry.resumen}</p>
-                </div>
-              ))}
-            </div>
-
-            <div className="p-3 bg-slate-950 border-t border-slate-800 flex justify-between items-center text-xs text-slate-500 px-4">
-              <span>Preservación permanente en Vercel Blob • Inmune a redeploys.</span>
-              <button onClick={() => setModalBitacoraAbierto(false)} className="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-bold">Cerrar</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 8. MODAL AUDITORÍA */}
+      {/* 7. MODAL AUDITORÍA */}
       {comunidadDetalle && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-fade-in">
           <div className="bg-slate-900 border-2 border-slate-700 max-w-3xl w-full rounded-2xl shadow-2xl overflow-hidden flex flex-col text-slate-200">
@@ -679,6 +622,47 @@ Documento oficial para párrocos, brigadistas y autoridades de auxilio.
             <div className="p-3.5 bg-slate-800/80 border-t border-slate-700 flex justify-between items-center text-xs">
               <span className="text-slate-400">Población directa: <strong className="text-white">{comunidadDetalle?.impactoSistemico?.poblacionDirecta?.toLocaleString() ?? 0}</strong> habitantes</span>
               <button onClick={() => setComunidadDetalle(null)} className="px-4 py-1.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-xs font-bold">Cerrar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 8. MODAL BITÁCORA */}
+      {modalBitacoraAbierto && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md animate-fade-in">
+          <div className="bg-slate-900 border-2 border-slate-700 max-w-4xl w-full rounded-2xl shadow-2xl overflow-hidden flex flex-col text-slate-200 max-h-[85vh]">
+            <div className="p-4 bg-slate-800 border-b border-slate-700 flex justify-between items-center">
+              <div className="flex items-center gap-2.5">
+                <ScrollText className="w-5 h-5 text-amber-400" />
+                <div>
+                  <h3 className="font-black text-sm md:text-base text-white">Bitácora Auditable de Operaciones • Agente SARA</h3>
+                  <p className="text-[11px] text-slate-400">Almacén en Vercel Blob • Hash SHA-256 encadenado</p>
+                </div>
+              </div>
+              <button onClick={() => setModalBitacoraAbierto(false)} className="p-1.5 bg-slate-700 hover:bg-slate-600 rounded-xl text-slate-300 hover:text-white"><X className="w-5 h-5" /></button>
+            </div>
+
+            <div className="p-4 overflow-y-auto space-y-3 font-mono text-xs">
+              {bitacoraSARA.map((entry) => (
+                <div key={entry.id} className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-1.5">
+                  <div className="flex justify-between items-center text-[11px]">
+                    <span className="text-amber-400 font-bold">{entry.fecha_dia_mexico ? `${entry.fecha_dia_mexico} • ${entry.hora_exacta_mexico}` : entry.timestamp_local} ({entry.id})</span>
+                    <span className="text-slate-400 text-[10px]">Hash: <strong className="text-emerald-400">{entry.hash}</strong></span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[9px] bg-slate-800 text-cyan-300 px-1.5 py-0.5 rounded font-bold">
+                      {entry.origen_evento || "PROGRAMADO_CRON_21"}
+                    </span>
+                    <p className="text-white font-bold text-xs">{entry.titulo}</p>
+                  </div>
+                  <p className="text-slate-300 text-[11px] font-sans leading-relaxed">{entry.resumen}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="p-3 bg-slate-950 border-t border-slate-800 flex justify-between items-center text-xs text-slate-500 px-4">
+              <span>Preservación permanente en Vercel Blob.</span>
+              <button onClick={() => setModalBitacoraAbierto(false)} className="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-bold">Cerrar</button>
             </div>
           </div>
         </div>
