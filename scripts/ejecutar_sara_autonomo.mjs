@@ -41,23 +41,37 @@ async function ejecutarSARA() {
   const horaMexicoStr = obtenerHoraMexico(ahora);
   const proximaCorridaStr = obtenerHoraMexico(new Date(ahora.getTime() + 3 * 3600000));
 
-  // 1. Detección Failsafe de Aviso Federal SMN / CONAGUA
-  let alertaSMN = {
-    titulo: "Frente Frío Núm. 1 y circulación ciclónica activa",
-    rango_lluvia_min_mm: 75,
-    rango_lluvia_max_mm: 150,
-    estados_afectados: ["PUE", "HGO", "VER"]
-  };
-
+  // 1. Detección DINÁMICA de Aviso Federal (Sin ningún texto quemado)
+  let alertaSMN = null;
   try {
-    const resSMN = await fetch("https://smn.conagua.gob.mx/tools/GUI/webservices/index.php?method=2").catch(() => null);
+    const resSMN = await fetch("https://smn.conagua.gob.mx/tools/GUI/webservices/index.php?method=1").catch(() => null);
     if (resSMN && resSMN.ok) {
-      console.log("🏛️ Sincronización oficial viva con CONAGUA/SMN confirmada.");
-    } else {
-      console.log("🏛️ Aplicando Aviso de Contingencia Frontal CONAGUA/SMN (Failsafe Art. 5).");
+      const texto = (await resSMN.text()).toLowerCase();
+      const afectaRegion = texto.includes("hidalgo") || texto.includes("puebla") || texto.includes("veracruz");
+      const esIntensa = texto.includes("intensas") || texto.includes("torrenciales");
+
+      if (afectaRegion && esIntensa) {
+        alertaSMN = {
+          titulo: "Aviso de Lluvias Intensas CONAGUA/SMN",
+          rango_lluvia_min_mm: 75,
+          rango_lluvia_max_mm: 150,
+          estados_afectados: ["PUE", "HGO", "VER"]
+        };
+        console.log("🏛️ Aviso Severo del SMN activo para la región (75 a 150 mm).");
+      } else if (afectaRegion) {
+        alertaSMN = {
+          titulo: "Aviso de Lluvias Fuertes CONAGUA/SMN",
+          rango_lluvia_min_mm: 25,
+          rango_lluvia_max_mm: 50,
+          estados_afectados: ["PUE", "HGO"]
+        };
+        console.log("🏛️ Aviso Preventivo del SMN activo (25 a 50 mm).");
+      } else {
+        console.log("🏛️ Sin avisos extraordinarios del SMN para Hidalgo/Puebla en este ciclo.");
+      }
     }
   } catch (e) {
-    console.log("🏛️ Modo Degradado SMN activo.");
+    console.log("🏛️ Sin conexión con SMN; evaluando únicamente con modelos meteorológicos vivos.");
   }
 
   // 2. Consulta Meteorológica de Cuenca
@@ -86,14 +100,14 @@ async function ejecutarSARA() {
       }
       console.log(`✅ Serie meteorológica procesada: ${serieHoraria.length} horas.`);
       const lluviaTotalEncontrada = serieHoraria.reduce((a, b) => a + b.lluvia_mm, 0);
-      console.log(`🌧️ Lluvia total acumulada en la serie histórica/pronóstico: ${lluviaTotalEncontrada.toFixed(1)} mm.`);
+      console.log(`🌧️ Lluvia acumulada encontrada en la serie: ${lluviaTotalEncontrada.toFixed(1)} mm.`);
     }
   } catch (e) {
     console.error("❌ Fallo en Open-Meteo:", e);
   }
 
   if (!serieHoraria.length) {
-    serieHoraria = Array(240).fill({ lluvia_mm: 1.0, temperatura_c: 16, viento_kmh: 15, rafagas_kmh: 25, visibilidad_km: 8 });
+    serieHoraria = Array(240).fill({ lluvia_mm: 0.5, temperatura_c: 16, viento_kmh: 15, rafagas_kmh: 25, visibilidad_km: 8 });
   }
 
   // 3. API de 7 Días Previos (d = 1 a 7)
@@ -116,7 +130,7 @@ async function ejecutarSARA() {
   const rafagaMaxHoy = Math.max(...eventoActual.map(h => h.rafagas_kmh), 15);
   const visMinHoy = Math.min(...eventoActual.map(h => h.visibilidad_km), 10);
 
-  // 4. Evaluación de las 405 Localidades con Umbral Ladera >= 45°
+  // 4. Evaluación de las 405 Localidades con Umbral de Ladera en >= 45°
   const evaluaciones = todasLocalidades.map(loc => {
     const esAltiplano = ['APN', 'TIZ', 'PMS', 'ACT'].includes(loc.zona_id);
     const esSierra = ['HUA', 'SPP', 'ZAC', 'CHG', 'ZAH', 'ATG', 'TUL'].includes(loc.zona_id);
@@ -129,6 +143,7 @@ async function ejecutarSARA() {
     const altitud = loc.topografia.altitud_msnm || 0;
     const esTerraceria = loc.vulnerabilidad.acceso_vial === 'CAMINO_TERRACERIA' || loc.vulnerabilidad.acceso_vial === 'BRECHA';
 
+    // Solo se adopta piso de temporal si el SMN tiene aviso activo real para hoy
     const lluviaEfectiva24h = (esSierra && alertaSMN) ? Math.max(lluviaEventoHoy, alertaSMN.rango_lluvia_min_mm) : lluviaEventoHoy;
     const saturacionSuelo = parseFloat((api7DiasPrevios + lluviaEfectiva24h).toFixed(1));
 
@@ -146,7 +161,7 @@ async function ejecutarSARA() {
     } else {
       // EVALUACIÓN DE SIERRA Y LADERAS
 
-      // --- UMBRAL CALIBRADO EN >= 45° PARA EMERGENCIA (N4) ---
+      // Umbral geomecánico de Emergencia calibrado en >= 45°
       if (esSierra && esLadera && saturacionSuelo >= 65.0) {
         if (pendiente >= 45.0) {
           nivel = 4;
@@ -154,7 +169,6 @@ async function ejecutarSARA() {
           tituloDiagnostico = "Peligro Crítico de Deslave en Ladera Escarpada";
           causa = `Suelo saturado (${saturacionSuelo} mm) sobre talud crítico de ${pendiente}°. Falla inminente de talud habitado.`;
         } else {
-          // Laderas habitables de 25° a 44° quedan en Nivel 3 Alerta Temprana
           nivel = Math.max(nivel, 3);
           vectorDominante = "DESLAVE_MODERADO";
           tituloDiagnostico = "Saturación Crítica de Terreno";
@@ -178,9 +192,9 @@ async function ejecutarSARA() {
         causa = `Vía única de terracería/brecha vulnerable a corte total por lodo.`;
       }
 
-      // --- VIGILANCIA PREVENTIVA EN VALLES DE TRANSICIÓN (N2 AMARILLO) ---
+      // Vigilancia preventiva en valles de transición (Nivel 2 Amarillo)
       if (nivel === 1 && (lluviaEfectiva24h >= 8.0 || saturacionSuelo >= 30.0 || visMinHoy <= 2.0)) {
-        nivel = 2; // AMARILLO VIGILANCIA
+        nivel = 2;
         vectorDominante = "VIGILANCIA_NORMAL";
         tituloDiagnostico = "Vigilancia Preventiva por Lluvia Activa y Niebla";
         causa = `Precipitación continua moderada (${lluviaEfectiva24h} mm) en valles y lomas de transición.`;
@@ -231,7 +245,7 @@ async function ejecutarSARA() {
   const n1 = evaluaciones.filter(e => e.nivel_alerta === 1).length;
   const criticas = evaluaciones.filter(e => e.nivel_alerta >= 3).slice(0, 6).map(c => `${c.nombre} (${c.municipio})`);
 
-  console.log(`📊 [SARA CLASIFICACIÓN CON UMBRAL >= 45°] N4: ${n4} | N3: ${n3} | N2: ${n2} | N1: ${n1}`);
+  console.log(`📊 [SARA CLASIFICACIÓN REAL VIVA] N4: ${n4} | N3: ${n3} | N2: ${n2} | N1: ${n1}`);
 
   // 5. Inferencia con Groq Llama-3.3-70B
   let dictamenSARA = null;
@@ -250,11 +264,12 @@ async function ejecutarSARA() {
             {
               role: "system",
               content: `Eres SARA, Oficial Meteoróloga de Guardia de Cáritas Tulancingo. Hora oficial de México: ${horaMexicoStr}.
-Genera el informe diocesano multimodal en JSON con claves: estado_situacion, color, titulo, comentario_oficial.`
+Genera el informe diocesano multimodal en JSON con claves: estado_situacion, color, titulo, comentario_oficial.
+REGLA: Si no hay emergencias activas, declara situación normal con serenidad profesional.`
             },
             {
               role: "user",
-              content: `Hora México: ${horaMexicoStr}. Aviso SMN: ${alertaSMN ? alertaSMN.titulo : 'Normal'}.
+              content: `Hora México: ${horaMexicoStr}. Aviso SMN: ${alertaSMN ? alertaSMN.titulo : 'Sin aviso severo vigente'}.
 Nivel 4: ${n4}, Nivel 3: ${n3}, Nivel 2: ${n2}, Nivel 1: ${n1}.
 Comunidades críticas bajo tensión: ${JSON.stringify(criticas)}.`
             }
@@ -275,8 +290,8 @@ Comunidades críticas bajo tensión: ${JSON.stringify(criticas)}.`
     dictamenSARA = {
       estado_situacion: n4 > 0 ? "SITUACION_CRITICA" : (n3 > 0 ? "SITUACION_GRAVE" : (n2 > 0 ? "SITUACION_ALERTA_PREPARACION" : "SITUACION_NORMAL")),
       color: n4 > 0 ? "#EF4444" : (n3 > 0 ? "#F97316" : (n2 > 0 ? "#F59E0B" : "#10B981")),
-      titulo: n4 > 0 ? "Emergencia por Deslaves en Taludes >= 45°" : (n3 > 0 ? "Alerta Temprana en Laderas Serranas" : "Vigilancia Preventiva Diocesana"),
-      comentario_oficial: `Corrida del minuto 21 (${horaMexicoStr}): Frente Frío Núm. 1 activo. Emergencias acotadas a desfiladeros críticos de la Sierra de Puebla. Laderas moderadas en alerta y Altiplano en completa calma.`
+      titulo: n4 > 0 ? "Emergencia por Deslaves en Taludes >= 45°" : (n3 > 0 ? "Alerta Temprana en Laderas Serranas" : "Situación Diocesana de Calma"),
+      comentario_oficial: `Corrida del minuto 21 (${horaMexicoStr}): Monitoreo dinámico activo. Evaluaciones físicas actualizadas sobre las 405 comunidades.`
     };
   }
 
@@ -313,7 +328,7 @@ Comunidades críticas bajo tensión: ${JSON.stringify(criticas)}.`
     hash_completo: nuevoHash
   });
 
-  // 7. Publicación en Vercel Blob
+  // 7. Publicación en Vercel Blob CON allowOverwrite: true
   const paqueteMaestro = {
     actualizado_iso: ahora.toISOString(),
     hora_local_mexico: horaMexicoStr,
@@ -337,7 +352,7 @@ Comunidades críticas bajo tensión: ${JSON.stringify(criticas)}.`
       token: process.env.BLOB_READ_WRITE_TOKEN
     });
 
-    console.log(`✅ [SARA RUNNER] Guardado exitoso en Vercel Blob a las ${horaMexicoStr}.`);
+    console.log(`✅ [SARA RUNNER] Publicación exitosa en Vercel Blob a las ${horaMexicoStr}.`);
   } catch (e) {
     console.error("❌ Error al publicar en Vercel Blob:", e);
     process.exit(1);

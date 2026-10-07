@@ -5,8 +5,7 @@ import {
   ExternalLink, 
   ChevronDown, 
   ChevronUp,
-  CloudLightning,
-  Wind
+  CheckCircle2
 } from 'lucide-react';
 
 export default function OfficialAlertBanner() {
@@ -24,44 +23,58 @@ export default function OfficialAlertBanner() {
         setCargando(false);
       })
       .catch(err => {
-        console.error("Fallo al cargar SMN:", err);
+        console.error("Fallo al consultar SMN:", err);
         setCargando(false);
       });
   }, []);
 
   if (cargando || !datosSMN) return null;
 
+  // Si no hay alerta activa (nivel 1), muestra cinta verde sobria de tranquilidad
+  const esAlertaActiva = datosSMN.activo && datosSMN.nivel >= 2;
+
   return (
-    <div className="bg-orange-950/80 border-b-2 border-orange-500 text-orange-100 shadow-lg">
-      <div className="max-w-7xl mx-auto px-4 py-2.5">
+    <div className={`border-b transition-colors ${
+      esAlertaActiva 
+        ? (datosSMN.nivel >= 3 ? 'bg-orange-950/80 border-orange-500 text-orange-100 shadow-md' : 'bg-amber-950/80 border-amber-500 text-amber-100')
+        : 'bg-slate-900 border-slate-800 text-slate-300'
+    }`}>
+      <div className="max-w-7xl mx-auto px-4 py-2">
         
         <div className="flex flex-wrap justify-between items-center gap-2">
           
           <div className="flex items-center gap-2.5">
-            <div className="p-1.5 rounded-lg bg-orange-500/20 border border-orange-400 text-orange-300 animate-pulse">
-              <AlertTriangle className="w-4 h-4" />
+            <div className={`p-1 rounded-lg border flex items-center justify-center ${
+              esAlertaActiva 
+                ? 'bg-orange-500/20 border-orange-400 text-orange-300 animate-pulse' 
+                : 'bg-emerald-500/20 border-emerald-400 text-emerald-300'
+            }`}>
+              {esAlertaActiva ? <AlertTriangle className="w-4 h-4" /> : <Building2 className="w-4 h-4" />}
             </div>
 
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs font-black tracking-wide text-white uppercase flex items-center gap-1.5">
-                  CONAGUA • SMN
-                </span>
-                <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-orange-500 text-slate-950 border border-orange-400">
-                  Nivel {datosSMN.nivel} • {datosSMN.severidad}
-                </span>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-black tracking-wide text-white uppercase flex items-center gap-1.5">
+                CONAGUA • SMN
+              </span>
 
-                <span className="text-[10px] text-amber-300 font-bold bg-amber-900/60 px-2 py-0.5 rounded border border-amber-500/40">
-                  Aviso Vigente: Lluvias Intensas ({datosSMN.rango_lluvia_min_mm} a {datosSMN.rango_lluvia_max_mm} mm) en Puebla e Hidalgo
-                </span>
-              </div>
+              <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${
+                esAlertaActiva 
+                  ? 'bg-orange-500 text-slate-950 border-orange-400' 
+                  : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+              }`}>
+                {esAlertaActiva ? `Nivel ${datosSMN.nivel} • ${datosSMN.severidad}` : 'Nivel 1 • Condiciones Normales'}
+              </span>
+
+              <span className="text-[11px] text-slate-200 font-medium">
+                {datosSMN.titulo}
+              </span>
             </div>
           </div>
 
           <div className="flex items-center gap-3 text-xs">
             <button
               onClick={() => setDesplegado(!desplegado)}
-              className="flex items-center gap-1 text-[11px] font-bold text-slate-200 hover:text-white transition-colors"
+              className="flex items-center gap-1 text-[11px] font-bold text-slate-300 hover:text-white transition-colors"
             >
               <span>{desplegado ? 'Ocultar Detalle' : 'Ver Aviso Oficial'}</span>
               {desplegado ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
@@ -79,23 +92,20 @@ export default function OfficialAlertBanner() {
 
         </div>
 
-        {/* Resumen Oficial sin caracteres corruptos */}
+        {/* Resumen Oficial Dinámico */}
         {desplegado && (
-          <div className="mt-2.5 pt-2.5 border-t border-orange-800/60 text-xs space-y-2 animate-fade-in">
-            <p className="text-white font-semibold text-xs">
-              {datosSMN.titulo}
-            </p>
-            <p className="text-orange-200 leading-relaxed font-normal">
+          <div className="mt-2.5 pt-2.5 border-t border-slate-800 text-xs space-y-2 animate-fade-in">
+            <p className="text-slate-200 leading-relaxed font-normal">
               {datosSMN.descripcion}
             </p>
 
-            <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px] text-orange-300">
-              <span className="font-semibold text-white">Estados en vigilancia federal:</span>
-              <span className="bg-orange-900/40 px-2 py-0.5 rounded border border-orange-700/60 text-white font-mono">
-                PUEBLA • HIDALGO • VERACRUZ • SAN LUIS POTOSÍ • TAMAULIPAS
+            <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px] text-slate-400">
+              <span className="font-semibold text-slate-300">Monitoreo federal oficial:</span>
+              <span className="bg-slate-950 px-2 py-0.5 rounded border border-slate-800 text-slate-200 font-mono">
+                {datosSMN.estados_afectados?.length > 0 ? datosSMN.estados_afectados.join(' • ') : 'Monitoreo Nacional Rutinario'}
               </span>
-              <span className="ml-auto font-mono text-[10px] text-orange-400">
-                Sincronización Oficial: {datosSMN.fecha_sincronizacion} hrs
+              <span className="ml-auto font-mono text-[10px] text-slate-500">
+                Sincronización en vivo: {datosSMN.fecha_sincronizacion} hrs
               </span>
             </div>
           </div>
