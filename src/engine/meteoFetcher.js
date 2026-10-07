@@ -1,6 +1,6 @@
 /**
- * SatRC V2.0 - Core Engine: Conector Multi-Modelo con Memoria Hídrica (7 días previos)
- * Consulta lluvia acumulada pasada (past_days=7) + pronóstico 72h (forecast_days=3).
+ * SatRC V2.0 - Core Engine: Conector Multi-Modelo Oficial
+ * Tríada Activa para México: GFS (EE.UU.) + ICON (Alemania) + GEM (Canadá).
  */
 
 const OPEN_METEO_BASE = "https://api.open-meteo.com/v1/forecast";
@@ -12,12 +12,13 @@ export async function consultarModelosDeterministas(lat, lon) {
     "relative_humidity_2m",
     "wind_speed_10m",
     "wind_gusts_10m",
+    "visibility",
     "weather_code"
   ].join(",");
 
-  const modelos = ["ecmwf_ifs025", "gfs_seamless", "icon_seamless"].join(",");
+  // Tríada verificada y sin deprecaciones: GFS (NOAA), ICON (DWD) y GEM (Canadá)
+  const modelos = ["gfs_seamless", "icon_seamless", "gem_seamless"].join(",");
 
-  // past_days=7 nos da la memoria del suelo real de la última semana
   const url = `${OPEN_METEO_BASE}?latitude=${lat}&longitude=${lon}` +
               `&hourly=${variables}` +
               `&models=${modelos}` +

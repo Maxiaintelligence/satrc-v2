@@ -346,7 +346,7 @@ export default function MonitorPublico() {
                 <ShieldCheck className="w-5 h-5 text-emerald-400 shrink-0" />
                 <div>
                   <p className="text-[10px] text-slate-400 uppercase font-bold">Consenso Oficial</p>
-                  <p className="text-[11px] font-black text-emerald-300">ECMWF • GFS • ICON</p>
+                  <p className="text-[11px] font-black text-emerald-300">GFS • ICON • GEM</p>
                 </div>
               </div>
             </div>
@@ -373,13 +373,13 @@ export default function MonitorPublico() {
 
           <div className="flex items-center gap-3 text-xs font-bold bg-slate-900 p-2 rounded-xl border border-slate-800">
             <span className="flex items-center gap-1.5 text-sky-400">
-              <span className="w-3.5 h-1.5 bg-sky-400 rounded-full inline-block"></span> ECMWF (Europa)
+              <span className="w-3.5 h-1.5 bg-sky-400 rounded-full inline-block"></span> GFS (EE.UU.)
             </span>
             <span className="flex items-center gap-1.5 text-emerald-400">
-              <span className="w-3.5 h-1.5 bg-emerald-400 rounded-full inline-block"></span> GFS (EE.UU.)
+              <span className="w-3.5 h-1.5 bg-emerald-400 rounded-full inline-block"></span> ICON (Alemania)
             </span>
             <span className="flex items-center gap-1.5 text-amber-400">
-              <span className="w-3.5 h-1.5 bg-amber-400 rounded-full inline-block"></span> ICON (Alemania)
+              <span className="w-3.5 h-1.5 bg-amber-400 rounded-full inline-block"></span> GEM (Canadá)
             </span>
           </div>
         </div>
