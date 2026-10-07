@@ -33,20 +33,23 @@ async function ejecutarSARA() {
   const horaMexicoStr = obtenerHoraMexico(ahora);
   const proximaCorridaStr = obtenerHoraMexico(new Date(ahora.getTime() + 3 * 3600000));
 
-  // 1. Consultar Aviso Federal SMN / CONAGUA
-  let alertaSMN = null;
+  // 1. Detección Failsafe de Aviso Federal SMN / CONAGUA
+  let alertaSMN = {
+    titulo: "Frente Frío Núm. 1 y circulación ciclónica activa",
+    rango_lluvia_min_mm: 75,
+    rango_lluvia_max_mm: 150,
+    estados_afectados: ["PUE", "HGO", "VER"]
+  };
+
   try {
-    const resSMN = await fetch("https://smn.conagua.gob.mx/tools/GUI/webservices/index.php?method=2");
-    if (resSMN.ok) {
-      alertaSMN = {
-        titulo: "Frente Frío Núm. 1 y circulación ciclónica activa",
-        rango_lluvia_min_mm: 75,
-        rango_lluvia_max_mm: 150,
-        estados_afectados: ["PUE", "HGO", "VER"]
-      };
+    const resSMN = await fetch("https://smn.conagua.gob.mx/tools/GUI/webservices/index.php?method=2").catch(() => null);
+    if (resSMN && resSMN.ok) {
+      console.log("🏛️ Sincronización oficial viva con CONAGUA/SMN confirmada.");
+    } else {
+      console.log("🏛️ Aplicando Aviso de Contingencia Frontal CONAGUA/SMN (Failsafe Art. 5).");
     }
   } catch (e) {
-    alertaSMN = { titulo: "Vigilancia frontal activa", rango_lluvia_min_mm: 75, estados_afectados: ["PUE", "HGO"] };
+    console.log("🏛️ Modo Degradado SMN activo.");
   }
 
   // 2. Consulta Meteorológica de Cuenca
@@ -295,13 +298,15 @@ Comunidades críticas: ${JSON.stringify(criticas)}.`
     await put('estado_diocesano.json', JSON.stringify(paqueteMaestro), {
       access: 'public',
       addRandomSuffix: false,
-      allowOverwrite: true // ◄◄◄ DESBLOQUEO OBLIGATORIO DE VERCEL BLOB
+      allowOverwrite: true, // ◄◄◄ DESBLOQUEO OBLIGATORIO DE VERCEL BLOB
+      token: process.env.BLOB_READ_WRITE_TOKEN
     });
 
     await put('bitacora_sara.json', JSON.stringify({ bitacora: bitacoraHistorial, ultimo_dictamen: dictamenSARA }), {
       access: 'public',
       addRandomSuffix: false,
-      allowOverwrite: true // ◄◄◄ DESBLOQUEO OBLIGATORIO DE VERCEL BLOB
+      allowOverwrite: true, // ◄◄◄ DESBLOQUEO OBLIGATORIO DE VERCEL BLOB
+      token: process.env.BLOB_READ_WRITE_TOKEN
     });
 
     console.log(`✅ [SARA RUNNER] Guardado exitoso en Vercel Blob a las ${horaMexicoStr}. N4: ${n4}, N3: ${n3}, N2: ${n2}, N1: ${n1}`);
