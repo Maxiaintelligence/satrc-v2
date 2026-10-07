@@ -1,24 +1,37 @@
+import crypto from 'crypto';
+import { put, list } from '@vercel/blob';
+
 /**
- * SatRC V2.0 - Reporte Diocesano de Situación "On-Demand" (Groq Llama-3.3-70B)
- * Genera el documento formal de 6 secciones en tiempo real al hacer clic.
+ * SatRC V2.0 - Reporte Diocesano On-Demand con Persistencia y Sello en Bitácora
+ * Almacena en Vercel Blob: 'reporte_diocesano_vigente.json' y 'bitacora_sara.json'
  */
+
+const BLOQUE_GENESIS = "0000000000000000000000000000000000000000000000000000000000000000";
+
+function generarHashSHA256(prevHash, timestamp, datos) {
+  return crypto.createHash('sha256')
+    .update(prevHash + timestamp + JSON.stringify(datos))
+    .digest('hex');
+}
 
 export default async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
 
   const ahora = new Date();
-  const fechaHoyStr = ahora.toLocaleDateString('es-MX', { 
+  const fechaDiaMexico = ahora.toLocaleDateString('es-MX', { 
     timeZone: 'America/Mexico_City', 
     day: '2-digit', 
     month: 'long', 
     year: 'numeric' 
   });
-  const horaMexicoStr = ahora.toLocaleTimeString('es-MX', { 
+  const horaExactaMexico = ahora.toLocaleTimeString('es-MX', { 
     timeZone: 'America/Mexico_City', 
     hour: '2-digit', 
     minute: '2-digit', 
+    second: '2-digit',
     hour12: true 
   });
+  const timestampIsoUtc = ahora.toISOString();
 
   const { alertaSMN, resumenSeveridad, focosCriticos } = req.body || {};
   const apiKeyGroq = process.env.GROQ_API_KEY;
@@ -43,8 +56,8 @@ REGLAS OBLIGATORIAS:
   "seccion_VI_deslinde": "Texto formal de subordinación a Protección Civil y CONAGUA"
 }`;
 
-  const userPrompt = `Emitido hoy: ${fechaHoyStr} a las ${horaMexicoStr}.
-Aviso oficial CONAGUA/SMN: ${alertaSMN ? alertaSMN.titulo + " (" + alertaSMN.rango_lluvia_min_mm + "-" + alertaSMN.rango_lluvia_max_mm + " mm)" : "Sin aviso extraordinario"}.
+  const userPrompt = `Fecha y hora de emisión: ${fechaDiaMexico} a las ${horaExactaMexico}.
+Aviso oficial CONAGUA/SMN: ${alertaSMN ? alertaSMN.titulo : "Sin aviso extraordinario"}.
 Emergencias Nivel 4 (Laderas >= 45°): ${resumenSeveridad?.totalNivel4 || 0}.
 Alertas Nivel 3 (Laderas 25°-44°): ${resumenSeveridad?.totalNivel3 || 0}.
 Estables Nivel 1 (Altiplano): ${resumenSeveridad?.totalNivel1 || 300}.
@@ -75,16 +88,83 @@ Comunidades prioritarias: ${JSON.stringify(focosCriticos || [])}.`;
     const data = await respuestaGroq.json();
     const reporteJSON = JSON.parse(data.choices[0].message.content);
 
+    const reporteCompleto = {
+      id_reporte: `REP_ONDEMAND_${ahora.getTime()}`,
+      origen_evento: "ON_DEMAND_OPERADOR",
+      fecha_dia_mexico: fechaDiaMexico,
+      hora_exacta_mexico: horaExactaMexico,
+      timestamp_iso_utc: timestampIsoUtc,
+      consenso_modelos: "GFS (EE.UU.) • ICON (Alemania) • GEM (Canadá)",
+      resumen_severidad: resumenSeveridad,
+      focos_criticos: focosCriticos,
+      reporte: reporteJSON
+    };
+
+    // 1. Guardar el Reporte Permanente en Vercel Blob
+    await put('reporte_diocesano_vigente.json', JSON.stringify(reporteCompleto, null, 2), {
+      access: 'public',
+      addRandomSuffix: false,
+      allowOverwrite: true,
+      token: process.env.BLOB_READ_WRITE_TOKEN
+    });
+
+    // 2. Registrar la Entrada con Sello en la Bitácora de SARA
+    let bitacoraHistorial = [];
+    let hashUltimo = BLOQUE_GENESIS;
+
+    try {
+      const listado = await list();
+      const blobB = listado?.blobs?.find(b => b.pathname.includes('bitacora_sara.json'));
+      if (blobB) {
+        const rB = await fetch(blobB.url, { cache: 'no-store' });
+        if (rB.ok) {
+          const dB = await rB.json();
+          bitacoraHistorial = dB.bitacora || [];
+          if (bitacoraHistorial.length > 0) {
+            hashUltimo = bitacoraHistorial[bitacoraHistorial.length - 1].hash_completo || BLOQUE_GENESIS;
+          }
+        }
+      }
+    } catch (e) {}
+
+    const nuevoHash = generarHashSHA256(hashUltimo, timestampIsoUtc, {
+      tipo: "ON_DEMAND_OPERADOR",
+      fecha: fechaDiaMexico,
+      hora: horaExactaMexico,
+      titulo: reporteJSON.seccion_I_atmosfera?.slice(0, 50)
+    });
+
+    const entradaBitacora = {
+      id: `SARA_LOG_${bitacoraHistorial.length + 1}`,
+      origen_evento: "ON_DEMAND_OPERADOR",
+      fecha_dia_mexico: fechaDiaMexico,
+      hora_exacta_mexico: horaExactaMexico,
+      timestamp_iso_utc: timestampIsoUtc,
+      estado_situacion: (resumenSeveridad?.totalNivel4 || 0) > 0 ? "SITUACION_CRITICA" : "SITUACION_GRAVE",
+      titulo: "Reporte Diocesano On-Demand Generado por el Operador",
+      resumen: reporteJSON.seccion_I_atmosfera,
+      prev_hash: hashUltimo.slice(0, 16) + "...",
+      hash: nuevoHash.slice(0, 16) + "...",
+      hash_completo: nuevoHash
+    };
+
+    bitacoraHistorial.push(entradaBitacora);
+
+    await put('bitacora_sara.json', JSON.stringify({ bitacora: bitacoraHistorial, ultimo_reporte_id: reporteCompleto.id_reporte }), {
+      access: 'public',
+      addRandomSuffix: false,
+      allowOverwrite: true,
+      token: process.env.BLOB_READ_WRITE_TOKEN
+    });
+
     return res.json({
       exito: true,
-      fecha_emision: fechaHoyStr,
-      hora_emision: horaMexicoStr,
-      consenso_modelos: "GFS (EE.UU.) • ICON (Alemania) • GEM (Canadá)",
-      reporte: reporteJSON
+      reporte_guardado: reporteCompleto,
+      bitacora_actualizada: bitacoraHistorial
     });
 
   } catch (error) {
     console.error("Fallo generando reporte On-Demand:", error);
-    return res.status(500).json({ error: "No se pudo generar el reporte con Groq" });
+    return res.status(500).json({ error: "No se pudo generar ni guardar el reporte" });
   }
 }

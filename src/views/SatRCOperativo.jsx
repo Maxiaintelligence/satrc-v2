@@ -34,7 +34,8 @@ import {
   Printer,
   Sparkles,
   Share2,
-  Check
+  Check,
+  Calendar
 } from 'lucide-react';
 
 export default function SatRCOperativo({ alCerrarSesion }) {
@@ -60,9 +61,9 @@ export default function SatRCOperativo({ alCerrarSesion }) {
   // Estados del Reporte On-Demand
   const [modalReporteOnDemandAbierto, setModalReporteOnDemandAbierto] = useState(false);
   const [generandoOnDemand, setGenerandoOnDemand] = useState(false);
-  const [reporteOnDemandData, setReporteOnDemandData] = useState(null);
-  const [copiadoWhatsApp, setCopiadoWhatsApp] = useState(false);
+  const [reporteVigente, setReporteVigente] = useState(null);
 
+  // Evaluación Local de Respaldo en Vivo
   const ejecutarEvaluacionRealEnVivo = async (alertaSMN = null) => {
     const nodoSierra = todasLocalidades.find(l => l.nombre.toLowerCase().includes('huauchinango')) || todasLocalidades[0];
     let serieConsenso = [];
@@ -72,9 +73,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
       if (resM?.exito && resM?.datos_horarios) {
         serieConsenso = generarConsensoDeterminista(resM.datos_horarios);
       }
-    } catch (e) {
-      console.warn("Fallo temporal meteo:", e);
-    }
+    } catch (e) {}
 
     const resEvaluadas = todasLocalidades.map(loc => {
       try {
@@ -89,6 +88,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
     setComunidadFoco(resEvaluadas[0] || null);
   };
 
+  // Cargar Estado desde el Servidor Vercel Blob
   const cargarEstadoServidor = async () => {
     setCargando(true);
     try {
@@ -97,6 +97,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
         const data = await res.json();
         if (data.dictamen) setDictamenSARA(data.dictamen);
         if (data.bitacora) setBitacoraSARA(data.bitacora);
+        if (data.ultimo_reporte_ondemand) setReporteVigente(data.ultimo_reporte_ondemand);
 
         if (data.evaluaciones && data.evaluaciones.length > 0) {
           setEvaluaciones(data.evaluaciones);
@@ -117,16 +118,15 @@ export default function SatRCOperativo({ alCerrarSesion }) {
     cargarEstadoServidor();
   }, []);
 
-  // Generar Reporte On-Demand en Tiempo Real con Groq Llama-3.3
+  // Generar Nuevo Reporte On-Demand (Llamada a Groq y guardado en Blob)
   const generarReporteOnDemand = async () => {
     setGenerandoOnDemand(true);
     setModalReporteOnDemandAbierto(true);
-    setCopiadoWhatsApp(false);
 
     const n4 = evaluaciones.filter(e => e?.nivel_alerta === 4).length;
     const n3 = evaluaciones.filter(e => e?.nivel_alerta === 3).length;
     const n1 = evaluaciones.filter(e => e?.nivel_alerta === 1).length;
-    const focos = evaluaciones.filter(e => (e?.nivel_alerta ?? 1) >= 3).slice(0, 6).map(c => ({
+    const focos = evaluaciones.filter(e => (e?.nivel_alerta ?? 1) >= 3).slice(0, 8).map(c => ({
       nombre: c.nombre,
       municipio: c.municipio,
       nivel: c.nivel_alerta,
@@ -147,7 +147,12 @@ export default function SatRCOperativo({ alCerrarSesion }) {
 
       if (res.ok) {
         const data = await res.json();
-        setReporteOnDemandData(data);
+        if (data.reporte_guardado) {
+          setReporteVigente(data.reporte_guardado);
+        }
+        if (data.bitacora_actualizada) {
+          setBitacoraSARA(data.bitacora_actualizada);
+        }
       }
     } catch (e) {
       console.error("Error al generar reporte On-Demand:", e);
@@ -155,19 +160,68 @@ export default function SatRCOperativo({ alCerrarSesion }) {
     setGenerandoOnDemand(false);
   };
 
-  const copiarResumenWhatsApp = () => {
-    if (!reporteOnDemandData) return;
-    const r = reporteOnDemandData.reporte;
-    const texto = `🏛️ *REPORTE DIOCESANO DE SITUACIÓN • CÁRITAS TULANCINGO*\n` +
-      `📅 Emisión: ${reporteOnDemandData.fecha_emision} (${reporteOnDemandData.hora_emision} hrs)\n\n` +
-      `*1. ATMÓSFERA REGIONAL:* ${r.seccion_I_atmosfera}\n\n` +
-      `*2. FOCOS EN SIERRA (N4 y N3):* ${r.seccion_II_focos_sierra}\n\n` +
-      `*3. RECOMENDACIONES PASTORALES:* ${r.seccion_V_recomendaciones_pastorales}\n\n` +
-      `⛪ _Consulte al coordinador de Cáritas._`;
+  // Botón Compartir Directo en WhatsApp (Protocolo wa.me infalible)
+  const compartirPorWhatsApp = () => {
+    if (!reporteVigente) return;
+    const r = reporteVigente.reporte;
+    const textoMensaje = `🏛️ *REPORTE DIOCESANO DE SITUACIÓN • CÁRITAS TULANCINGO*\n` +
+      `📅 *Emisión:* ${reporteVigente.fecha_dia_mexico} (${reporteVigente.hora_exacta_mexico} hrs)\n\n` +
+      `*I. ATMÓSFERA REGIONAL:*\n${r.seccion_I_atmosfera}\n\n` +
+      `*II. FOCOS CRÍTICOS EN SIERRA:*\n${r.seccion_II_focos_sierra}\n\n` +
+      `*III. RECOMENDACIONES TÁCTICAS:*\n${r.seccion_V_recomendaciones_pastorales}\n\n` +
+      `⛪ _Consulte al coordinador de Cáritas Diocesana._`;
 
-    navigator.clipboard.writeText(texto);
-    setCopiadoWhatsApp(true);
-    setTimeout(() => setCopiadoWhatsApp(false), 3000);
+    const urlWhatsApp = `https://api.whatsapp.com/send?text=${encodeURIComponent(textoMensaje)}`;
+    window.open(urlWhatsApp, '_blank');
+  };
+
+  // Botón Descargar Documento Oficial Formateado (.txt)
+  const descargarDocumentoOficial = () => {
+    if (!reporteVigente) return;
+    const r = reporteVigente.reporte;
+    const contenidoDoc = `================================================================================
+CÁRITAS PASTORAL SOCIAL • ARQUIDIÓCESIS DE TULANCINGO
+SISTEMA DE ALERTA TEMPRANA Y RIESGOS CLIMÁTICOS (SatRC V2.0) • AGENTE SARA
+================================================================================
+REPORTE DIOCESANO DE SITUACIÓN METEOROLÓGICA (ON-DEMAND)
+Folio de Auditoría: ${reporteVigente.id_reporte}
+Fecha de Emisión: ${reporteVigente.fecha_dia_mexico}
+Hora Exacta de Emisión: ${reporteVigente.hora_exacta_mexico} (Hora del Centro de México)
+Consenso de Modelos: ${reporteVigente.consenso_modelos}
+--------------------------------------------------------------------------------
+
+I. DINÁMICA ATMOSFÉRICA REGIONAL:
+${r.seccion_I_atmosfera}
+
+II. FOCOS PRIORITARIOS DE TENSIÓN EN LA SIERRA (NIVEL 4 Y NIVEL 3):
+${r.seccion_II_focos_sierra}
+
+III. CONDICIONES EN EL ALTIPLANO Y VALLES (ZONAS EN ESTABILIDAD):
+${r.seccion_III_altiplano_calma}
+
+IV. PRONÓSTICO DE EVOLUCIÓN (PRÓXIMAS 12 A 24 HORAS):
+${r.seccion_IV_evolucion}
+
+V. RECOMENDACIONES TÁCTICAS SEGÚN CONDICIONES ACTIVAS:
+${r.seccion_V_recomendaciones_pastorales}
+
+VI. AVISO INSTITUCIONAL Y COORDINACIÓN CON PROTECCIÓN CIVIL:
+${r.seccion_VI_deslinde}
+
+--------------------------------------------------------------------------------
+Instrucción Diocesana: "Consulte al coordinador de Cáritas"
+Documento oficial para párrocos, brigadistas y autoridades de auxilio.
+================================================================================`;
+
+    const blob = new Blob([contenidoDoc], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Reporte_Diocesano_Caritas_${reporteVigente.fecha_dia_mexico.replace(/\s+/g, '_')}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
   };
 
   // Conteos
@@ -256,43 +310,38 @@ export default function SatRCOperativo({ alCerrarSesion }) {
         </div>
       </div>
 
-      {/* 2. REPORTE MULTIMODAL DIOCESANO DE SARA */}
-      <div className="bg-slate-900 border-2 border-slate-800 rounded-2xl p-5 shadow-2xl space-y-3">
-        <div className="flex flex-wrap justify-between items-center gap-2 border-b border-slate-800 pb-3">
-          <div className="flex items-center gap-2">
-            <div className="p-1.5 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20">
-              <Bot className="w-5 h-5 text-amber-400" />
+      {/* 2. TARJETA PERMANENTE DEL ÚLTIMO REPORTE DIOCESANO GUARDADO EN BLOB */}
+      {reporteVigente && (
+        <div className="bg-slate-900 border-2 border-amber-500/40 p-4 rounded-2xl shadow-xl flex flex-wrap justify-between items-center gap-3">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-amber-500/10 text-amber-400 border border-amber-500/30 rounded-xl">
+              <FileText className="w-5 h-5 text-amber-400" />
             </div>
             <div>
-              <h3 className="font-black text-sm md:text-base text-white flex items-center gap-2">
-                Informe de Situación • Agente SARA
-                {dictamenSARA?.color && (
-                  <span className="text-[10px] font-black px-2 py-0.5 rounded text-white shadow" style={{ backgroundColor: dictamenSARA.color }}>
-                    {dictamenSARA.estado_situacion || "SITUACION_DIOCESANA"}
-                  </span>
-                )}
-              </h3>
-              <p className="text-[11px] text-slate-400">
-                Oficial Meteoróloga de Guardia • Tríada GFS • ICON • GEM
+              <span className="text-[10px] uppercase font-black text-amber-400 tracking-wider block">
+                Último Reporte Diocesano Emitido en el Servidor
+              </span>
+              <p className="text-xs md:text-sm font-bold text-white">
+                Emitido el {reporteVigente.fecha_dia_mexico} a las {reporteVigente.hora_exacta_mexico} hrs
+              </p>
+              <p className="text-[11px] text-slate-300 truncate max-w-xl">
+                {reporteVigente.reporte?.seccion_I_atmosfera?.slice(0, 110)}...
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 font-mono text-xs text-slate-400">
-            <Clock className="w-3.5 h-3.5 text-cyan-400" />
-            <span>Última corrida oficial: <strong className="text-white">{dictamenSARA?.hora_evaluacion || '--:--'}</strong></span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                setModalReporteOnDemandAbierto(true);
+              }}
+              className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl transition-all shadow"
+            >
+              Consultar / Exportar
+            </button>
           </div>
         </div>
-
-        <div className="space-y-2 text-xs">
-          <p className="text-sm font-black text-amber-400 uppercase tracking-wide">
-            {dictamenSARA?.titulo || "Evaluación Multimodal Diocesana"}
-          </p>
-          <div className="bg-slate-950/70 p-3.5 rounded-xl border border-slate-800 leading-relaxed text-slate-200">
-            {dictamenSARA?.comentario_oficial}
-          </div>
-        </div>
-      </div>
+      )}
 
       {/* 3. SEMÁFORO INTERACTIVO */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -401,35 +450,51 @@ export default function SatRCOperativo({ alCerrarSesion }) {
       </div>
 
       {/* ========================================================== */}
-      {/* 6. MODAL DE REPORTE DIOCESANO ON-DEMAND (6 SECCIONES FORMALES) */}
+      {/* 6. MODAL DE REPORTE DIOCESANO ON-DEMAND FORMAL             */}
       {/* ========================================================== */}
       {modalReporteOnDemandAbierto && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md animate-fade-in print:p-0 print:bg-white">
           <div className="bg-slate-900 border-2 border-slate-700 max-w-4xl w-full rounded-2xl shadow-2xl overflow-hidden flex flex-col text-slate-200 max-h-[92vh] print:max-h-none print:border-0 print:shadow-none print:text-black print:bg-white">
             
             {/* Cabecera del Reporte On-Demand */}
-            <div className="p-4 bg-slate-800 border-b border-slate-700 flex justify-between items-center print:hidden">
+            <div className="p-4 bg-slate-800 border-b border-slate-700 flex flex-wrap justify-between items-center gap-2 print:hidden">
               <div className="flex items-center gap-2">
                 <FileText className="w-5 h-5 text-amber-400" />
-                <h3 className="font-bold text-sm text-white">Reporte Diocesano de Situación • On-Demand (Tiempo Real)</h3>
+                <h3 className="font-bold text-sm text-white">Reporte Diocesano Oficial • On-Demand (En Vivo)</h3>
               </div>
+
+              {/* Botones de Exportación Operativos */}
               <div className="flex items-center gap-2">
+                {/* 1. WHATSAPP DIRECTO */}
                 <button
-                  onClick={copiarResumenWhatsApp}
-                  disabled={generandoOnDemand || !reporteOnDemandData}
+                  onClick={compartirPorWhatsApp}
+                  disabled={generandoOnDemand || !reporteVigente}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-all shadow"
-                  title="Copiar texto para WhatsApp"
+                  title="Abrir WhatsApp para enviar"
                 >
-                  {copiadoWhatsApp ? <Check className="w-3.5 h-3.5" /> : <Share2 className="w-3.5 h-3.5" />}
-                  <span>{copiadoWhatsApp ? '¡Copiado!' : 'Compartir WhatsApp'}</span>
+                  <Share2 className="w-3.5 h-3.5" />
+                  <span>Enviar WhatsApp</span>
                 </button>
 
+                {/* 2. DESCARGAR DOCUMENTO (.TXT) */}
+                <button
+                  onClick={descargarDocumentoOficial}
+                  disabled={generandoOnDemand || !reporteVigente}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-xs font-bold transition-all border border-slate-600"
+                  title="Descargar archivo oficial de texto"
+                >
+                  <Download className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Descargar Doc</span>
+                </button>
+
+                {/* 3. IMPRIMIR / PDF */}
                 <button
                   onClick={() => window.print()}
-                  disabled={generandoOnDemand || !reporteOnDemandData}
+                  disabled={generandoOnDemand || !reporteVigente}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-lg text-xs font-bold shadow"
                 >
-                  <Printer className="w-3.5 h-3.5" /> Imprimir / PDF
+                  <Printer className="w-3.5 h-3.5" />
+                  <span>Imprimir / PDF</span>
                 </button>
 
                 <button onClick={() => setModalReporteOnDemandAbierto(false)} className="p-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-slate-300">
@@ -440,14 +505,13 @@ export default function SatRCOperativo({ alCerrarSesion }) {
 
             {/* Contenido Formal del Documento */}
             <div className="p-6 overflow-y-auto space-y-5 text-xs leading-relaxed font-sans print:p-6 print:text-xs">
-              
               {generandoOnDemand ? (
                 <div className="p-16 text-center text-slate-400 flex flex-col items-center justify-center gap-3">
                   <div className="w-8 h-8 border-4 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
                   <p className="font-bold text-white text-sm">SARA (Groq Llama-3.3-70B) redactando reporte en tiempo real...</p>
-                  <p className="text-[11px] text-slate-400">Analizando cuencas de la Sierra y Altiplano con la última fotografía atmosférica.</p>
+                  <p className="text-[11px] text-slate-400">Analizando cuencas y sellando entrada en la bitácora de Vercel Blob.</p>
                 </div>
-              ) : reporteOnDemandData ? (
+              ) : reporteVigente ? (
                 <>
                   {/* Membrete Oficial */}
                   <div className="border-b-2 border-amber-500 pb-3 flex justify-between items-start">
@@ -460,8 +524,8 @@ export default function SatRCOperativo({ alCerrarSesion }) {
                       </p>
                     </div>
                     <div className="text-right font-mono text-[11px] text-slate-400 print:text-gray-600">
-                      <p>Emisión en Vivo: <strong>{reporteOnDemandData.fecha_emision} ({reporteOnDemandData.hora_emision} hrs)</strong></p>
-                      <p>Consenso: {reporteOnDemandData.consenso_modelos}</p>
+                      <p>Sello de Emisión: <strong>{reporteVigente.fecha_dia_mexico} a las {reporteVigente.hora_exacta_mexico} hrs</strong></p>
+                      <p>Consenso: {reporteVigente.consenso_modelos}</p>
                     </div>
                   </div>
 
@@ -471,7 +535,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
                       I. Dinámica Atmosférica Regional
                     </h4>
                     <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-slate-200 print:bg-gray-50 print:border-gray-300 print:text-gray-900">
-                      {reporteOnDemandData.reporte.seccion_I_atmosfera}
+                      {reporteVigente.reporte?.seccion_I_atmosfera}
                     </div>
                   </div>
 
@@ -481,7 +545,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
                       II. Focos Prioritarios de Tensión en la Sierra (Nivel 4 y Nivel 3)
                     </h4>
                     <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-slate-200 print:bg-gray-50 print:border-gray-300 print:text-gray-900">
-                      {reporteOnDemandData.reporte.seccion_II_focos_sierra}
+                      {reporteVigente.reporte?.seccion_II_focos_sierra}
                     </div>
                   </div>
 
@@ -491,7 +555,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
                       III. Condiciones en el Altiplano y Valles (Zonas en Estabilidad)
                     </h4>
                     <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-slate-200 print:bg-gray-50 print:border-gray-300 print:text-gray-900">
-                      {reporteOnDemandData.reporte.seccion_III_altiplano_calma}
+                      {reporteVigente.reporte?.seccion_III_altiplano_calma}
                     </div>
                   </div>
 
@@ -501,7 +565,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
                       IV. Pronóstico de Evolución (Próximas 12 a 24 Horas)
                     </h4>
                     <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-slate-200 print:bg-gray-50 print:border-gray-300 print:text-gray-900">
-                      {reporteOnDemandData.reporte.seccion_IV_evolucion}
+                      {reporteVigente.reporte?.seccion_IV_evolucion}
                     </div>
                   </div>
 
@@ -511,14 +575,14 @@ export default function SatRCOperativo({ alCerrarSesion }) {
                       V. Recomendaciones Tácticas según Condiciones Activas
                     </h4>
                     <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-slate-100 print:bg-amber-50 print:border-amber-300 print:text-gray-900">
-                      {reporteOnDemandData.reporte.seccion_V_recomendaciones_pastorales}
+                      {reporteVigente.reporte?.seccion_V_recomendaciones_pastorales}
                     </div>
                   </div>
 
                   {/* VI. Deslinde Oficial */}
                   <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 text-[10px] text-slate-400 space-y-1 print:bg-gray-50 print:border-gray-200 print:text-gray-600">
                     <p className="font-bold text-slate-300 print:text-black">VI. Aviso Institucional y Coordinación con Protección Civil:</p>
-                    <p>{reporteOnDemandData.reporte.seccion_VI_deslinde}</p>
+                    <p>{reporteVigente.reporte?.seccion_VI_deslinde}</p>
                   </div>
 
                   {/* Pie de Firma */}
@@ -537,63 +601,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
         </div>
       )}
 
-      {/* 7. MODAL AUDITORÍA */}
-      {comunidadDetalle && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-fade-in">
-          <div className="bg-slate-900 border-2 border-slate-700 max-w-3xl w-full rounded-2xl shadow-2xl overflow-hidden flex flex-col text-slate-200">
-            <div className="p-4 border-b border-slate-800 flex justify-between items-start" style={{ backgroundColor: `${comunidadDetalle?.color_alerta || '#10B981'}20` }}>
-              <div>
-                <span className="text-xs font-black px-2.5 py-0.5 rounded text-white" style={{ backgroundColor: comunidadDetalle?.color_alerta }}>
-                  NIVEL {comunidadDetalle?.nivel_alerta} • {comunidadDetalle?.estado_alerta}
-                </span>
-                <h2 className="text-xl font-black text-white mt-1">{comunidadDetalle?.nombre}</h2>
-                <p className="text-xs text-slate-300">{comunidadDetalle?.municipio}, {comunidadDetalle?.estado} • Cuenca: {comunidadDetalle?.geografia?.cuenca}</p>
-              </div>
-              <button onClick={() => setComunidadDetalle(null)} className="p-1.5 bg-slate-800 hover:bg-slate-700 rounded-xl text-slate-400 hover:text-white">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="p-5 overflow-y-auto max-h-[70vh] space-y-4 text-xs">
-              <div className="bg-slate-950/70 p-3.5 rounded-xl border border-slate-800 space-y-1">
-                <p className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">Diagnóstico Físico</p>
-                <p className="text-sm font-bold text-white">{comunidadDetalle?.diagnostico?.titulo}</p>
-                <p className="text-xs text-slate-300 leading-relaxed">{comunidadDetalle?.diagnostico?.causa}</p>
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
-                  <span className="text-[10px] text-slate-400 uppercase font-semibold block">Pendiente Máx</span>
-                  <span className="text-base font-bold text-white">{comunidadDetalle?.geografia?.pendienteMax ?? 0}°</span>
-                </div>
-                <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
-                  <span className="text-[10px] text-slate-400 uppercase font-semibold block">Acceso Vial</span>
-                  <span className="text-xs font-bold text-amber-300 block truncate">{comunidadDetalle?.impactoSistemico?.accesoVial}</span>
-                </div>
-                <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
-                  <span className="text-[10px] text-slate-400 uppercase font-semibold block">Hospital Cercano</span>
-                  <span className="text-base font-bold text-white">{comunidadDetalle?.impactoSistemico?.distanciaHospitalKm ?? 0} km</span>
-                </div>
-                <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
-                  <span className="text-[10px] text-slate-400 uppercase font-semibold block">Ventana Acción</span>
-                  <span className="text-base font-bold text-emerald-400">{comunidadDetalle?.tiempos?.ventanaAccionHoras ?? 6} hrs</span>
-                </div>
-              </div>
-
-              <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-center">
-                <p className="text-xs font-bold text-amber-300 italic">{comunidadDetalle?.protocolo || "Consulte al coordinador de Cáritas"}</p>
-              </div>
-            </div>
-
-            <div className="p-3.5 bg-slate-800/80 border-t border-slate-700 flex justify-between items-center text-xs">
-              <span className="text-slate-400">Población directa: <strong className="text-white">{comunidadDetalle?.impactoSistemico?.poblacionDirecta?.toLocaleString() ?? 0}</strong> habitantes</span>
-              <button onClick={() => setComunidadDetalle(null)} className="px-4 py-1.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-xs font-bold">Cerrar</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 8. MODAL BITÁCORA */}
+      {/* 7. MODAL DE BITÁCORA */}
       {modalBitacoraAbierto && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md animate-fade-in">
           <div className="bg-slate-900 border-2 border-slate-700 max-w-4xl w-full rounded-2xl shadow-2xl overflow-hidden flex flex-col text-slate-200 max-h-[85vh]">
@@ -612,18 +620,65 @@ export default function SatRCOperativo({ alCerrarSesion }) {
               {bitacoraSARA.map((entry) => (
                 <div key={entry.id} className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-1.5">
                   <div className="flex justify-between items-center text-[11px]">
-                    <span className="text-amber-400 font-bold">{entry.timestamp_local} ({entry.id})</span>
+                    <span className="text-amber-400 font-bold">{entry.fecha_dia_mexico ? `${entry.fecha_dia_mexico} • ${entry.hora_exacta_mexico}` : entry.timestamp_local} ({entry.id})</span>
                     <span className="text-slate-400 text-[10px]">Hash: <strong className="text-emerald-400">{entry.hash}</strong></span>
                   </div>
-                  <p className="text-white font-bold text-xs">{entry.titulo}</p>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[9px] bg-slate-800 text-cyan-300 px-1.5 py-0.5 rounded font-bold">
+                      {entry.origen_evento || "PROGRAMADO_CRON_21"}
+                    </span>
+                    <p className="text-white font-bold text-xs">{entry.titulo}</p>
+                  </div>
                   <p className="text-slate-300 text-[11px] font-sans leading-relaxed">{entry.resumen}</p>
                 </div>
               ))}
             </div>
 
             <div className="p-3 bg-slate-950 border-t border-slate-800 flex justify-between items-center text-xs text-slate-500 px-4">
-              <span>Preservación permanente en Vercel Blob.</span>
+              <span>Preservación permanente en Vercel Blob • Inmune a redeploys.</span>
               <button onClick={() => setModalBitacoraAbierto(false)} className="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-bold">Cerrar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 8. MODAL AUDITORÍA */}
+      {comunidadDetalle && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-fade-in">
+          <div className="bg-slate-900 border-2 border-slate-700 max-w-3xl w-full rounded-2xl shadow-2xl overflow-hidden flex flex-col text-slate-200">
+            <div className="p-4 border-b border-slate-800 flex justify-between items-start" style={{ backgroundColor: `${comunidadDetalle?.color_alerta || '#10B981'}20` }}>
+              <div>
+                <span className="text-xs font-black px-2.5 py-0.5 rounded text-white" style={{ backgroundColor: comunidadDetalle?.color_alerta }}>
+                  NIVEL {comunidadDetalle?.nivel_alerta} • {comunidadDetalle?.estado_alerta}
+                </span>
+                <h2 className="text-xl font-black text-white mt-1">{comunidadDetalle?.nombre}</h2>
+                <p className="text-xs text-slate-300">{comunidadDetalle?.municipio}, {comunidadDetalle?.estado} • Cuenca: {comunidadDetalle?.geografia?.cuenca}</p>
+              </div>
+              <button onClick={() => setComunidadDetalle(null)} className="p-1.5 bg-slate-800 hover:bg-slate-700 rounded-xl text-slate-400 hover:text-white"><X className="w-5 h-5" /></button>
+            </div>
+
+            <div className="p-5 overflow-y-auto max-h-[70vh] space-y-4 text-xs">
+              <div className="bg-slate-950/70 p-3.5 rounded-xl border border-slate-800 space-y-1">
+                <p className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">Diagnóstico Físico</p>
+                <p className="text-sm font-bold text-white">{comunidadDetalle?.diagnostico?.titulo}</p>
+                <p className="text-xs text-slate-300 leading-relaxed">{comunidadDetalle?.diagnostico?.causa}</p>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60"><span className="text-[10px] text-slate-400 uppercase font-semibold block">Pendiente Máx</span><span className="text-base font-bold text-white">{comunidadDetalle?.geografia?.pendienteMax ?? 0}°</span></div>
+                <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60"><span className="text-[10px] text-slate-400 uppercase font-semibold block">Acceso Vial</span><span className="text-xs font-bold text-amber-300 block truncate">{comunidadDetalle?.impactoSistemico?.accesoVial}</span></div>
+                <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60"><span className="text-[10px] text-slate-400 uppercase font-semibold block">Hospital Cercano</span><span className="text-base font-bold text-white">{comunidadDetalle?.impactoSistemico?.distanciaHospitalKm ?? 0} km</span></div>
+                <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60"><span className="text-[10px] text-slate-400 uppercase font-semibold block">Ventana Acción</span><span className="text-base font-bold text-emerald-400">{comunidadDetalle?.tiempos?.ventanaAccionHoras ?? 6} hrs</span></div>
+              </div>
+
+              <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-center">
+                <p className="text-xs font-bold text-amber-300 italic">{comunidadDetalle?.protocolo || "Consulte al coordinador de Cáritas"}</p>
+              </div>
+            </div>
+
+            <div className="p-3.5 bg-slate-800/80 border-t border-slate-700 flex justify-between items-center text-xs">
+              <span className="text-slate-400">Población directa: <strong className="text-white">{comunidadDetalle?.impactoSistemico?.poblacionDirecta?.toLocaleString() ?? 0}</strong> habitantes</span>
+              <button onClick={() => setComunidadDetalle(null)} className="px-4 py-1.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-xs font-bold">Cerrar</button>
             </div>
           </div>
         </div>
