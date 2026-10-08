@@ -12,6 +12,7 @@ const todasLocalidades = db.localidades || [];
 console.log(`📡 [SARA RUNNER RESILIENTE] Evaluando ${todasLocalidades.length} localidades...`);
 
 const BLOQUE_GENESIS = "0000000000000000000000000000000000000000000000000000000000000000";
+const MIN_HORAS_REQUERIDAS = 192; // 7 días pasados + 1 día futuro para evaluar el evento
 
 function generarHashSHA256(prevHash, timestamp, datos) {
   return crypto.createHash('sha256')
@@ -34,6 +35,55 @@ function extraerValor(h, indice, nombreBase, valorDefecto = 0) {
          h[`${nombreBase}_gfs_seamless`]?.[indice] ??
          h[`${nombreBase}_icon_seamless`]?.[indice] ??
          valorDefecto;
+}
+
+async function registrarCorridaDegradada(horaMexicoStr, ahora, motivo) {
+  try {
+    let bitacoraHistorial = [];
+    try {
+      const listado = await list();
+      const blobB = listado?.blobs?.find(b => b.pathname.includes('bitacora_sara.json'));
+      if (blobB) {
+        const rB = await fetch(blobB.url, { cache: 'no-store' });
+        if (rB.ok) {
+          const dB = await rB.json();
+          bitacoraHistorial = dB.bitacora || [];
+        }
+      }
+    } catch (e) {}
+
+    const prevHash = bitacoraHistorial.length > 0
+      ? bitacoraHistorial[bitacoraHistorial.length - 1].hash_completo
+      : BLOQUE_GENESIS;
+
+    const nuevoHash = generarHashSHA256(prevHash, ahora.toISOString(), {
+      tipo: "CORRIDA_DEGRADADA",
+      motivo
+    });
+
+    bitacoraHistorial.push({
+      id: `SARA_LOG_${bitacoraHistorial.length + 1}`,
+      timestamp_local: horaMexicoStr,
+      timestamp_iso: ahora.toISOString(),
+      estado_situacion: "CORRIDA_DEGRADADA",
+      titulo: "Corrida degradada: sin datos meteorológicos reales",
+      resumen: `${motivo} a las ${horaMexicoStr}. No se publicó evaluación nueva para evitar alertas falsas. El estado anterior en el sistema permanece vigente.`,
+      prev_hash: prevHash.slice(0, 16) + "...",
+      hash: nuevoHash.slice(0, 16) + "...",
+      hash_completo: nuevoHash
+    });
+
+    await put('bitacora_sara.json', JSON.stringify({ bitacora: bitacoraHistorial }), {
+      access: 'public',
+      addRandomSuffix: false,
+      allowOverwrite: true,
+      token: process.env.BLOB_READ_WRITE_TOKEN
+    });
+
+    console.log("📝 Corrida degradada registrada en bitácora SHA-256.");
+  } catch (e) {
+    console.error("❌ No se pudo registrar la corrida degradada:", e);
+  }
 }
 
 async function ejecutarSARA() {
@@ -81,56 +131,78 @@ async function ejecutarSARA() {
                    `&models=gfs_seamless,icon_seamless&past_days=7&forecast_days=3&timezone=America%2FMexico_City`;
 
   let serieHoraria = [];
+  let falloMeteo = null;
+
   try {
     const resM = await fetch(urlMeteo);
-    const dataM = await resM.json();
-    const h = dataM.hourly;
+    if (!resM.ok) {
+      falloMeteo = `Open-Meteo respondió HTTP ${resM.status}`;
+    } else {
+      const dataM = await resM.json();
+      const h = dataM.hourly;
 
-    if (h && h.time) {
-      for (let i = 0; i < h.time.length; i++) {
-        serieHoraria.push({
-          fecha_hora: h.time[i],
-          lluvia_mm: extraerValor(h, i, 'precipitation', 0),
-          temperatura_c: extraerValor(h, i, 'temperature_2m', 15),
-          humedad_relativa_pct: extraerValor(h, i, 'relative_humidity_2m', 60),
-          viento_kmh: extraerValor(h, i, 'wind_speed_10m', 10),
-          rafagas_kmh: extraerValor(h, i, 'wind_gusts_10m', 15),
-          visibilidad_km: extraerValor(h, i, 'visibility', 10000) / 1000
-        });
+      if (h && h.time) {
+        for (let i = 0; i < h.time.length; i++) {
+          serieHoraria.push({
+            fecha_hora: h.time[i],
+            lluvia_mm: extraerValor(h, i, 'precipitation', 0),
+            temperatura_c: extraerValor(h, i, 'temperature_2m', 15),
+            humedad_relativa_pct: extraerValor(h, i, 'relative_humidity_2m', 60),
+            viento_kmh: extraerValor(h, i, 'wind_speed_10m', 10),
+            rafagas_kmh: extraerValor(h, i, 'wind_gusts_10m', 15),
+            visibilidad_km: extraerValor(h, i, 'visibility', 10000) / 1000
+          });
+        }
+        console.log(`✅ Serie meteorológica procesada: ${serieHoraria.length} horas.`);
+        const lluviaTotalEncontrada = serieHoraria.reduce((a, b) => a + b.lluvia_mm, 0);
+        console.log(`🌧️ Lluvia acumulada encontrada en la serie: ${lluviaTotalEncontrada.toFixed(1)} mm.`);
+      } else {
+        falloMeteo = "Open-Meteo devolvió respuesta sin bloque 'hourly'";
       }
-      console.log(`✅ Serie meteorológica procesada: ${serieHoraria.length} horas.`);
-      const lluviaTotalEncontrada = serieHoraria.reduce((a, b) => a + b.lluvia_mm, 0);
-      console.log(`🌧️ Lluvia acumulada encontrada en la serie: ${lluviaTotalEncontrada.toFixed(1)} mm.`);
     }
   } catch (e) {
+    falloMeteo = `Excepción consultando Open-Meteo: ${e.message}`;
     console.error("❌ Fallo en Open-Meteo:", e);
   }
 
-  if (!serieHoraria.length) {
-    serieHoraria = Array(240).fill({ lluvia_mm: 0.5, temperatura_c: 16, viento_kmh: 15, rafagas_kmh: 25, visibilidad_km: 8 });
+  // ============================================================
+  // A5 — MODO DEGRADADO
+  // Si no hay datos meteorológicos reales y suficientes,
+  // NO se inventan valores. NO se publica evaluación nueva.
+  // Se registra la corrida degradada en la bitácora y se sale.
+  // ============================================================
+  if (serieHoraria.length < MIN_HORAS_REQUERIDAS) {
+    const motivo = falloMeteo || `Serie insuficiente: ${serieHoraria.length} horas (mínimo ${MIN_HORAS_REQUERIDAS})`;
+    console.error("⚠️  MODO DEGRADADO ACTIVADO");
+    console.error(`⚠️  Motivo: ${motivo}`);
+    console.error("⚠️  No se publicará estado_diocesano.json. El estado anterior en Blob permanece vigente.");
+    console.error(`⚠️  Timestamp: ${ahora.toISOString()}`);
+
+    await registrarCorridaDegradada(horaMexicoStr, ahora, motivo);
+
+    console.log("ℹ️  Corrida finalizada en modo degradado. Workflow sale con código 0.");
+    process.exit(0);
   }
 
-  // 3. API de 7 Días Previos (d = 1 a 7)
+  // 3. API de 7 Días Previos (d = 1 a 7) — solo se llega aquí con datos reales
   let api7DiasPrevios = 0;
-  if (serieHoraria.length >= 168) {
-    for (let d = 1; d <= 7; d++) {
-      const idxInicio = (d - 1) * 24;
-      const idxFin = d * 24;
-      const lluviaDia = serieHoraria.slice(idxInicio, idxFin).reduce((acc, h) => acc + h.lluvia_mm, 0);
-      api7DiasPrevios += lluviaDia * Math.pow(0.85, 8 - d);
-    }
+  for (let d = 1; d <= 7; d++) {
+    const idxInicio = (d - 1) * 24;
+    const idxFin = d * 24;
+    const lluviaDia = serieHoraria.slice(idxInicio, idxFin).reduce((acc, h) => acc + h.lluvia_mm, 0);
+    api7DiasPrevios += lluviaDia * Math.pow(0.85, 8 - d);
   }
   api7DiasPrevios = parseFloat(api7DiasPrevios.toFixed(1));
 
   // Ventana del Evento Actual
-  const eventoActual = serieHoraria.length >= 192 ? serieHoraria.slice(168, 192) : serieHoraria.slice(-24);
+  const eventoActual = serieHoraria.slice(168, 192);
   const lluviaEventoHoy = parseFloat(eventoActual.reduce((acc, h) => acc + h.lluvia_mm, 0).toFixed(1));
   const tempMinHoy = Math.min(...eventoActual.map(h => h.temperatura_c), 20);
   const vientoMaxHoy = Math.max(...eventoActual.map(h => h.viento_kmh), 10);
   const rafagaMaxHoy = Math.max(...eventoActual.map(h => h.rafagas_kmh), 15);
   const visMinHoy = Math.min(...eventoActual.map(h => h.visibilidad_km), 10);
 
-  // 4. Evaluación de las 405 Localidades con Umbral de Ladera en >= 45°
+  // 4. Evaluación de Localidades con Umbral de Ladera en >= 45°
   const evaluaciones = todasLocalidades.map(loc => {
     const esAltiplano = ['APN', 'TIZ', 'PMS', 'ACT'].includes(loc.zona_id);
     const esSierra = ['HUA', 'SPP', 'ZAC', 'CHG', 'ZAH', 'ATG', 'TUL'].includes(loc.zona_id);
@@ -140,10 +212,8 @@ async function ejecutarSARA() {
     const esLadera = relieve === 'LADERA' || pendiente >= 25;
     const distRio = loc.hidrologia.distancia_cauce_km || 99;
     const twi = loc.topografia.twi || 0;
-    const altitud = loc.topografia.altitud_msnm || 0;
     const esTerraceria = loc.vulnerabilidad.acceso_vial === 'CAMINO_TERRACERIA' || loc.vulnerabilidad.acceso_vial === 'BRECHA';
 
-    // Solo se adopta piso de temporal si el SMN tiene aviso activo real para hoy
     const lluviaEfectiva24h = (esSierra && alertaSMN) ? Math.max(lluviaEventoHoy, alertaSMN.rango_lluvia_min_mm) : lluviaEventoHoy;
     const saturacionSuelo = parseFloat((api7DiasPrevios + lluviaEfectiva24h).toFixed(1));
 
@@ -152,16 +222,12 @@ async function ejecutarSARA() {
     let tituloDiagnostico = "Condiciones de Estabilidad y Calma";
     let causa = "Sin perturbaciones climáticas significativas previstas.";
 
-    // Altiplano seco forzado a Normalidad (N1 Verde)
     if (esAltiplano && pendiente < 15 && lluviaEventoHoy < 20.0 && tempMinHoy > 2.0 && vientoMaxHoy < 40) {
       nivel = 1;
       vectorDominante = "ATMOSFERA_ESTABLE";
       tituloDiagnostico = "Condiciones de Estabilidad y Calma";
       causa = `Zona del Altiplano bajo sombra orográfica. Lluvia de ${lluviaEventoHoy} mm sin riesgo geofísico.`;
     } else {
-      // EVALUACIÓN DE SIERRA Y LADERAS
-
-      // Umbral geomecánico de Emergencia calibrado en >= 45°
       if (esSierra && esLadera && saturacionSuelo >= 65.0) {
         if (pendiente >= 45.0) {
           nivel = 4;
@@ -176,7 +242,6 @@ async function ejecutarSARA() {
         }
       }
 
-      // Desbordamiento ribereño en cañadas
       if (distRio <= 0.8 && twi >= 12.0 && lluviaEfectiva24h >= 35.0 && !esAltiplano) {
         nivel = Math.max(nivel, 4);
         vectorDominante = "INUNDACION_FLUVIAL";
@@ -184,7 +249,6 @@ async function ejecutarSARA() {
         causa = `Comunidad ribereña a ${distRio} km del cauce en punto de convergencia de flujo.`;
       }
 
-      // Aislamiento por terracería en temporal
       if (esTerraceria && (lluviaEfectiva24h >= 20.0 || saturacionSuelo >= 50.0) && nivel < 3) {
         nivel = 3;
         vectorDominante = "CORTE_VIAL";
@@ -192,7 +256,6 @@ async function ejecutarSARA() {
         causa = `Vía única de terracería/brecha vulnerable a corte total por lodo.`;
       }
 
-      // Vigilancia preventiva en valles de transición (Nivel 2 Amarillo)
       if (nivel === 1 && (lluviaEfectiva24h >= 8.0 || saturacionSuelo >= 30.0 || visMinHoy <= 2.0)) {
         nivel = 2;
         vectorDominante = "VIGILANCIA_NORMAL";
@@ -291,7 +354,7 @@ Comunidades críticas bajo tensión: ${JSON.stringify(criticas)}.`
       estado_situacion: n4 > 0 ? "SITUACION_CRITICA" : (n3 > 0 ? "SITUACION_GRAVE" : (n2 > 0 ? "SITUACION_ALERTA_PREPARACION" : "SITUACION_NORMAL")),
       color: n4 > 0 ? "#EF4444" : (n3 > 0 ? "#F97316" : (n2 > 0 ? "#F59E0B" : "#10B981")),
       titulo: n4 > 0 ? "Emergencia por Deslaves en Taludes >= 45°" : (n3 > 0 ? "Alerta Temprana en Laderas Serranas" : "Situación Diocesana de Calma"),
-      comentario_oficial: `Corrida del minuto 21 (${horaMexicoStr}): Monitoreo dinámico activo. Evaluaciones físicas actualizadas sobre las 405 comunidades.`
+      comentario_oficial: `Corrida del minuto 21 (${horaMexicoStr}): Monitoreo dinámico activo. Evaluaciones físicas actualizadas.`
     };
   }
 
