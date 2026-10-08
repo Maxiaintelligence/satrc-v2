@@ -155,7 +155,7 @@ export default async function handler(req, res) {
         signal: AbortSignal.timeout(TIMEOUT_GROQ_MS),
         headers: { "Authorization": `Bearer ${apiKeyGroq.trim()}`, "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: "llama-3.3-70b-versatile",
+          model: "openai/gpt-oss-120b",
           temperature: 0.1,
           response_format: { type: "json_object" },
           messages: [
@@ -192,7 +192,7 @@ Comunidades críticas: ${JSON.stringify(resumenSeveridad?.criticasNombres || [])
           hora_evaluacion: horaMexicoStr,
           proxima_evaluacion: proximaCorridaStr,
           timestamp: ahora.toISOString(),
-          modelo_ia: "Groq Llama-3.3-70B LPU"
+          modelo_ia: "openai/gpt-oss-120b"
         };
       }
     } catch (e) {

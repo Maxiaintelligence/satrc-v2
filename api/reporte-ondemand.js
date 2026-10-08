@@ -61,7 +61,8 @@ Aviso oficial CONAGUA/SMN: ${alertaSMN ? alertaSMN.titulo : "Sin aviso extraordi
 Emergencias Nivel 4 (Laderas >= 45°): ${resumenSeveridad?.totalNivel4 || 0}.
 Alertas Nivel 3 (Laderas 25°-44°): ${resumenSeveridad?.totalNivel3 || 0}.
 Estables Nivel 1 (Altiplano): ${resumenSeveridad?.totalNivel1 || 300}.
-Comunidades prioritarias: ${JSON.stringify(focosCriticos || [])}.`;
+Comunidades prioritarias: ${JSON.stringify(focosCriticos || [])}.
+Devuelve la respuesta en formato JSON estricto.`;
 
   try {
     const respuestaGroq = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -71,7 +72,7 @@ Comunidades prioritarias: ${JSON.stringify(focosCriticos || [])}.`;
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: "llama-3.3-70b-versatile",
+        model: "openai/gpt-oss-120b",
         temperature: 0.1,
         response_format: { type: "json_object" },
         messages: [

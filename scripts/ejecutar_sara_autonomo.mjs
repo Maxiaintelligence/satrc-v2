@@ -247,7 +247,7 @@ async function ejecutarSARA() {
 
   console.log(`📊 [SARA CLASIFICACIÓN REAL VIVA] N4: ${n4} | N3: ${n3} | N2: ${n2} | N1: ${n1}`);
 
-  // 5. Inferencia con Groq Llama-3.3-70B
+  // 5. Inferencia con Groq openai/gpt-oss-120b
   let dictamenSARA = null;
   const apiKeyGroq = process.env.GROQ_API_KEY;
 
@@ -256,8 +256,8 @@ async function ejecutarSARA() {
       const resG = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
         headers: { "Authorization": `Bearer ${apiKeyGroq.trim()}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "llama-3.3-70b-versatile",
+        body: JSON.stringify({openai/gpt-oss-120b
+          model: "openai/gpt-oss-120b",
           temperature: 0.1,
           response_format: { type: "json_object" },
           messages: [
