@@ -75,8 +75,8 @@ export function evaluarLocalidad(localidad, serieHoraria, contexto = {}) {
   });
 
   // Delimitación Geográfica Diocesana
-  const esZonaAltiplanoPlano = ['APN', 'TIZ', 'PMS', 'ACT'].includes(localidad.zona_id);
-  const esZonaSierraExpuesta = ['HUA', 'SPP', 'ZAC', 'CHG', 'ZAH', 'ATG', 'TUL'].includes(localidad.zona_id);
+  const esZonaAltiplanoPlano = ['ACT', 'APN', 'PMN', 'PMS', 'TIZ'].includes(localidad.zona_id);
+  const esZonaSierraExpuesta = ['ATG', 'CHG', 'HUA', 'HYC', 'SPP', 'TUL', 'XIC', 'ZAC', 'ZAH'].includes(localidad.zona_id);
 
   // Aviso Federal del Frente Frío (75 a 150 mm) aplica a zonas de Sierra
   const alertaSMN = contexto.alertaSMN;

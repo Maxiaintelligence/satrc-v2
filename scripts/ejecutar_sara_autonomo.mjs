@@ -370,8 +370,8 @@ async function ejecutarSARA() {
     const zonaSinDatos = series[zonaId]?.ok === false;
 
     // Reutilizamos la lógica de evaluación existente pero por zona
-    const esAltiplano = ['APN', 'TIZ', 'PMS', 'ACT'].includes(zonaId);
-    const esSierra = ['HUA', 'SPP', 'ZAC', 'CHG', 'ZAH', 'ATG', 'TUL'].includes(zonaId);
+    const esAltiplano = ['ACT', 'APN', 'PMN', 'PMS', 'TIZ'].includes(zonaId);
+    const esSierra = ['ATG', 'CHG', 'HUA', 'HYC', 'SPP', 'TUL', 'XIC', 'ZAC', 'ZAH'].includes(zonaId);
 
     // --- Cálculos previos sobre la serie de la zona ---
     let api7DiasPrevios = 0;
