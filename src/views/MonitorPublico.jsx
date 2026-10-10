@@ -158,10 +158,10 @@ export default function MonitorPublico() {
 
   // Eje de tiempo homogéneo y estable: 24 horas naturales completas
   const obtenerHorasPestana = () => {
-    if (!datosConsenso || datosConsenso.length === 0) return [];
-    if (pestanaActiva === 'hoy') return datosConsenso.slice(0, 24);
-    if (pestanaActiva === 'manana') return datosConsenso.slice(24, 48);
-    return datosConsenso.slice(48, 72);
+    if (!datosConsenso || datosConsenso.length < 240) return [];
+    if (pestanaActiva === 'hoy') return datosConsenso.slice(168, 192);
+    if (pestanaActiva === 'manana') return datosConsenso.slice(192, 216);
+    return datosConsenso.slice(216, 240);
   };
 
   const horasMostradas = obtenerHorasPestana();
