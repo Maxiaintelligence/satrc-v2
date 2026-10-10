@@ -138,8 +138,8 @@ export default function SatRCOperativo({ alCerrarSesion }) {
   const [modalReporteOnDemandAbierto, setModalReporteOnDemandAbierto] = useState(false);
   const [generandoOnDemand, setGenerandoOnDemand] = useState(false);
   const [reporteVigente, setReporteVigente] = useState(null);
-
-  const ADMIN_TOKEN = "CaritasAdmin2026";
+  
+  const ADMIN_TOKEN = import.meta.env.VITE_SARA_ONDEMAND_TOKEN || "";
 
   const alertaSMNRef = useRef(null);
   useEffect(() => {
@@ -274,6 +274,10 @@ export default function SatRCOperativo({ alCerrarSesion }) {
   // N12 — Generar Reporte On-Demand con datos atmosféricos reales
   // ============================================================
   const generarReporteOnDemand = async () => {
+    if (!ADMIN_TOKEN) {
+      alert("Error de configuración: VITE_SARA_ONDEMAND_TOKEN no está definido. Contacte al administrador.");
+      return;
+    }
     setGenerandoOnDemand(true);
     setModalReporteOnDemandAbierto(true);
 

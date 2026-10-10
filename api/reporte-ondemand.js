@@ -3,6 +3,7 @@ import { put, list } from '@vercel/blob';
 
 const BLOQUE_GENESIS = "0000000000000000000000000000000000000000000000000000000000000000";
 const MAX_REGISTROS_BITACORA = 500;
+const TIMEOUT_GROQ_MS = 30000;
 
 function generarHashSHA256(prevHash, timestamp, datos) {
   return crypto.createHash('sha256')
@@ -54,10 +55,6 @@ function normalizarAlertaSMN(alertaRaw) {
   };
 }
 
-/**
- * N12 — Sanitiza los datos atmosféricos reales recibidos del frontend.
- * Devuelve null si no hay información utilizable.
- */
 function normalizarDatosAtmosfericos(raw) {
   if (!raw || typeof raw !== 'object') return null;
 
@@ -79,7 +76,6 @@ function normalizarDatosAtmosfericos(raw) {
     confiabilidad_dominante: String(raw.confiabilidad_dominante || 'DESCONOCIDA').slice(0, 20)
   };
 
-  // Si no hay ni un solo dato numérico, no lo usamos
   const tieneAlgunDato = Object.values(limpio).some(v => typeof v === 'number' && v !== null);
   if (!tieneAlgunDato) return null;
 
@@ -108,8 +104,32 @@ function construirBloqueAtmosferico(datos) {
          lineas.map(l => `- ${l}`).join('\n');
 }
 
+/**
+ * C2 + N5 — Validación del token administrativo con timingSafeEqual.
+ * Lee el token esperado desde SARA_ONDEMAND_TOKEN (variable de entorno secreta).
+ */
+function tokenValido(req) {
+  const esperado = process.env.SARA_ONDEMAND_TOKEN;
+  const recibido = req.headers['x-admin-token'];
+  if (!esperado || typeof recibido !== 'string' || recibido.length === 0) return false;
+  const a = Buffer.from(recibido);
+  const b = Buffer.from(esperado);
+  if (a.length !== b.length) return false;
+  return crypto.timingSafeEqual(a, b);
+}
+
 export default async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+
+  // C2 + N5 — Validar método HTTP
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: "Método no permitido. Usar POST." });
+  }
+
+  // C2 + N5 — Validar token administrativo
+  if (!tokenValido(req)) {
+    return res.status(401).json({ error: "No autorizado" });
+  }
 
   const ahora = new Date();
   const fechaDiaMexico = ahora.toLocaleDateString('es-MX', {
@@ -181,7 +201,8 @@ REGLAS OBLIGATORIAS:
 2. Reconoce que el Altiplano (Apan, Tizayuca, Pachuca) está en calma por sombra orográfica y que la Sierra (Huauchinango, Pahuatlán, Zihuateutla) concentra la tensión.
 3. ANTI-ALUCINACIÓN (crítico): la sección I debe redactarse EXCLUSIVAMENTE con base en el bloque "DATOS METEOROLÓGICOS REALES MEDIDOS" y en el "AVISO OFICIAL" si está activo. PROHIBIDO mencionar sistemas sinópticos específicos (frentes fríos, ciclones, depresiones tropicales, vaguadas, canales de baja presión) si el bloque de datos reales no los describe explícitamente. Si no hay evidencia de un sistema particular, describe las condiciones medidas (temperaturas, lluvia acumulada, vientos, humedad) sin atribuirles una causa sinóptica inventada.
 4. Si el bloque AVISO OFICIAL indica un aviso vigente de CONAGUA/SMN, DEBES integrarlo explícitamente en las secciones I y IV, mencionando el nivel del aviso, el rango de lluvia esperado y los estados afectados.
-5. Responde ÚNICAMENTE un objeto JSON con las 6 secciones exactas:
+5. VOCABULARIO OBLIGATORIO: usa siempre "localidades" (no "municipios", no "comunidades", no "pueblos") al referirte a los conteos del semáforo diocesano. Los municipios son la unidad administrativa; las localidades son la unidad de monitoreo del sistema.
+6. Responde ÚNICAMENTE un objeto JSON con las 6 secciones exactas:
 {
   "seccion_I_atmosfera": "Párrafo sobre las condiciones atmosféricas reales medidas en el nodo de referencia, sin inventar sistemas sinópticos",
   "seccion_II_focos_sierra": "Párrafo explicando la física de laderas y cuencas bajo tensión, basado en los conteos del semáforo",
@@ -200,17 +221,19 @@ ${bloqueAtmosferico}
 
 SEMÁFORO DIOCESANO ACTUAL (sobre 405 localidades):
 - Nivel 4 (Emergencia, laderas ≥ 45°): ${resumenSeveridad?.totalNivel4 ?? 0} localidades
-- Nivel 3 (Alerta Temprana, laderas 25°-44°): ${resumenSeveridad?.totalNivel3 ?? 0}
-- Nivel 2 (Vigilancia, valles y niebla): ${resumenSeveridad?.totalNivel2 ?? 0}
-- Nivel 1 (Estables, Altiplano): ${resumenSeveridad?.totalNivel1 ?? 0}
+- Nivel 3 (Alerta Temprana, laderas 25°-44°): ${resumenSeveridad?.totalNivel3 ?? 0} localidades
+- Nivel 2 (Vigilancia, valles y niebla): ${resumenSeveridad?.totalNivel2 ?? 0} localidades
+- Nivel 1 (Estables, Altiplano): ${resumenSeveridad?.totalNivel1 ?? 0} localidades
 
 COMUNIDADES CRÍTICAS BAJO TENSIÓN (N3-N4): ${JSON.stringify(focosCriticos || [])}.
 
 Devuelve la respuesta en formato JSON estricto.`;
 
   try {
+    // A1 — Timeout explícito de 30 segundos sobre el fetch a Groq
     const respuestaGroq = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
+      signal: AbortSignal.timeout(TIMEOUT_GROQ_MS),
       headers: {
         "Authorization": `Bearer ${apiKeyGroq.trim()}`,
         "Content-Type": "application/json"
@@ -336,6 +359,11 @@ Devuelve la respuesta en formato JSON estricto.`;
     });
 
   } catch (error) {
+    // A1 — Manejo específico de timeout vs otros errores
+    if (error.name === 'TimeoutError' || error.name === 'AbortError') {
+      console.error("Timeout consultando Groq después de", TIMEOUT_GROQ_MS, "ms");
+      return res.status(504).json({ error: "Timeout consultando Groq. Intente de nuevo." });
+    }
     console.error("Fallo generando reporte On-Demand:", error);
     return res.status(500).json({ error: "No se pudo generar ni guardar el reporte" });
   }
