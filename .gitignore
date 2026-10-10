@@ -22,3 +22,12 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Salidas reproducibles de auditoria (no versionar)
+diagnostico_calibracion.json
+series_historicas_14_zonas.json
+simulacion_nodos_resultado.json
+simulacion_nodos_resultado_v2.json
+*.tmp
+
+notas_personales/
