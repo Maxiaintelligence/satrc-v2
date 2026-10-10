@@ -1,27 +1,52 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import db from '../data/localidades.json';
 import { consultarModelosDeterministas } from '../engine/meteoFetcher.js';
 import { generarConsensoDeterminista } from '../engine/consensusEngine.js';
 import SatelliteViewer from '../components/SatelliteViewer.jsx';
 import DisclaimerModal from '../components/DisclaimerModal.jsx';
-import { 
-  CloudRain, 
-  Thermometer, 
-  Wind, 
-  MapPin, 
-  ShieldCheck, 
-  Calendar, 
+import {
+  CloudRain,
+  Thermometer,
+  Wind,
+  MapPin,
+  ShieldCheck,
+  Calendar,
   Info,
   Droplets,
   TrendingUp,
   Building2,
-  Bot
+  Bot,
+  Clock,
+  RotateCw
 } from 'lucide-react';
+
+const INTERVALO_REFRESCO_MS = 30 * 60 * 1000; // 30 minutos
+
+function formatearTimestamp(isoUtc) {
+  if (!isoUtc) return null;
+  try {
+    const fecha = new Date(isoUtc);
+    if (isNaN(fecha.getTime())) return null;
+    const fechaMx = fecha.toLocaleDateString('es-MX', {
+      timeZone: 'America/Mexico_City',
+      day: '2-digit',
+      month: 'short'
+    });
+    const horaMx = fecha.toLocaleTimeString('es-MX', {
+      timeZone: 'America/Mexico_City',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    });
+    return `${fechaMx} • ${horaMx} hrs`;
+  } catch (e) {
+    return null;
+  }
+}
 
 export default function MonitorPublico() {
   const listaZonas = Object.values(db.indices.zonas);
 
-  // Estados de los 3 niveles jerárquicos
   const [zonaActiva, setZonaActiva] = useState(listaZonas[0] || null);
   const [municipioActivo, setMunicipioActivo] = useState('');
   const [localidadActiva, setLocalidadActiva] = useState(null);
@@ -31,8 +56,17 @@ export default function MonitorPublico() {
   const [pestanaActiva, setPestanaActiva] = useState('hoy');
   const [mostrarDisclaimer, setMostrarDisclaimer] = useState(false);
 
-  // Lista de municipios de la zona seleccionada
+  // N9-Public — Timestamp y refresh
+  const [ultimaConsulta, setUltimaConsulta] = useState(null);
+  const [refrescando, setRefrescando] = useState(false);
+
   const listaMunicipios = zonaActiva ? Object.keys(zonaActiva.municipios || {}) : [];
+
+  // Ref para acceder a la localidad activa desde el interval sin stale closure
+  const localidadRef = useRef(null);
+  useEffect(() => {
+    localidadRef.current = localidadActiva;
+  }, [localidadActiva]);
 
   // Al montar o cambiar de zona: fijar el primer municipio y su primera localidad
   useEffect(() => {
@@ -48,7 +82,6 @@ export default function MonitorPublico() {
     }
   }, [zonaActiva]);
 
-  // Al cambiar de municipio dentro de la zona: fijar su primera localidad
   const manejarCambioMunicipio = (e) => {
     const munSeleccionado = e.target.value;
     setMunicipioActivo(munSeleccionado);
@@ -70,30 +103,60 @@ export default function MonitorPublico() {
     if (loc) setLocalidadActiva(loc);
   };
 
-  // Consultar pronóstico meteorológico multi-modelo
-  useEffect(() => {
-    if (!localidadActiva) return;
+  // Función de carga reutilizable (usada al cambiar localidad y en el auto-refresh)
+  const cargarPronostico = async (localidad, silencioso = false) => {
+    if (!localidad) return;
 
-    let cancelado = false;
-    async function cargarPronostico() {
-      setCargando(true);
-      const res = await consultarModelosDeterministas(
-        localidadActiva.coords.lat,
-        localidadActiva.coords.lon
-      );
+    if (!silencioso) setCargando(true);
+    if (silencioso) setRefrescando(true);
 
-      if (!cancelado && res.exito) {
+    try {
+      const res = await consultarModelosDeterministas(localidad.coords.lat, localidad.coords.lon);
+      if (res.exito) {
         const serie = generarConsensoDeterminista(res.datos_horarios);
         setDatosConsenso(serie);
+        setUltimaConsulta(new Date().toISOString());
       }
-      if (!cancelado) setCargando(false);
+    } catch (e) {
+      console.warn("Fallo consultando Open-Meteo en MonitorPublico:", e.message);
     }
 
-    cargarPronostico();
-    return () => { cancelado = true; };
+    if (!silencioso) setCargando(false);
+    if (silencioso) setRefrescando(false);
+  };
+
+  // Carga inicial al cambiar de localidad
+  useEffect(() => {
+    if (localidadActiva) {
+      cargarPronostico(localidadActiva, false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [localidadActiva]);
 
-  // Eje de tiempo homogéneo y estable: 24 horas naturales completas (00:00 a 23:00)
+  // N9-Public — Auto-refresh cada 30 min + al volver a la pestaña
+  useEffect(() => {
+    const intervalo = setInterval(() => {
+      if (document.visibilityState === 'visible' && localidadRef.current) {
+        cargarPronostico(localidadRef.current, true);
+      }
+    }, INTERVALO_REFRESCO_MS);
+
+    const alCambiarVisibilidad = () => {
+      if (document.visibilityState === 'visible' && localidadRef.current) {
+        cargarPronostico(localidadRef.current, true);
+      }
+    };
+
+    document.addEventListener('visibilitychange', alCambiarVisibilidad);
+
+    return () => {
+      clearInterval(intervalo);
+      document.removeEventListener('visibilitychange', alCambiarVisibilidad);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Eje de tiempo homogéneo y estable: 24 horas naturales completas
   const obtenerHorasPestana = () => {
     if (!datosConsenso || datosConsenso.length === 0) return [];
     if (pestanaActiva === 'hoy') return datosConsenso.slice(0, 24);
@@ -103,13 +166,11 @@ export default function MonitorPublico() {
 
   const horasMostradas = obtenerHorasPestana();
 
-  // Métricas del periodo
   const lluviaTotalDia = horasMostradas.reduce((acc, h) => acc + h.lluvia_mm, 0).toFixed(1);
   const tempMaxDia = horasMostradas.length > 0 ? Math.max(...horasMostradas.map(h => h.temperatura_c)).toFixed(1) : '--';
   const tempMinDia = horasMostradas.length > 0 ? Math.min(...horasMostradas.map(h => h.temperatura_c)).toFixed(1) : '--';
   const vientoMaxDia = horasMostradas.length > 0 ? Math.max(...horasMostradas.map(h => h.rafagas_kmh)).toFixed(1) : '--';
 
-  // Geometría SVG Profesional
   const anchoGrafica = 920;
   const altoGrafica = 190;
   const padLeft = 48;
@@ -119,7 +180,6 @@ export default function MonitorPublico() {
 
   const coordX = (i) => padLeft + (i / 23) * (anchoGrafica - padLeft - padRight);
 
-  // Escala Temperatura
   const temps = horasMostradas.flatMap(h => [
     h.detalle_modelos?.temp?.ecmwf ?? h.temperatura_c,
     h.detalle_modelos?.temp?.gfs ?? h.temperatura_c,
@@ -137,27 +197,53 @@ export default function MonitorPublico() {
     }).join(' ');
   };
 
-  // Escala Lluvia
   const maxLl = Math.max(4, ...horasMostradas.map(h => h.lluvia_mm));
   const escalaYBarra = (mm) => ((mm / maxLl) * (altoGrafica - padTop - padBottom));
 
-  // Escala Viento
   const maxV = Math.max(30, ...horasMostradas.map(h => Math.max(h.viento_kmh, h.rafagas_kmh)));
   const coordYV = (v) => altoGrafica - padBottom - (v / maxV) * (altoGrafica - padTop - padBottom);
 
   const esHoraReferencia = (i) => i % 3 === 0 || i === 23;
+
+  const textoUltimaConsulta = formatearTimestamp(ultimaConsulta);
 
   return (
     <div className="space-y-6">
       <DisclaimerModal abierto={mostrarDisclaimer} alCerrar={() => setMostrarDisclaimer(false)} />
 
       {/* ========================================================== */}
-      {/* 1. SELECTOR EN CASCADA DE 3 NIVELES (ZONA ➔ MUNICIPIO ➔ LOCALIDAD) */}
+      {/* 0. BARRA DE ESTADO — N9-Public                              */}
+      {/* ========================================================== */}
+      <div className="flex flex-wrap items-center justify-between gap-3 px-1">
+        <div className="flex items-center gap-2 text-xs text-slate-400">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span>Monitor público de consulta · Datos en vivo desde Open-Meteo</span>
+        </div>
+        <div className="flex items-center gap-2">
+          {textoUltimaConsulta && (
+            <span className="text-[11px] font-bold px-2.5 py-1 rounded-full border bg-slate-900 text-amber-300 border-amber-500/30 flex items-center gap-1.5">
+              <Clock className="w-3 h-3" />
+              Actualizado: {textoUltimaConsulta}
+            </span>
+          )}
+          <button
+            onClick={() => localidadActiva && cargarPronostico(localidadActiva, true)}
+            disabled={refrescando || !localidadActiva}
+            title="Refrescar datos meteorológicos"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-slate-300 hover:text-white text-[11px] font-bold border border-slate-700 transition-all"
+          >
+            <RotateCw className={`w-3 h-3 ${refrescando ? 'animate-spin' : ''}`} />
+            <span>{refrescando ? 'Refrescando...' : 'Refrescar'}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* ========================================================== */}
+      {/* 1. SELECTOR EN CASCADA DE 3 NIVELES                        */}
       {/* ========================================================== */}
       <div className="bg-slate-900 border-2 border-slate-700 p-5 rounded-2xl shadow-xl">
         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-12 gap-3.5 items-end">
-          
-          {/* Nivel 1: Zona de Resguardo / Cuenca */}
+
           <div className="md:col-span-1 lg:col-span-4 space-y-1.5">
             <label className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
               <MapPin className="w-4 h-4 text-amber-400 shrink-0" />
@@ -176,7 +262,6 @@ export default function MonitorPublico() {
             </select>
           </div>
 
-          {/* Nivel 2: Municipio */}
           <div className="md:col-span-1 lg:col-span-3 space-y-1.5">
             <label className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
               <Building2 className="w-4 h-4 text-emerald-400 shrink-0" />
@@ -195,7 +280,6 @@ export default function MonitorPublico() {
             </select>
           </div>
 
-          {/* Nivel 3: Localidad Específica */}
           <div className="md:col-span-1 lg:col-span-3 space-y-1.5">
             <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
               3. Comunidad / Localidad
@@ -217,7 +301,6 @@ export default function MonitorPublico() {
             </select>
           </div>
 
-          {/* Botón de Deslinde */}
           <div className="md:col-span-3 lg:col-span-2">
             <button
               onClick={() => setMostrarDisclaimer(true)}
@@ -232,7 +315,7 @@ export default function MonitorPublico() {
       </div>
 
       {/* ========================================================== */}
-      {/* 2. SÍNTESIS DE SITUACIÓN COMUNITARIA EMITIDA POR SARA     */}
+      {/* 2. SÍNTESIS DE SITUACIÓN COMUNITARIA EMITIDA POR SARA      */}
       {/* ========================================================== */}
       {localidadActiva && (
         <div className="bg-slate-900 border-2 border-slate-800 p-4 rounded-2xl shadow-xl flex items-start gap-3.5">
@@ -247,7 +330,7 @@ export default function MonitorPublico() {
               <span className="text-[10px] text-slate-500 font-mono">Orientación Comunitaria</span>
             </div>
             <p className="text-xs md:text-sm text-slate-200 leading-relaxed font-normal">
-              {Number(lluviaTotalDia) >= 20.0 
+              {Number(lluviaTotalDia) >= 20.0
                 ? `Vigilancia activa en ${localidadActiva.nombre} (${localidadActiva.municipio}): Previsión de ${lluviaTotalDia} mm acumulados con bancos de niebla densa en carreteras de montaña. Se recomienda extrema precaución en traslados hacia caminos de ${localidadActiva.vulnerabilidad?.acceso_vial?.toLowerCase() || 'terracería'} por reducción de adherencia.`
                 : `Condiciones de estabilidad en ${localidadActiva.nombre} (${localidadActiva.municipio}). Lluvia prevista de ${lluviaTotalDia} mm en el período de 24 horas, dentro de parámetros ordinarios para la cuenca. Actividades comunitarias y traslados sin restricciones de seguridad.`}
             </p>
@@ -256,7 +339,7 @@ export default function MonitorPublico() {
       )}
 
       {/* ========================================================== */}
-      {/* 3. BOTONES TEMPORALES (24 HORAS COMPLETAS 00:00 A 23:00)  */}
+      {/* 3. BOTONES TEMPORALES                                      */}
       {/* ========================================================== */}
       <div className="flex flex-wrap gap-2 border-b border-slate-800 pb-2">
         <button
@@ -302,7 +385,7 @@ export default function MonitorPublico() {
       {localidadActiva && (
         <div className="bg-gradient-to-r from-slate-900 via-slate-900 to-slate-800 border-2 border-slate-800 p-5 rounded-2xl shadow-xl">
           <div className="flex flex-col lg:flex-row justify-between lg:items-center gap-4">
-            
+
             <div>
               <div className="flex items-center gap-2 text-amber-400 text-xs font-bold uppercase tracking-wider mb-1">
                 <span>{localidadActiva.municipio}, {localidadActiva.estado}</span>
@@ -356,10 +439,10 @@ export default function MonitorPublico() {
       )}
 
       {/* ========================================================== */}
-      {/* 5. EVOLUCIÓN HORARIA: 4 CUADRANTES DE ALTA LEGIBILIDAD     */}
+      {/* 5. EVOLUCIÓN HORARIA                                       */}
       {/* ========================================================== */}
       <div className="space-y-4 pt-1">
-        
+
         <div className="flex flex-wrap justify-between items-center gap-2 px-1">
           <div>
             <h2 className="text-base md:text-lg font-black text-white flex items-center gap-2">
@@ -391,8 +474,7 @@ export default function MonitorPublico() {
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            
-            {/* CUADRANTE 1: TEMPERATURA COMPARATIVA MULTI-MODELO */}
+
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl space-y-2">
               <div className="flex justify-between items-center border-b border-slate-800/80 pb-2">
                 <span className="text-xs font-bold text-white flex items-center gap-1.5">
@@ -452,7 +534,6 @@ export default function MonitorPublico() {
               </div>
             </div>
 
-            {/* CUADRANTE 2: PRECIPITACIÓN POR HORA */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl space-y-2">
               <div className="flex justify-between items-center border-b border-slate-800/80 pb-2">
                 <span className="text-xs font-bold text-white flex items-center gap-1.5">
@@ -485,12 +566,12 @@ export default function MonitorPublico() {
 
                     return (
                       <g key={i}>
-                        <rect 
-                          x={x - 9} 
-                          y={y} 
-                          width="18" 
-                          height={Math.max(2, altBarra)} 
-                          rx="3" 
+                        <rect
+                          x={x - 9}
+                          y={y}
+                          width="18"
+                          height={Math.max(2, altBarra)}
+                          rx="3"
                           fill={h.lluvia_mm > 3 ? '#2563eb' : (h.lluvia_mm > 0.4 ? '#3b82f6' : '#1e293b')}
                           stroke={h.lluvia_mm > 0.4 ? '#60a5fa' : 'none'}
                           strokeWidth="1"
@@ -512,7 +593,6 @@ export default function MonitorPublico() {
               </div>
             </div>
 
-            {/* CUADRANTE 3: HUMEDAD RELATIVA (%) */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl space-y-2">
               <div className="flex justify-between items-center border-b border-slate-800/80 pb-2">
                 <span className="text-xs font-bold text-white flex items-center gap-1.5">
@@ -537,12 +617,12 @@ export default function MonitorPublico() {
                     );
                   })}
 
-                  <path 
+                  <path
                     d={horasMostradas.map((h, i) => {
                       const x = coordX(i);
                       const y = altoGrafica - padBottom - (h.humedad_relativa_pct / 100) * (altoGrafica - padTop - padBottom);
                       return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
-                    }).join(' ')} 
+                    }).join(' ')}
                     fill="none" stroke="#22d3ee" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"
                   />
 
@@ -574,7 +654,6 @@ export default function MonitorPublico() {
               </div>
             </div>
 
-            {/* CUADRANTE 4: VIENTO SOSTENIDO VS. RÁFAGAS (KM/H) */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl space-y-2">
               <div className="flex justify-between items-center border-b border-slate-800/80 pb-2">
                 <span className="text-xs font-bold text-white flex items-center gap-1.5">
@@ -599,13 +678,13 @@ export default function MonitorPublico() {
                     );
                   })}
 
-                  <path 
-                    d={horasMostradas.map((h, i) => `${i === 0 ? 'M' : 'L'} ${coordX(i)} ${coordYV(h.rafagas_kmh)}`).join(' ')} 
-                    fill="none" stroke="#fb923c" strokeWidth="2.5" strokeDasharray="6 3" strokeLinecap="round" strokeLinejoin="round" 
+                  <path
+                    d={horasMostradas.map((h, i) => `${i === 0 ? 'M' : 'L'} ${coordX(i)} ${coordYV(h.rafagas_kmh)}`).join(' ')}
+                    fill="none" stroke="#fb923c" strokeWidth="2.5" strokeDasharray="6 3" strokeLinecap="round" strokeLinejoin="round"
                   />
-                  <path 
-                    d={horasMostradas.map((h, i) => `${i === 0 ? 'M' : 'L'} ${coordX(i)} ${coordYV(h.viento_kmh)}`).join(' ')} 
-                    fill="none" stroke="#2dd4bf" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" 
+                  <path
+                    d={horasMostradas.map((h, i) => `${i === 0 ? 'M' : 'L'} ${coordX(i)} ${coordYV(h.viento_kmh)}`).join(' ')}
+                    fill="none" stroke="#2dd4bf" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"
                   />
 
                   {horasMostradas.map((h, i) => {
@@ -642,7 +721,7 @@ export default function MonitorPublico() {
       </div>
 
       {/* ========================================================== */}
-      {/* 6. SECCIÓN DE SATÉLITE GOES-19 (AL FINAL)                 */}
+      {/* 6. SECCIÓN DE SATÉLITE GOES-19                             */}
       {/* ========================================================== */}
       <div className="pt-2">
         <SatelliteViewer />
