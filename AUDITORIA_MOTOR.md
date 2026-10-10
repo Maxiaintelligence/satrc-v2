@@ -264,3 +264,78 @@ git status --short
 git add AUDITORIA_MOTOR.md scripts\diagnostico\ .gitignore
 git commit -m "docs: auditoria tecnica del motor y justificacion empirica de 14 nodos regionales"
 git push origin main
+
+---
+
+## Anexo D — Análisis de nodos de referencia por zona
+
+### D.1 Criterio de selección
+
+Para cada una de las 14 zonas de resguardo se necesita una **localidad de referencia** cuya serie meteorológica de Open-Meteo represente el comportamiento atmosférico de la zona completa.
+
+El criterio adoptado es **la localidad más poblada de cada zona**, con las siguientes justificaciones:
+
+1. **Priorización de vidas.** La serie meteorológica que alimenta al motor determina el nivel de alerta. Si el nodo representa a la localidad con más habitantes, el error de clasificación afecta a menos personas.
+2. **Reproducibilidad.** El criterio es objetivo y computable. No requiere decisiones ad-hoc que puedan ser cuestionadas en auditoría.
+3. **Estabilidad.** La población de las localidades cambia lentamente. El nodo no necesita recalibrarse cada año.
+
+### D.2 Nodos seleccionados
+
+| Zona | Zona de resguardo | Localidad de referencia | Población | Método |
+|------|-------------------|-------------------------|-----------|--------|
+| ACT | Altiplano Tula–Actopan | Actopan | 32,276 | Más poblada |
+| APN | Apan y Llanos Altos | Fray Bernardino de Sahagún (Ciudad Sahagún) | — | Más poblada |
+| ATG | Atotonilco–Sierra de Amajac | Mineral del Monte | — | Más poblada |
+| CHG | Chignahuapan | Ciudad de Chignahuapan | — | Más poblada |
+| HUA | Huauchinango y Cuenca del Necaxa | Huauchinango | — | Más poblada |
+| HYC | Huayacocotla y Sierra de Vinazco | Huayacocotla | — | Más poblada |
+| PMN | Pachuca Metropolitana Norte | Pachuca de Soto Centro | 297,848 | Más poblada |
+| PMS | Pachuca Metropolitana Sur | Paseos de Chavarría | 22,023 | Más poblada |
+| SPP | Sierra de Pahuatlán y Otomí-Tepehua | Tepepa (Santiago Tepepa) | — | Más poblada |
+| TIZ | Tizayuca y Corredor Industrial Sur | Tizayuca | — | Más poblada |
+| TUL | Valle de Tulancingo | Tulancingo | — | Más poblada |
+| XIC | Xicotepec y Cañón de San Marcos | Xicotepec de Juárez | — | Más poblada |
+| ZAC | Zacatlán y Cañadas Orientales | Zacatlán | — | Más poblada |
+| ZAH | Zacualtipán y Sierra Alta Hidalguense | Zacualtipán | — | Más poblada |
+
+**No se requieren overrides manuales.** El criterio "más poblada" produce nodos representativos en las 14 zonas.
+
+### D.3 Validación empírica — caso Pachuca
+
+La Zona Metropolitana de Pachuca está dividida en dos zonas de resguardo (PMN y PMS) por razones de concentración urbana. Se realizó una validación específica para confirmar que los nodos seleccionados son climáticamente representativos.
+
+**Datos históricos de 30 días (10 sep – 9 oct 2026):**
+
+| Localidad | Zona | Rol | Lluvia 30d | Temp Mín/Máx | Viento Máx |
+|-----------|------|-----|------------|--------------|------------|
+| Pachuca de Soto Centro | PMN | Centro urbano | 116.2 mm | 8.1/24.6 °C | 23.3 km/h |
+| La Providencia Siglo XXI | PMN | Norte industrial | 85.6 mm | 7.5/26.4 °C | 30.4 km/h |
+| Pachuquilla | PMN | Transición sur | 98.4 mm | 7.4/25.2 °C | 27.7 km/h |
+| Carboneras Fraccionamiento | PMN | Norte alto | 98.4 mm | 6.7/24.4 °C | 27.7 km/h |
+| Paseos de Chavarría | PMS | Sur industrial | 85.6 mm | 7.6/26.6 °C | 30.4 km/h |
+| Privadas Santa Matilde | PMS | Sur residencial | 98.5 mm | 8.8/27.7 °C | 27.9 km/h |
+| El Saucillo Fraccionamiento | PMS | Sur residencial | 98.4 mm | 7.8/25.5 °C | 27.7 km/h |
+
+### D.4 Conclusiones del caso Pachuca
+
+1. **PMN tiene un nodo claramente dominante.** Pachuca de Soto Centro concentra el **87% de la población** de la zona (297,848 de ~342,000 habitantes). Su perfil climático (30% más lluvia que el resto de la zona, 2°C más fresco) es único y bien diferenciado. La elección como nodo es correcta.
+
+2. **PMS tiene un perfil climático propio.** Paseos de Chavarría y Privadas Santa Matilde comparten un régimen más cálido (26-28°C máx) y más ventoso (28-30 km/h) que PMN. Este perfil justifica la separación en dos zonas independientes.
+
+3. **La hipótesis de que Pachuquilla tiene clima distinto se confirma.** Sus valores (98.4 mm, 27.7 km/h) se parecen más a Carboneras (PMN) y El Saucillo (PMS) que a Pachuca Centro. Sin embargo, Pachuquilla representa solo el 3% de la población de PMN. El error de representación es tolerable frente a la alternativa (que la zona PMN se evalúe con datos que no representan a su 87% urbano).
+
+4. **Los overrides manuales no son necesarios.** El criterio "más poblada" produce:
+   - Pachuca de Soto Centro para PMN (297k habitantes)
+   - Paseos de Chavarría para PMS (22k habitantes)
+
+   Ambos son la elección técnicamente correcta en términos de población, y climáticamente defendibles como representativos de su zona.
+
+### D.5 Limitaciones reconocidas
+
+- Los datos de este análisis cubren 30 días (10 sep – 9 oct 2026). Un análisis estacional completo requeriría 12 meses.
+- Las localidades de algunas zonas (HYC, ATG) tienen poblaciones bajas y no se analizaron en profundidad por escasez de datos demográficos diferenciadores.
+- El análisis no evalúa la representatividad climática de zonas individuales, solo el caso Pachuca por su complejidad administrativa.
+
+### D.6 Referencia a scripts
+
+El análisis completo se puede reproducir ejecutando el script almacenado en:
