@@ -860,7 +860,7 @@ Documento oficial emitido para párrocos, brigadistas y autoridades de auxilio.
             </div>
 
             <div className="p-4 overflow-y-auto space-y-3 font-mono text-xs">
-              {bitacoraSARA.map((entry) => (
+              {[...bitacoraSARA].reverse().map((entry) => (
                 <div key={entry.id} className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-1.5">
                   <div className="flex justify-between items-center text-[11px]">
                     <span className="text-amber-400 font-bold">{entry.fecha_dia_mexico ? `${entry.fecha_dia_mexico} • ${entry.hora_exacta_mexico}` : (entry.timestamp_local || entry.timestamp_iso || '(sin fecha)')} ({entry.id})</span>
