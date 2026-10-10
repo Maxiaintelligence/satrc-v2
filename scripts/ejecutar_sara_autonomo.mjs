@@ -14,6 +14,161 @@ console.log(`📡 [SARA RUNNER RESILIENTE] Evaluando ${todasLocalidades.length} 
 const BLOQUE_GENESIS = "0000000000000000000000000000000000000000000000000000000000000000";
 const MIN_HORAS_REQUERIDAS = 192;
 const MAX_REGISTROS_BITACORA = 500;
+const TIMEOUT_FETCH_MS = 30000;
+const ESPERA_REINTENTO_MS = 3000;
+
+// ============================================================
+// FASE 1: Selección de nodos regionales (uno por zona)
+// ============================================================
+
+function seleccionarNodosRegionales() {
+  const nodos = {};
+  const zonas = {};
+
+  todasLocalidades.forEach(loc => {
+    const zonaId = loc.zona_id;
+    if (!zonaId) return;
+
+    const poblacion = parseInt(loc.vulnerabilidad?.poblacion || 0, 10);
+    if (!zonas[zonaId] || poblacion > zonas[zonaId].poblacion) {
+      zonas[zonaId] = {
+        zona_id: zonaId,
+        zona_nombre: loc.zona_nombre || zonaId,
+        localidad: loc.nombre,
+        municipio: loc.municipio,
+        lat: loc.coords.lat,
+        lon: loc.coords.lon,
+        poblacion
+      };
+    }
+  });
+
+  Object.values(zonas).forEach(n => { nodos[n.zona_id] = n; });
+  return nodos;
+}
+
+// ============================================================
+// FASE 2: Consulta de Open-Meteo por zona, con reintentos
+// ============================================================
+
+function extraerValor(h, indice, nombreBase, valorDefecto = 0) {
+  if (!h) return valorDefecto;
+  return h[nombreBase]?.[indice] ??
+         h[`${nombreBase}_gfs_seamless`]?.[indice] ??
+         h[`${nombreBase}_icon_seamless`]?.[indice] ??
+         valorDefecto;
+}
+
+async function consultarZonaUnaVez(nodo) {
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${nodo.lat}&longitude=${nodo.lon}` +
+              `&hourly=precipitation,temperature_2m,relative_humidity_2m,wind_speed_10m,wind_gusts_10m,visibility` +
+              `&models=gfs_seamless,icon_seamless&past_days=7&forecast_days=3&timezone=America%2FMexico_City`;
+
+  const res = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_FETCH_MS) });
+  if (!res.ok) {
+    throw new Error(`Open-Meteo HTTP ${res.status}`);
+  }
+
+  const data = await res.json();
+  const h = data.hourly;
+  if (!h || !h.time) {
+    throw new Error("Respuesta sin bloque hourly");
+  }
+
+  const serie = [];
+  for (let i = 0; i < h.time.length; i++) {
+    serie.push({
+      fecha_hora: h.time[i],
+      lluvia_mm: extraerValor(h, i, 'precipitation', 0),
+      temperatura_c: extraerValor(h, i, 'temperature_2m', 15),
+      humedad_relativa_pct: extraerValor(h, i, 'relative_humidity_2m', 60),
+      viento_kmh: extraerValor(h, i, 'wind_speed_10m', 10),
+      rafagas_kmh: extraerValor(h, i, 'wind_gusts_10m', 15),
+      visibilidad_km: extraerValor(h, i, 'visibility', 10000) / 1000
+    });
+  }
+
+  if (serie.length < MIN_HORAS_REQUERIDAS) {
+    throw new Error(`Serie insuficiente: ${serie.length} horas (mínimo ${MIN_HORAS_REQUERIDAS})`);
+  }
+
+  return serie;
+}
+
+async function consultarZonaConReintentos(nodo) {
+  const intentos = 2;
+  let ultimoError = null;
+
+  for (let i = 1; i <= intentos; i++) {
+    try {
+      const serie = await consultarZonaUnaVez(nodo);
+      return { ok: true, serie, intentos: i };
+    } catch (e) {
+      ultimoError = e.message;
+      if (i < intentos) {
+        console.warn(`  ⏳ [${nodo.zona_id}] Intento ${i} falló: ${e.message}. Reintentando en ${ESPERA_REINTENTO_MS / 1000}s...`);
+        await new Promise(r => setTimeout(r, ESPERA_REINTENTO_MS));
+      }
+    }
+  }
+
+  return { ok: false, serie: [], error: ultimoError, intentos };
+}
+
+async function cargarSeriesRegionales(nodos) {
+  const zonaIds = Object.keys(nodos);
+  console.log(`\n🌐 Consultando ${zonaIds.length} nodos regionales en paralelo...`);
+
+  const t0 = Date.now();
+
+  const promesas = zonaIds.map((zonaId, indice) => {
+    const nodo = nodos[zonaId];
+    // Stagger: 200ms entre cada fetch para no gatillar rate limits de Open-Meteo
+    return new Promise(r => setTimeout(r, indice * 200))
+      .then(() => consultarZonaConReintentos(nodo))
+      .then(resultado => ({
+        zonaId,
+        nodo,
+        ...resultado
+      }));
+  });
+
+  const resultados = await Promise.allSettled(promesas);
+
+  const series = {};
+  const zonasOk = [];
+  const zonasFallidas = [];
+
+  resultados.forEach((r, i) => {
+    const zonaId = zonaIds[i];
+    if (r.status === 'fulfilled') {
+      series[zonaId] = r.value;
+      if (r.value.ok) {
+        zonasOk.push(`${zonaId}(${r.value.serie.length}h)`);
+        console.log(`  ✅ [${zonaId}] ${r.value.serie.length}h en ${r.value.intentos} intento(s)`);
+      } else {
+        zonasFallidas.push(zonaId);
+        console.warn(`  ❌ [${zonaId}] Falló después de ${r.value.intentos} intentos: ${r.value.error}`);
+      }
+    } else {
+      series[zonaId] = { ok: false, serie: [], error: r.reason?.message || 'Promise rechazada', intentos: 0 };
+      zonasFallidas.push(zonaId);
+      console.error(`  ❌ [${zonaId}] Error inesperado: ${r.reason?.message}`);
+    }
+  });
+
+  const dt = ((Date.now() - t0) / 1000).toFixed(1);
+  console.log(`\n📊 Cobertura: ${zonasOk.length}/${zonaIds.length} zonas OK en ${dt}s`);
+  if (zonasFallidas.length > 0) {
+    console.warn(`⚠️  Zonas sin datos: ${zonasFallidas.join(', ')}`);
+  }
+
+  return { series, zonasOk, zonasFallidas };
+}
+
+// ============================================================
+// Helpers (fecha, hash, ID)
+// ============================================================
 
 function generarHashSHA256(prevHash, timestamp, datos) {
   return crypto.createHash('sha256')
@@ -54,9 +209,6 @@ function normalizarEstadoSituacion(estadoRaw) {
   if (limpio === 'SITUACION_GRAVE' || limpio === 'GRAVE' || limpio === 'ALERTA') {
     return 'SITUACION_GRAVE';
   }
-  if (limpio === 'SITUACION_ALERTA_PREPARACION' || limpio === 'ALERTA_PREPARACION') {
-    return 'SITUACION_GRAVE';
-  }
   return 'SITUACION_NORMAL';
 }
 
@@ -71,13 +223,9 @@ function siguienteIdBitacora(historial) {
   return maxId + 1;
 }
 
-function extraerValor(h, indice, nombreBase, valorDefecto = 0) {
-  if (!h) return valorDefecto;
-  return h[nombreBase]?.[indice] ??
-         h[`${nombreBase}_gfs_seamless`]?.[indice] ??
-         h[`${nombreBase}_icon_seamless`]?.[indice] ??
-         valorDefecto;
-}
+// ============================================================
+// Registro de corrida degradada (falla total de Open-Meteo)
+// ============================================================
 
 async function registrarCorridaDegradada(horaMexicoStr, fechaDiaMexico, horaExactaMexico, ahora, motivo) {
   try {
@@ -115,7 +263,7 @@ async function registrarCorridaDegradada(horaMexicoStr, fechaDiaMexico, horaExac
       timestamp_local: horaMexicoStr,
       origen_evento: "CORRIDA_DEGRADADA",
       estado_situacion: "CORRIDA_DEGRADADA",
-      titulo: "Corrida degradada: sin datos meteorológicos reales",
+      titulo: "Corrida degradada: sin datos meteorológicos de ninguna zona",
       resumen: `${motivo} a las ${horaMexicoStr}. No se publicó evaluación nueva para evitar alertas falsas. El estado anterior en el sistema permanece vigente.`,
       prev_hash: prevHash.slice(0, 16) + "...",
       hash: nuevoHash.slice(0, 16) + "...",
@@ -144,12 +292,16 @@ async function registrarCorridaDegradada(horaMexicoStr, fechaDiaMexico, horaExac
   }
 }
 
+// ============================================================
+// Ejecución principal
+// ============================================================
+
 async function ejecutarSARA() {
   const ahora = new Date();
   const { fechaDia: fechaDiaMexico, horaExacta: horaExactaMexico, horaCorta: horaMexicoStr } = obtenerFechaHoraMexico(ahora);
   const proximaCorridaStr = obtenerFechaHoraMexico(new Date(ahora.getTime() + 3 * 3600000)).horaCorta;
 
-  // 1. Detección DINÁMICA de Aviso Federal (Sin ningún texto quemado)
+  // --- 1. Aviso SMN ---
   let alertaSMN = null;
   try {
     const resSMN = await fetch("https://smn.conagua.gob.mx/tools/GUI/webservices/index.php?method=1").catch(() => null);
@@ -182,54 +334,21 @@ async function ejecutarSARA() {
     console.log("🏛️ Sin conexión con SMN; evaluando únicamente con modelos meteorológicos vivos.");
   }
 
-  // 2. Consulta Meteorológica de Cuenca
-  const nodoSierra = todasLocalidades.find(l => l.nombre.toLowerCase().includes('huauchinango')) || todasLocalidades[0];
-  const urlMeteo = `https://api.open-meteo.com/v1/forecast?latitude=${nodoSierra.coords.lat}&longitude=${nodoSierra.coords.lon}` +
-                   `&hourly=precipitation,temperature_2m,relative_humidity_2m,wind_speed_10m,wind_gusts_10m,visibility` +
-                   `&models=gfs_seamless,icon_seamless&past_days=7&forecast_days=3&timezone=America%2FMexico_City`;
+  // --- 2. Cargar series por zona ---
+  const nodos = seleccionarNodosRegionales();
+  console.log(`\n🗺️  Nodos regionales seleccionados: ${Object.keys(nodos).length} zonas`);
+  Object.values(nodos).forEach(n => {
+    console.log(`  ${n.zona_id.padEnd(5)} | ${n.localidad.padEnd(32)} | ${n.poblacion.toLocaleString()} hab.`);
+  });
 
-  let serieHoraria = [];
-  let falloMeteo = null;
+  const { series, zonasOk, zonasFallidas } = await cargarSeriesRegionales(nodos);
 
-  try {
-    const resM = await fetch(urlMeteo);
-    if (!resM.ok) {
-      falloMeteo = `Open-Meteo respondió HTTP ${resM.status}`;
-    } else {
-      const dataM = await resM.json();
-      const h = dataM.hourly;
-
-      if (h && h.time) {
-        for (let i = 0; i < h.time.length; i++) {
-          serieHoraria.push({
-            fecha_hora: h.time[i],
-            lluvia_mm: extraerValor(h, i, 'precipitation', 0),
-            temperatura_c: extraerValor(h, i, 'temperature_2m', 15),
-            humedad_relativa_pct: extraerValor(h, i, 'relative_humidity_2m', 60),
-            viento_kmh: extraerValor(h, i, 'wind_speed_10m', 10),
-            rafagas_kmh: extraerValor(h, i, 'wind_gusts_10m', 15),
-            visibilidad_km: extraerValor(h, i, 'visibility', 10000) / 1000
-          });
-        }
-        console.log(`✅ Serie meteorológica procesada: ${serieHoraria.length} horas.`);
-        const lluviaTotalEncontrada = serieHoraria.reduce((a, b) => a + b.lluvia_mm, 0);
-        console.log(`🌧️ Lluvia acumulada encontrada en la serie: ${lluviaTotalEncontrada.toFixed(1)} mm.`);
-      } else {
-        falloMeteo = "Open-Meteo devolvió respuesta sin bloque 'hourly'";
-      }
-    }
-  } catch (e) {
-    falloMeteo = `Excepción consultando Open-Meteo: ${e.message}`;
-    console.error("❌ Fallo en Open-Meteo:", e);
-  }
-
-  // Modo Degradado (A5): NO se inventan valores, NO se publica evaluación nueva
-  if (serieHoraria.length < MIN_HORAS_REQUERIDAS) {
-    const motivo = falloMeteo || `Serie insuficiente: ${serieHoraria.length} horas (mínimo ${MIN_HORAS_REQUERIDAS})`;
-    console.error("⚠️  MODO DEGRADADO ACTIVADO");
+  // --- 3. Modo degradado si TODAS las zonas fallaron ---
+  if (zonasOk.length === 0) {
+    const motivo = `Falla total de Open-Meteo en las ${Object.keys(nodos).length} zonas. Zonas afectadas: ${zonasFallidas.join(', ')}`;
+    console.error("\n⚠️  MODO DEGRADADO ACTIVADO (falla total)");
     console.error(`⚠️  Motivo: ${motivo}`);
     console.error("⚠️  No se publicará estado_diocesano.json. El estado anterior en Blob permanece vigente.");
-    console.error(`⚠️  Timestamp: ${ahora.toISOString()}`);
 
     await registrarCorridaDegradada(horaMexicoStr, fechaDiaMexico, horaExactaMexico, ahora, motivo);
 
@@ -237,29 +356,43 @@ async function ejecutarSARA() {
     process.exit(0);
   }
 
-  // 3. API de 7 Días Previos (d = 1 a 7)
-  let api7DiasPrevios = 0;
-  for (let d = 1; d <= 7; d++) {
-    const idxInicio = (d - 1) * 24;
-    const idxFin = d * 24;
-    const lluviaDia = serieHoraria.slice(idxInicio, idxFin).reduce((acc, h) => acc + h.lluvia_mm, 0);
-    api7DiasPrevios += lluviaDia * Math.pow(0.85, 8 - d);
-  }
-  api7DiasPrevios = parseFloat(api7DiasPrevios.toFixed(1));
+  // --- 4. Construir seriesPorZona para el motor ---
+  // Cada zona tiene su serie real o un array vacío si falló
+  const seriesPorZona = {};
+  Object.keys(nodos).forEach(zonaId => {
+    seriesPorZona[zonaId] = series[zonaId]?.ok ? series[zonaId].serie : [];
+  });
 
-  // Ventana del Evento Actual
-  const eventoActual = serieHoraria.slice(168, 192);
-  const lluviaEventoHoy = parseFloat(eventoActual.reduce((acc, h) => acc + h.lluvia_mm, 0).toFixed(1));
-  const tempMinHoy = Math.min(...eventoActual.map(h => h.temperatura_c), 20);
-  const vientoMaxHoy = Math.max(...eventoActual.map(h => h.viento_kmh), 10);
-  const rafagaMaxHoy = Math.max(...eventoActual.map(h => h.rafagas_kmh), 15);
-  const visMinHoy = Math.min(...eventoActual.map(h => h.visibilidad_km), 10);
-
-  // 4. Evaluación de las Localidades
+  // --- 5. Evaluación de cada localidad con SU serie regional ---
   const evaluaciones = todasLocalidades.map(loc => {
-    const esAltiplano = ['APN', 'TIZ', 'PMS', 'ACT'].includes(loc.zona_id);
-    const esSierra = ['HUA', 'SPP', 'ZAC', 'CHG', 'ZAH', 'ATG', 'TUL'].includes(loc.zona_id);
+    const zonaId = loc.zona_id;
+    const serieZona = seriesPorZona[zonaId] || [];
+    const zonaSinDatos = series[zonaId]?.ok === false;
 
+    // Reutilizamos la lógica de evaluación existente pero por zona
+    const esAltiplano = ['APN', 'TIZ', 'PMS', 'ACT'].includes(zonaId);
+    const esSierra = ['HUA', 'SPP', 'ZAC', 'CHG', 'ZAH', 'ATG', 'TUL'].includes(zonaId);
+
+    // --- Cálculos previos sobre la serie de la zona ---
+    let api7DiasPrevios = 0;
+    if (serieZona.length >= 168) {
+      for (let d = 1; d <= 7; d++) {
+        const idxInicio = (d - 1) * 24;
+        const idxFin = d * 24;
+        const lluviaDia = serieZona.slice(idxInicio, idxFin).reduce((acc, h) => acc + h.lluvia_mm, 0);
+        api7DiasPrevios += lluviaDia * Math.pow(0.85, 8 - d);
+      }
+    }
+    api7DiasPrevios = parseFloat(api7DiasPrevios.toFixed(1));
+
+    const eventoActual = serieZona.length >= 192 ? serieZona.slice(168, 192) : [];
+    const lluviaEventoHoy = parseFloat(eventoActual.reduce((acc, h) => acc + h.lluvia_mm, 0).toFixed(1));
+    const tempMinHoy = eventoActual.length ? Math.min(...eventoActual.map(h => h.temperatura_c), 20) : 20;
+    const vientoMaxHoy = eventoActual.length ? Math.max(...eventoActual.map(h => h.viento_kmh), 10) : 10;
+    const rafagaMaxHoy = eventoActual.length ? Math.max(...eventoActual.map(h => h.rafagas_kmh), 15) : 15;
+    const visMinHoy = eventoActual.length ? Math.min(...eventoActual.map(h => h.visibilidad_km), 10) : 10;
+
+    // --- Reglas del motor (idénticas a las originales) ---
     const pendiente = loc.topografia.pendiente_max_deg || 0;
     const relieve = loc.topografia.relieve || 'MESETA';
     const esLadera = relieve === 'LADERA' || pendiente >= 25;
@@ -271,49 +404,53 @@ async function ejecutarSARA() {
     const saturacionSuelo = parseFloat((api7DiasPrevios + lluviaEfectiva24h).toFixed(1));
 
     let nivel = 1;
-    let vectorDominante = "ATMOSFERA_ESTABLE";
-    let tituloDiagnostico = "Condiciones de Estabilidad y Calma";
-    let causa = "Sin perturbaciones climáticas significativas previstas.";
+    let vectorDominante = zonaSinDatos ? "SIN_DATOS_REGIONALES" : "ATMOSFERA_ESTABLE";
+    let tituloDiagnostico = zonaSinDatos ? "Sin datos meteorológicos regionales" : "Condiciones de Estabilidad y Calma";
+    let causa = zonaSinDatos
+      ? `La zona ${zonaId} no reportó datos meteorológicos en esta corrida. Localidad evaluada con mínimos por defecto.`
+      : "Sin perturbaciones climáticas significativas previstas.";
 
-    if (esAltiplano && pendiente < 15 && lluviaEventoHoy < 20.0 && tempMinHoy > 2.0 && vientoMaxHoy < 40) {
-      nivel = 1;
-      vectorDominante = "ATMOSFERA_ESTABLE";
-      tituloDiagnostico = "Condiciones de Estabilidad y Calma";
-      causa = `Zona del Altiplano bajo sombra orográfica. Lluvia de ${lluviaEventoHoy} mm sin riesgo geofísico.`;
-    } else {
-      if (esSierra && esLadera && saturacionSuelo >= 65.0) {
-        if (pendiente >= 45.0) {
-          nivel = 4;
-          vectorDominante = "DESLAVE_CRITICO";
-          tituloDiagnostico = "Peligro Crítico de Deslave en Ladera Escarpada";
-          causa = `Suelo saturado (${saturacionSuelo} mm) sobre talud crítico de ${pendiente}°. Falla inminente de talud habitado.`;
-        } else {
-          nivel = Math.max(nivel, 3);
-          vectorDominante = "DESLAVE_MODERADO";
-          tituloDiagnostico = "Saturación Crítica de Terreno";
-          causa = `Reblandecimiento de estratos en ladera de ${pendiente}° con desprendimientos menores.`;
+    if (!zonaSinDatos) {
+      if (esAltiplano && pendiente < 15 && lluviaEventoHoy < 20.0 && tempMinHoy > 2.0 && vientoMaxHoy < 40) {
+        nivel = 1;
+        vectorDominante = "ATMOSFERA_ESTABLE";
+        tituloDiagnostico = "Condiciones de Estabilidad y Calma";
+        causa = `Zona del Altiplano bajo sombra orográfica. Lluvia de ${lluviaEventoHoy} mm sin riesgo geofísico.`;
+      } else {
+        if (esSierra && esLadera && saturacionSuelo >= 65.0) {
+          if (pendiente >= 45.0) {
+            nivel = 4;
+            vectorDominante = "DESLAVE_CRITICO";
+            tituloDiagnostico = "Peligro Crítico de Deslave en Ladera Escarpada";
+            causa = `Suelo saturado (${saturacionSuelo} mm) sobre talud crítico de ${pendiente}°. Falla inminente de talud habitado.`;
+          } else {
+            nivel = Math.max(nivel, 3);
+            vectorDominante = "DESLAVE_MODERADO";
+            tituloDiagnostico = "Saturación Crítica de Terreno";
+            causa = `Reblandecimiento de estratos en ladera de ${pendiente}° con desprendimientos menores.`;
+          }
         }
-      }
 
-      if (distRio <= 0.8 && twi >= 12.0 && lluviaEfectiva24h >= 35.0 && !esAltiplano) {
-        nivel = Math.max(nivel, 4);
-        vectorDominante = "INUNDACION_FLUVIAL";
-        tituloDiagnostico = "Desbordamiento e Inundación Ribereña";
-        causa = `Comunidad ribereña a ${distRio} km del cauce en punto de convergencia de flujo.`;
-      }
+        if (distRio <= 0.8 && twi >= 12.0 && lluviaEfectiva24h >= 35.0 && !esAltiplano) {
+          nivel = Math.max(nivel, 4);
+          vectorDominante = "INUNDACION_FLUVIAL";
+          tituloDiagnostico = "Desbordamiento e Inundación Ribereña";
+          causa = `Comunidad ribereña a ${distRio} km del cauce en punto de convergencia de flujo.`;
+        }
 
-      if (esTerraceria && (lluviaEfectiva24h >= 20.0 || saturacionSuelo >= 50.0) && nivel < 3) {
-        nivel = 3;
-        vectorDominante = "CORTE_VIAL";
-        tituloDiagnostico = "Amenaza de Incomunicación y Corte de Acceso";
-        causa = `Vía única de terracería/brecha vulnerable a corte total por lodo.`;
-      }
+        if (esTerraceria && (lluviaEfectiva24h >= 20.0 || saturacionSuelo >= 50.0) && nivel < 3) {
+          nivel = 3;
+          vectorDominante = "CORTE_VIAL";
+          tituloDiagnostico = "Amenaza de Incomunicación y Corte de Acceso";
+          causa = `Vía única de terracería/brecha vulnerable a corte total por lodo.`;
+        }
 
-      if (nivel === 1 && (lluviaEfectiva24h >= 8.0 || saturacionSuelo >= 30.0 || visMinHoy <= 2.0)) {
-        nivel = 2;
-        vectorDominante = "VIGILANCIA_NORMAL";
-        tituloDiagnostico = "Vigilancia Preventiva por Lluvia Activa y Niebla";
-        causa = `Precipitación continua moderada (${lluviaEfectiva24h} mm) en valles y lomas de transición.`;
+        if (nivel === 1 && (lluviaEfectiva24h >= 8.0 || saturacionSuelo >= 30.0 || visMinHoy <= 2.0)) {
+          nivel = 2;
+          vectorDominante = "VIGILANCIA_NORMAL";
+          tituloDiagnostico = "Vigilancia Preventiva por Lluvia Activa y Niebla";
+          causa = `Precipitación continua moderada (${lluviaEfectiva24h} mm) en valles y lomas de transición.`;
+        }
       }
     }
 
@@ -322,11 +459,13 @@ async function ejecutarSARA() {
       nombre: loc.nombre,
       municipio: loc.municipio,
       estado: loc.estado,
-      zona_id: loc.zona_id,
+      zona_id: zonaId,
+      zona_nombre: loc.zona_nombre,
       nivel_alerta: nivel,
       color_alerta: ['#10B981', '#F59E0B', '#F97316', '#EF4444'][nivel - 1],
       estado_alerta: ['NORMAL', 'VIGILANCIA', 'ALERTA_TEMPRANA', 'EMERGENCIA'][nivel - 1],
       vector_dominante: vectorDominante,
+      sin_datos_regionales: zonaSinDatos,
       diagnostico: { titulo: tituloDiagnostico, causa: causa },
       donde: {
         subcuenca_cve: loc.hidrologia.subcuenca_cve,
@@ -344,6 +483,7 @@ async function ejecutarSARA() {
         accesoVial: loc.vulnerabilidad.acceso_vial,
         distanciaHospitalKm: loc.vulnerabilidad.dist_hospital_km,
         marginacion: loc.vulnerabilidad.marginacion,
+        apiPrevio7DiasMm: api7DiasPrevios,
         saturacionTotalSueloMm: saturacionSuelo,
         lluviaEvento24hMm: parseFloat(lluviaEfectiva24h.toFixed(1)),
         tempMinimaC: tempMinHoy,
@@ -359,11 +499,12 @@ async function ejecutarSARA() {
   const n3 = evaluaciones.filter(e => e.nivel_alerta === 3).length;
   const n2 = evaluaciones.filter(e => e.nivel_alerta === 2).length;
   const n1 = evaluaciones.filter(e => e.nivel_alerta === 1).length;
+  const sinDatos = evaluaciones.filter(e => e.sin_datos_regionales).length;
   const criticas = evaluaciones.filter(e => e.nivel_alerta >= 3).slice(0, 6).map(c => `${c.nombre} (${c.municipio})`);
 
-  console.log(`📊 [SARA CLASIFICACIÓN REAL VIVA] N4: ${n4} | N3: ${n3} | N2: ${n2} | N1: ${n1}`);
+  console.log(`📊 [SARA CLASIFICACIÓN MULTI-NODO] N4: ${n4} | N3: ${n3} | N2: ${n2} | N1: ${n1} | Sin datos: ${sinDatos}`);
 
-  // 5. Inferencia con Groq
+  // --- 6. Inferencia con Groq ---
   let dictamenSARA = null;
   const apiKeyGroq = process.env.GROQ_API_KEY;
 
@@ -381,11 +522,13 @@ async function ejecutarSARA() {
               role: "system",
               content: `Eres SARA, Oficial Meteoróloga de Guardia de Cáritas Tulancingo. Hora oficial de México: ${horaMexicoStr}.
 Genera el informe diocesano multimodal en JSON con claves: estado_situacion, color, titulo, comentario_oficial.
-REGLA: Si no hay emergencias activas, declara situación normal con serenidad profesional.`
+REGLA: Si no hay emergencias activas, declara situación normal con serenidad profesional.
+REGLA: NO menciones conteos numéricos de niveles en el comentario. Se agregarán aparte.`
             },
             {
               role: "user",
               content: `Hora México: ${horaMexicoStr}. Aviso SMN: ${alertaSMN ? alertaSMN.titulo : 'Sin aviso severo vigente'}.
+Zonas OK: ${zonasOk.length}/${Object.keys(nodos).length}. Zonas sin datos: ${zonasFallidas.join(', ') || 'ninguna'}.
 Nivel 4: ${n4}, Nivel 3: ${n3}, Nivel 2: ${n2}, Nivel 1: ${n1}.
 Comunidades críticas bajo tensión: ${JSON.stringify(criticas)}.`
             }
@@ -404,22 +547,20 @@ Comunidades críticas bajo tensión: ${JSON.stringify(criticas)}.`
 
   if (!dictamenSARA) {
     dictamenSARA = {
-      estado_situacion: n4 > 0 ? "SITUACION_CRITICA" : (n3 > 0 ? "SITUACION_GRAVE" : (n2 > 0 ? "SITUACION_GRAVE" : "SITUACION_NORMAL")),
-      color: n4 > 0 ? "#EF4444" : (n3 > 0 ? "#F97316" : (n2 > 0 ? "#F59E0B" : "#10B981")),
+      estado_situacion: n4 > 0 ? "SITUACION_CRITICA" : (n3 > 0 ? "SITUACION_GRAVE" : "SITUACION_NORMAL"),
+      color: n4 > 0 ? "#EF4444" : (n3 > 0 ? "#F97316" : "#10B981"),
       titulo: n4 > 0 ? "Emergencia por Deslaves en Taludes >= 45°" : (n3 > 0 ? "Alerta Temprana en Laderas Serranas" : "Situación Diocesana de Calma"),
-      comentario_oficial: `Corrida autónoma (${horaMexicoStr}): Monitoreo dinámico activo. Evaluaciones físicas actualizadas.`
+      comentario_oficial: `Corrida autónoma multi-nodo (${horaMexicoStr}): Evaluación sobre ${zonasOk.length} zonas meteorológicas con datos reales.`
     };
   }
 
-  // Normalizar estado_situacion (N11)
   dictamenSARA.estado_situacion = normalizarEstadoSituacion(dictamenSARA.estado_situacion);
   dictamenSARA.hora_evaluacion = horaMexicoStr;
   dictamenSARA.proxima_evaluacion = proximaCorridaStr;
   dictamenSARA.timestamp = ahora.toISOString();
 
-  // 6. Bitácora con Hash SHA-256
+  // --- 7. Bitácora ---
   let bitacoraHistorial = [];
-  let ultimoDictamenPrevio = null;
   try {
     const listado = await list();
     const blobB = listado?.blobs?.find(b => b.pathname.includes('bitacora_sara.json'));
@@ -428,13 +569,12 @@ Comunidades críticas bajo tensión: ${JSON.stringify(criticas)}.`
       if (rB.ok) {
         const dB = await rB.json();
         bitacoraHistorial = dB.bitacora || [];
-        ultimoDictamenPrevio = dB.ultimo_dictamen || null;
       }
     }
   } catch (e) {}
 
   const prevHash = bitacoraHistorial.length > 0 ? bitacoraHistorial[bitacoraHistorial.length - 1].hash_completo : BLOQUE_GENESIS;
-  const nuevoHash = generarHashSHA256(prevHash, dictamenSARA.timestamp, { n4, n3, n2, n1, hora: horaMexicoStr });
+  const nuevoHash = generarHashSHA256(prevHash, dictamenSARA.timestamp, { n4, n3, n2, n1, zonaOk: zonasOk.length, hora: horaMexicoStr });
   const nuevoId = siguienteIdBitacora(bitacoraHistorial);
 
   bitacoraHistorial.push({
@@ -446,7 +586,7 @@ Comunidades críticas bajo tensión: ${JSON.stringify(criticas)}.`
     origen_evento: "PROGRAMADO_CRON",
     estado_situacion: dictamenSARA.estado_situacion,
     titulo: dictamenSARA.titulo,
-    resumen: dictamenSARA.comentario_oficial,
+    resumen: `N4=${n4}, N3=${n3}, N2=${n2}, N1=${n1} | Zonas OK: ${zonasOk.length}/${Object.keys(nodos).length}. ${dictamenSARA.comentario_oficial}`,
     prev_hash: prevHash.slice(0, 16) + "...",
     hash: nuevoHash.slice(0, 16) + "...",
     hash_completo: nuevoHash
@@ -456,12 +596,27 @@ Comunidades críticas bajo tensión: ${JSON.stringify(criticas)}.`
     bitacoraHistorial = bitacoraHistorial.slice(-MAX_REGISTROS_BITACORA);
   }
 
-  // 7. Publicación en Vercel Blob
+  // --- 8. Publicación ---
+  const seriesPorZonaMeta = {};
+  Object.keys(nodos).forEach(zonaId => {
+    seriesPorZonaMeta[zonaId] = {
+      nodo_referencia: nodos[zonaId].localidad,
+      municipio: nodos[zonaId].municipio,
+      poblacion: nodos[zonaId].poblacion,
+      ok: series[zonaId]?.ok === true,
+      horas: series[zonaId]?.serie?.length || 0,
+      intentos: series[zonaId]?.intentos || 0,
+      error: series[zonaId]?.error || null
+    };
+  });
+
   const paqueteMaestro = {
     actualizado_iso: ahora.toISOString(),
     hora_local_mexico: horaMexicoStr,
     dictamen: dictamenSARA,
     semaforo: { totalNivel4: n4, totalNivel3: n3, totalNivel2: n2, totalNivel1: n1 },
+    zonas_sin_datos: zonasFallidas,
+    series_por_zona: seriesPorZonaMeta,
     evaluaciones: evaluaciones
   };
 
@@ -473,16 +628,14 @@ Comunidades críticas bajo tensión: ${JSON.stringify(criticas)}.`
       token: process.env.BLOB_READ_WRITE_TOKEN
     });
 
-    const payloadBitacora = { bitacora: bitacoraHistorial, ultimo_dictamen: dictamenSARA };
-
-    await put('bitacora_sara.json', JSON.stringify(payloadBitacora), {
+    await put('bitacora_sara.json', JSON.stringify({ bitacora: bitacoraHistorial, ultimo_dictamen: dictamenSARA }), {
       access: 'public',
       addRandomSuffix: false,
       allowOverwrite: true,
       token: process.env.BLOB_READ_WRITE_TOKEN
     });
 
-    console.log(`✅ [SARA RUNNER] Publicación exitosa en Vercel Blob a las ${horaMexicoStr}.`);
+    console.log(`✅ [SARA RUNNER] Publicación exitosa con ${zonasOk.length} zonas a las ${horaMexicoStr}.`);
   } catch (e) {
     console.error("❌ Error al publicar en Vercel Blob:", e);
     process.exit(1);
