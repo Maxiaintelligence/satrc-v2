@@ -38,8 +38,8 @@ import {
   ShieldCheck
 } from 'lucide-react';
 
-const INTERVALO_REFRESCO_MS = 5 * 60 * 1000;       // 5 minutos: refresco de estado
-const INTERVALO_SMN_MS = 30 * 60 * 1000;            // 30 minutos: refresco del aviso SMN
+const INTERVALO_REFRESCO_MS = 5 * 60 * 1000;
+const INTERVALO_SMN_MS = 30 * 60 * 1000;
 
 function formatearTimestamp(isoUtc) {
   if (!isoUtc) return null;
@@ -63,6 +63,55 @@ function formatearTimestamp(isoUtc) {
   }
 }
 
+/**
+ * N12 — Extrae un resumen atmosférico real de la serie de consenso.
+ * La serie tiene 240 h: índices 0-167 son las últimas 7 días pasadas,
+ * índice 168 es "ahora" (aprox), y 168-239 son el pronóstico.
+ */
+function construirResumenAtmosferico(serie, nodoNombre) {
+  if (!Array.isArray(serie) || serie.length < 192) return null;
+
+  const ultimas24h = serie.slice(144, 168);   // 24 h antes de "ahora"
+  const proximas24h = serie.slice(168, 192);  // 24 h de pronóstico
+
+  const lluviaAcumulada24h = ultimas24h.reduce((a, h) => a + (h.lluvia_mm || 0), 0);
+  const lluviaProyectada24h = proximas24h.reduce((a, h) => a + (h.lluvia_mm || 0), 0);
+
+  const temps = ultimas24h.map(h => h.temperatura_c).filter(Number.isFinite);
+  const vientos = ultimas24h.map(h => h.viento_kmh).filter(Number.isFinite);
+  const rafagas = ultimas24h.map(h => h.rafagas_kmh).filter(Number.isFinite);
+  const humedades = ultimas24h.map(h => h.humedad_relativa_pct).filter(Number.isFinite);
+  const visibilidades = ultimas24h.map(h => h.visibility_km).filter(Number.isFinite);
+
+  const actual = serie[168] || ultimas24h[ultimas24h.length - 1] || {};
+
+  // Confiabilidad dominante en las últimas 24 h
+  const cuentaConfiabilidad = { ALTA: 0, MODERADA: 0, EN_DISPUTA: 0 };
+  ultimas24h.forEach(h => {
+    if (h.confiabilidad && cuentaConfiabilidad[h.confiabilidad] !== undefined) {
+      cuentaConfiabilidad[h.confiabilidad]++;
+    }
+  });
+  const confiabilidadDominante = Object.entries(cuentaConfiabilidad)
+    .sort((a, b) => b[1] - a[1])[0]?.[0] || 'DESCONOCIDA';
+
+  return {
+    nodo_nombre: nodoNombre,
+    ventana_analisis: 'últimas 24 horas',
+    lluvia_acumulada_24h_mm: parseFloat(lluviaAcumulada24h.toFixed(1)),
+    lluvia_proyectada_prox_24h_mm: parseFloat(lluviaProyectada24h.toFixed(1)),
+    temperatura_min_c: temps.length ? parseFloat(Math.min(...temps).toFixed(1)) : null,
+    temperatura_max_c: temps.length ? parseFloat(Math.max(...temps).toFixed(1)) : null,
+    temperatura_actual_c: Number.isFinite(actual.temperatura_c) ? parseFloat(actual.temperatura_c.toFixed(1)) : null,
+    viento_max_kmh: vientos.length ? parseFloat(Math.max(...vientos).toFixed(1)) : null,
+    rafaga_max_kmh: rafagas.length ? parseFloat(Math.max(...rafagas).toFixed(1)) : null,
+    humedad_min_pct: humedades.length ? Math.round(Math.min(...humedades)) : null,
+    humedad_max_pct: humedades.length ? Math.round(Math.max(...humedades)) : null,
+    visibilidad_min_km: visibilidades.length ? parseFloat(Math.min(...visibilidades).toFixed(1)) : null,
+    confiabilidad_dominante: confiabilidadDominante
+  };
+}
+
 export default function SatRCOperativo({ alCerrarSesion }) {
   const todasLocalidades = db.localidades || [];
 
@@ -70,43 +119,34 @@ export default function SatRCOperativo({ alCerrarSesion }) {
   const [comunidadFoco, setComunidadFoco] = useState(null);
   const [cargando, setCargando] = useState(true);
 
-  // Filtros del Semáforo
   const [filtroSemaforo, setFiltroSemaforo] = useState('NIVEL4');
   const [bandejaAbierta, setBandejaAbierta] = useState(false);
   const [paginaActual, setPaginaActual] = useState(1);
   const itemsPorPagina = 10;
 
-  // Estados de SARA
   const [dictamenSARA, setDictamenSARA] = useState(null);
   const [bitacoraSARA, setBitacoraSARA] = useState([]);
   const [modalBitacoraAbierto, setModalBitacoraAbierto] = useState(false);
   const [disparandoManual, setDisparandoManual] = useState(false);
   const [comunidadDetalle, setComunidadDetalle] = useState(null);
 
-  // Timestamp de última actualización (N9)
   const [ultimaActualizacion, setUltimaActualizacion] = useState(null);
   const [refrescando, setRefrescando] = useState(false);
 
-  // C4 — Alerta oficial CONAGUA/SMN
   const [alertaSMN, setAlertaSMN] = useState(null);
 
-  // Estados del Reporte On-Demand
   const [modalReporteOnDemandAbierto, setModalReporteOnDemandAbierto] = useState(false);
   const [generandoOnDemand, setGenerandoOnDemand] = useState(false);
   const [reporteVigente, setReporteVigente] = useState(null);
 
-  // Token de administración para operaciones privilegiadas
   const ADMIN_TOKEN = "CaritasAdmin2026";
 
-  // Referencia a la alerta SMN más reciente para evitar stale closures
   const alertaSMNRef = useRef(null);
   useEffect(() => {
     alertaSMNRef.current = alertaSMN;
   }, [alertaSMN]);
 
-  // ============================================================
-  // C4 — Cargar alerta oficial CONAGUA/SMN al montar y cada 30 min
-  // ============================================================
+  // C4 — Cargar alerta SMN
   useEffect(() => {
     let cancelado = false;
 
@@ -119,9 +159,6 @@ export default function SatRCOperativo({ alCerrarSesion }) {
         const data = await res.json();
         if (!cancelado && data.exito && data.alerta) {
           setAlertaSMN(data.alerta);
-          if (data.alerta.activo) {
-            console.log(`[SMN] Aviso activo: ${data.alerta.titulo} (Nivel ${data.alerta.nivel})`);
-          }
         }
       } catch (e) {
         console.warn("[SMN] No se pudo cargar la alerta oficial:", e.message);
@@ -186,7 +223,6 @@ export default function SatRCOperativo({ alCerrarSesion }) {
           setEvaluaciones(data.evaluaciones);
           setComunidadFoco(data.evaluaciones[0] || null);
         } else if (!silencioso) {
-          // C4 + N2: pasar la alerta SMN correcta (antes se pasaba data.dictamen por error)
           await ejecutarEvaluacionRealEnVivo(alertaSMNRef.current);
         }
       } else if (!silencioso) {
@@ -213,7 +249,6 @@ export default function SatRCOperativo({ alCerrarSesion }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // N9 — Auto-refresh cada 5 minutos + al volver a la pestaña
   useEffect(() => {
     const intervalo = setInterval(() => {
       if (document.visibilityState === 'visible') {
@@ -236,7 +271,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
   }, []);
 
   // ============================================================
-  // C4 — Generar Reporte On-Demand incluyendo la alerta SMN al body
+  // N12 — Generar Reporte On-Demand con datos atmosféricos reales
   // ============================================================
   const generarReporteOnDemand = async () => {
     setGenerandoOnDemand(true);
@@ -244,6 +279,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
 
     const n4 = evaluaciones.filter(e => e?.nivel_alerta === 4).length;
     const n3 = evaluaciones.filter(e => e?.nivel_alerta === 3).length;
+    const n2 = evaluaciones.filter(e => e?.nivel_alerta === 2).length;
     const n1 = evaluaciones.filter(e => e?.nivel_alerta === 1).length;
     const focos = evaluaciones.filter(e => (e?.nivel_alerta ?? 1) >= 3).slice(0, 8).map(c => ({
       nombre: c.nombre,
@@ -254,8 +290,6 @@ export default function SatRCOperativo({ alCerrarSesion }) {
       acceso: c.impactoSistemico?.accesoVial
     }));
 
-    // C4 — Preparar el alertaSMN para enviarlo al backend.
-    // Solo se envía si está activo (nivel >= 2), para no contaminar el prompt.
     const alertaParaEnviar = (alertaSMN && alertaSMN.activo && alertaSMN.nivel >= 2)
       ? {
           activo: true,
@@ -270,6 +304,24 @@ export default function SatRCOperativo({ alCerrarSesion }) {
         }
       : null;
 
+    // N12 — Obtener datos atmosféricos REALES antes de llamar a Groq
+    let datosAtmosfericos = null;
+    let nodoReferencia = null;
+    try {
+      const nodo = todasLocalidades.find(l => l.nombre.toLowerCase().includes('huauchinango')) || todasLocalidades[0];
+      nodoReferencia = `${nodo.nombre} (${nodo.municipio})`;
+      const resM = await consultarModelosDeterministas(nodo.coords.lat, nodo.coords.lon);
+      if (resM?.exito && resM?.datos_horarios) {
+        const serie = generarConsensoDeterminista(resM.datos_horarios);
+        datosAtmosfericos = construirResumenAtmosferico(serie, nodoReferencia);
+        if (!datosAtmosfericos) {
+          console.warn("[N12] Serie insuficiente para extraer resumen atmosférico");
+        }
+      }
+    } catch (e) {
+      console.warn("[N12] No se pudo obtener la serie atmosférica para el reporte:", e.message);
+    }
+
     try {
       const res = await fetch('/api/reporte-ondemand', {
         method: 'POST',
@@ -278,9 +330,11 @@ export default function SatRCOperativo({ alCerrarSesion }) {
           'x-admin-token': ADMIN_TOKEN
         },
         body: JSON.stringify({
-          resumenSeveridad: { totalNivel4: n4, totalNivel3: n3, totalNivel1: n1 },
+          resumenSeveridad: { totalNivel4: n4, totalNivel3: n3, totalNivel2: n2, totalNivel1: n1 },
           focosCriticos: focos,
-          alertaSMN: alertaParaEnviar
+          alertaSMN: alertaParaEnviar,
+          datosAtmosfericos: datosAtmosfericos,
+          nodoReferencia: nodoReferencia
         })
       });
 
@@ -362,7 +416,6 @@ Documento oficial emitido para párrocos, brigadistas y autoridades de auxilio.
     URL.revokeObjectURL(url);
   };
 
-  // Conteos
   const totalNivel4 = evaluaciones.filter(e => e?.nivel_alerta === 4).length;
   const totalNivel3 = evaluaciones.filter(e => e?.nivel_alerta === 3).length;
   const totalNivel2 = evaluaciones.filter(e => e?.nivel_alerta === 2).length;
@@ -474,7 +527,7 @@ Documento oficial emitido para párrocos, brigadistas y autoridades de auxilio.
         </div>
       </div>
 
-      {/* 2. TARJETA DEL ÚLTIMO REPORTE DIOCESANO GUARDADO EN BLOB */}
+      {/* 2. TARJETA DEL ÚLTIMO REPORTE */}
       {reporteVigente && (
         <div className="bg-slate-900 border-2 border-amber-500/40 p-4 rounded-2xl shadow-xl flex flex-wrap justify-between items-center gap-3">
           <div className="flex items-center gap-3">
@@ -611,7 +664,7 @@ Documento oficial emitido para párrocos, brigadistas y autoridades de auxilio.
         )}
       </div>
 
-      {/* 6. MODAL DE REPORTE DIOCESANO ON-DEMAND FORMAL */}
+      {/* 6. MODAL DE REPORTE DIOCESANO ON-DEMAND */}
       {modalReporteOnDemandAbierto && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md animate-fade-in print:p-0 print:bg-white">
           <div className="bg-slate-900 border-2 border-slate-700 max-w-4xl w-full rounded-2xl shadow-2xl overflow-hidden flex flex-col text-slate-200 max-h-[92vh] print:max-h-none print:border-0 print:shadow-none print:text-black print:bg-white">
@@ -661,7 +714,7 @@ Documento oficial emitido para párrocos, brigadistas y autoridades de auxilio.
                 <div className="p-16 text-center text-slate-400 flex flex-col items-center justify-center gap-3">
                   <div className="w-8 h-8 border-4 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
                   <p className="font-bold text-white text-sm">SARA redactando reporte en tiempo real...</p>
-                  <p className="text-[11px] text-slate-400">Analizando cuencas y sellando entrada en la bitácora de Vercel Blob.</p>
+                  <p className="text-[11px] text-slate-400">Consultando datos atmosféricos reales y sellando entrada en la bitácora.</p>
                 </div>
               ) : reporteVigente ? (
                 <>
@@ -806,12 +859,12 @@ Documento oficial emitido para párrocos, brigadistas y autoridades de auxilio.
               {bitacoraSARA.map((entry) => (
                 <div key={entry.id} className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-1.5">
                   <div className="flex justify-between items-center text-[11px]">
-                    <span className="text-amber-400 font-bold">{entry.fecha_dia_mexico ? `${entry.fecha_dia_mexico} • ${entry.hora_exacta_mexico}` : entry.timestamp_local} ({entry.id})</span>
+                    <span className="text-amber-400 font-bold">{entry.fecha_dia_mexico ? `${entry.fecha_dia_mexico} • ${entry.hora_exacta_mexico}` : (entry.timestamp_local || entry.timestamp_iso || '(sin fecha)')} ({entry.id})</span>
                     <span className="text-slate-400 text-[10px]">Hash: <strong className="text-emerald-400">{entry.hash}</strong></span>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-[9px] bg-slate-800 text-cyan-300 px-1.5 py-0.5 rounded font-bold">
-                      {entry.origen_evento || "PROGRAMADO_CRON_21"}
+                      {entry.origen_evento || "PROGRAMADO_CRON"}
                     </span>
                     <p className="text-white font-bold text-xs">{entry.titulo}</p>
                   </div>
