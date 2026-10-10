@@ -35,7 +35,12 @@ import {
   Sparkles,
   Share2,
   Check,
-  ShieldCheck
+  ShieldCheck,
+  CloudRain,
+  Thermometer,
+  Wind,
+  Droplets,
+  Eye
 } from 'lucide-react';
 
 const INTERVALO_REFRESCO_MS = 5 * 60 * 1000;
@@ -818,19 +823,68 @@ Documento oficial emitido para párrocos, brigadistas y autoridades de auxilio.
             </div>
 
             <div className="p-5 overflow-y-auto max-h-[70vh] space-y-4 text-xs">
+              {/* Diagnóstico Físico */}
               <div className="bg-slate-950/70 p-3.5 rounded-xl border border-slate-800 space-y-1">
                 <p className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">Diagnóstico Físico</p>
                 <p className="text-sm font-bold text-white">{comunidadDetalle?.diagnostico?.titulo}</p>
                 <p className="text-xs text-slate-300 leading-relaxed">{comunidadDetalle?.diagnostico?.causa}</p>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60"><span className="text-[10px] text-slate-400 uppercase font-semibold block">Pendiente Máx</span><span className="text-base font-bold text-white">{comunidadDetalle?.geografia?.pendienteMax ?? 0}°</span></div>
-                <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60"><span className="text-[10px] text-slate-400 uppercase font-semibold block">Acceso Vial</span><span className="text-xs font-bold text-amber-300 block truncate">{comunidadDetalle?.impactoSistemico?.accesoVial}</span></div>
-                <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60"><span className="text-[10px] text-slate-400 uppercase font-semibold block">Hospital Cercano</span><span className="text-base font-bold text-white">{comunidadDetalle?.impactoSistemico?.distanciaHospitalKm ?? 0} km</span></div>
-                <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60"><span className="text-[10px] text-slate-400 uppercase font-semibold block">Ventana Acción</span><span className="text-base font-bold text-emerald-400">{comunidadDetalle?.tiempos?.ventanaAccionHoras ?? 6} hrs</span></div>
+              {/* Condiciones Meteorológicas Actuales */}
+              <div className="space-y-2">
+                <p className="text-[10px] font-bold text-cyan-400 uppercase tracking-wider">Condiciones Meteorológicas Actuales</p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <CloudRain className="w-3.5 h-3.5 text-blue-400" />
+                      <span className="text-[10px] text-slate-400 uppercase font-semibold">Lluvia 24h</span>
+                    </div>
+                    <span className="text-base font-bold text-white">{comunidadDetalle?.impactoSistemico?.lluviaEvento24hMm ?? 0} mm</span>
+                  </div>
+
+                  <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <Thermometer className="w-3.5 h-3.5 text-amber-400" />
+                      <span className="text-[10px] text-slate-400 uppercase font-semibold">Temp Mínima</span>
+                    </div>
+                    <span className="text-base font-bold text-white">{comunidadDetalle?.impactoSistemico?.tempMinimaC ?? '--'} °C</span>
+                  </div>
+
+                  <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <Wind className="w-3.5 h-3.5 text-cyan-400" />
+                      <span className="text-[10px] text-slate-400 uppercase font-semibold">Ráfaga Máxima</span>
+                    </div>
+                    <span className="text-base font-bold text-white">{comunidadDetalle?.impactoSistemico?.rafagaMaximaKmh ?? '--'} km/h</span>
+                  </div>
+
+                  <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <Droplets className="w-3.5 h-3.5 text-emerald-400" />
+                      <span className="text-[10px] text-slate-400 uppercase font-semibold">Saturación Suelo</span>
+                    </div>
+                    <span className="text-base font-bold text-white">{comunidadDetalle?.impactoSistemico?.saturacionTotalSueloMm ?? 0} mm</span>
+                  </div>
+
+                  <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <Clock className="w-3.5 h-3.5 text-indigo-400" />
+                      <span className="text-[10px] text-slate-400 uppercase font-semibold">API 7 días</span>
+                    </div>
+                    <span className="text-base font-bold text-white">{comunidadDetalle?.impactoSistemico?.apiPrevio7DiasMm ?? 0} mm</span>
+                  </div>
+
+                  <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <Eye className="w-3.5 h-3.5 text-slate-300" />
+                      <span className="text-[10px] text-slate-400 uppercase font-semibold">Visibilidad Mín</span>
+                    </div>
+                    <span className="text-base font-bold text-white">{comunidadDetalle?.impactoSistemico?.visibilidadMinKm ?? 10} km</span>
+                  </div>
+                </div>
               </div>
 
+              {/* Protocolo */}
               <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-center">
                 <p className="text-xs font-bold text-amber-300 italic">{comunidadDetalle?.protocolo || "Consulte al coordinador de Cáritas"}</p>
               </div>
