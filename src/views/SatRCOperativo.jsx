@@ -38,7 +38,8 @@ import {
   ShieldCheck
 } from 'lucide-react';
 
-const INTERVALO_REFRESCO_MS = 5 * 60 * 1000; // 5 minutos
+const INTERVALO_REFRESCO_MS = 5 * 60 * 1000;       // 5 minutos: refresco de estado
+const INTERVALO_SMN_MS = 30 * 60 * 1000;            // 30 minutos: refresco del aviso SMN
 
 function formatearTimestamp(isoUtc) {
   if (!isoUtc) return null;
@@ -86,6 +87,9 @@ export default function SatRCOperativo({ alCerrarSesion }) {
   const [ultimaActualizacion, setUltimaActualizacion] = useState(null);
   const [refrescando, setRefrescando] = useState(false);
 
+  // C4 — Alerta oficial CONAGUA/SMN
+  const [alertaSMN, setAlertaSMN] = useState(null);
+
   // Estados del Reporte On-Demand
   const [modalReporteOnDemandAbierto, setModalReporteOnDemandAbierto] = useState(false);
   const [generandoOnDemand, setGenerandoOnDemand] = useState(false);
@@ -94,7 +98,46 @@ export default function SatRCOperativo({ alCerrarSesion }) {
   // Token de administración para operaciones privilegiadas
   const ADMIN_TOKEN = "CaritasAdmin2026";
 
-  const ejecutarEvaluacionRealEnVivo = async (alertaSMN = null) => {
+  // Referencia a la alerta SMN más reciente para evitar stale closures
+  const alertaSMNRef = useRef(null);
+  useEffect(() => {
+    alertaSMNRef.current = alertaSMN;
+  }, [alertaSMN]);
+
+  // ============================================================
+  // C4 — Cargar alerta oficial CONAGUA/SMN al montar y cada 30 min
+  // ============================================================
+  useEffect(() => {
+    let cancelado = false;
+
+    async function cargarAlertaSMN() {
+      try {
+        const res = await fetch(`/api/smn?t=${Date.now()}`, {
+          headers: { 'Cache-Control': 'no-cache' }
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelado && data.exito && data.alerta) {
+          setAlertaSMN(data.alerta);
+          if (data.alerta.activo) {
+            console.log(`[SMN] Aviso activo: ${data.alerta.titulo} (Nivel ${data.alerta.nivel})`);
+          }
+        }
+      } catch (e) {
+        console.warn("[SMN] No se pudo cargar la alerta oficial:", e.message);
+      }
+    }
+
+    cargarAlertaSMN();
+    const intervalo = setInterval(cargarAlertaSMN, INTERVALO_SMN_MS);
+
+    return () => {
+      cancelado = true;
+      clearInterval(intervalo);
+    };
+  }, []);
+
+  const ejecutarEvaluacionRealEnVivo = async (alertaParaEvaluar = null) => {
     const nodoSierra = todasLocalidades.find(l => l.nombre.toLowerCase().includes('huauchinango')) || todasLocalidades[0];
     let serieConsenso = [];
 
@@ -107,7 +150,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
 
     const resEvaluadas = todasLocalidades.map(loc => {
       try {
-        return evaluarLocalidad(loc, serieConsenso, { alertaSMN });
+        return evaluarLocalidad(loc, serieConsenso, { alertaSMN: alertaParaEvaluar });
       } catch (err) {
         return null;
       }
@@ -132,7 +175,6 @@ export default function SatRCOperativo({ alCerrarSesion }) {
 
         if (data.dictamen) {
           setDictamenSARA(data.dictamen);
-          // Guardar timestamp del dictamen como marca de "última actualización"
           if (data.dictamen.timestamp) {
             setUltimaActualizacion(data.dictamen.timestamp);
           }
@@ -144,16 +186,16 @@ export default function SatRCOperativo({ alCerrarSesion }) {
           setEvaluaciones(data.evaluaciones);
           setComunidadFoco(data.evaluaciones[0] || null);
         } else if (!silencioso) {
-          // Solo hacer evaluación en vivo si NO es refresh silencioso
-          await ejecutarEvaluacionRealEnVivo(data.dictamen);
+          // C4 + N2: pasar la alerta SMN correcta (antes se pasaba data.dictamen por error)
+          await ejecutarEvaluacionRealEnVivo(alertaSMNRef.current);
         }
       } else if (!silencioso) {
-        await ejecutarEvaluacionRealEnVivo();
+        await ejecutarEvaluacionRealEnVivo(alertaSMNRef.current);
       }
     } catch (e) {
       if (!silencioso) {
         console.warn("Fallo en carga inicial, evaluando en vivo:", e.message);
-        await ejecutarEvaluacionRealEnVivo();
+        await ejecutarEvaluacionRealEnVivo(alertaSMNRef.current);
       } else {
         console.warn("Refresh silencioso falló:", e.message);
       }
@@ -163,11 +205,9 @@ export default function SatRCOperativo({ alCerrarSesion }) {
     if (silencioso) setRefrescando(false);
   };
 
-  // Guardar referencia estable a cargarEstadoServidor para el intervalo
   const cargarEstadoRef = useRef();
   cargarEstadoRef.current = cargarEstadoServidor;
 
-  // Carga inicial al montar
   useEffect(() => {
     cargarEstadoServidor();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -195,7 +235,9 @@ export default function SatRCOperativo({ alCerrarSesion }) {
     };
   }, []);
 
-  // Generar Reporte On-Demand con Cabecera x-admin-token
+  // ============================================================
+  // C4 — Generar Reporte On-Demand incluyendo la alerta SMN al body
+  // ============================================================
   const generarReporteOnDemand = async () => {
     setGenerandoOnDemand(true);
     setModalReporteOnDemandAbierto(true);
@@ -212,6 +254,22 @@ export default function SatRCOperativo({ alCerrarSesion }) {
       acceso: c.impactoSistemico?.accesoVial
     }));
 
+    // C4 — Preparar el alertaSMN para enviarlo al backend.
+    // Solo se envía si está activo (nivel >= 2), para no contaminar el prompt.
+    const alertaParaEnviar = (alertaSMN && alertaSMN.activo && alertaSMN.nivel >= 2)
+      ? {
+          activo: true,
+          nivel: alertaSMN.nivel,
+          severidad: alertaSMN.severidad,
+          titulo: alertaSMN.titulo,
+          descripcion: alertaSMN.descripcion,
+          estados_afectados: alertaSMN.estados_afectados || [],
+          rango_lluvia_min_mm: alertaSMN.rango_lluvia_min_mm,
+          rango_lluvia_max_mm: alertaSMN.rango_lluvia_max_mm,
+          fecha_sincronizacion: alertaSMN.fecha_sincronizacion
+        }
+      : null;
+
     try {
       const res = await fetch('/api/reporte-ondemand', {
         method: 'POST',
@@ -221,7 +279,8 @@ export default function SatRCOperativo({ alCerrarSesion }) {
         },
         body: JSON.stringify({
           resumenSeveridad: { totalNivel4: n4, totalNivel3: n3, totalNivel1: n1 },
-          focosCriticos: focos
+          focosCriticos: focos,
+          alertaSMN: alertaParaEnviar
         })
       });
 
@@ -241,7 +300,6 @@ export default function SatRCOperativo({ alCerrarSesion }) {
     setGenerandoOnDemand(false);
   };
 
-  // Botón Compartir Directo en WhatsApp
   const compartirPorWhatsApp = () => {
     if (!reporteVigente?.reporte) return;
     const r = reporteVigente.reporte;
@@ -256,7 +314,6 @@ export default function SatRCOperativo({ alCerrarSesion }) {
     window.open(urlWhatsApp, '_blank');
   };
 
-  // Botón Descargar Documento Oficial (.txt)
   const descargarDocumentoOficial = () => {
     if (!reporteVigente?.reporte) return;
     const r = reporteVigente.reporte;
@@ -339,6 +396,7 @@ Documento oficial emitido para párrocos, brigadistas y autoridades de auxilio.
   };
 
   const textoUltimaActualizacion = formatearTimestamp(ultimaActualizacion);
+  const hayAvisoSMNActivo = alertaSMN && alertaSMN.activo && alertaSMN.nivel >= 2;
 
   return (
     <div className="space-y-6">
@@ -363,6 +421,16 @@ Documento oficial emitido para párrocos, brigadistas y autoridades de auxilio.
                   Datos: {textoUltimaActualizacion}
                 </span>
               )}
+              {hayAvisoSMNActivo && (
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border flex items-center gap-1 ${
+                  alertaSMN.nivel >= 3
+                    ? 'bg-orange-500/20 text-orange-300 border-orange-500/40 animate-pulse'
+                    : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                }`}>
+                  <AlertTriangle className="w-3 h-3" />
+                  CONAGUA N{alertaSMN.nivel}: {alertaSMN.titulo}
+                </span>
+              )}
             </div>
             <p className="text-xs text-slate-400">
               Cáritas Pastoral Social • Arquidiócesis de Tulancingo (405 Localidades)
@@ -371,7 +439,6 @@ Documento oficial emitido para párrocos, brigadistas y autoridades de auxilio.
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {/* BOTÓN REFRESH MANUAL */}
           <button
             onClick={() => cargarEstadoServidor(true)}
             disabled={refrescando}
@@ -381,7 +448,6 @@ Documento oficial emitido para párrocos, brigadistas y autoridades de auxilio.
             <RotateCw className={`w-3.5 h-3.5 ${refrescando ? 'animate-spin' : ''}`} />
           </button>
 
-          {/* BOTÓN REPORTE DIOCESANO ON-DEMAND */}
           <button
             onClick={generarReporteOnDemand}
             className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black rounded-xl text-xs transition-all shadow-lg shadow-amber-500/25 border border-amber-400"
