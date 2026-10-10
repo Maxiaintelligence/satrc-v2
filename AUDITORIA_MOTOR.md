@@ -335,7 +335,3 @@ La Zona Metropolitana de Pachuca está dividida en dos zonas de resguardo (PMN y
 - Los datos de este análisis cubren 30 días (10 sep – 9 oct 2026). Un análisis estacional completo requeriría 12 meses.
 - Las localidades de algunas zonas (HYC, ATG) tienen poblaciones bajas y no se analizaron en profundidad por escasez de datos demográficos diferenciadores.
 - El análisis no evalúa la representatividad climática de zonas individuales, solo el caso Pachuca por su complejidad administrativa.
-
-### D.6 Referencia a scripts
-
-El análisis completo se puede reproducir ejecutando el script almacenado en:
