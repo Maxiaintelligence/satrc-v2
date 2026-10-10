@@ -426,7 +426,7 @@ async function ejecutarSARA() {
     const tempMinHoy = eventoActual.length ? Math.min(...eventoActual.map(h => h.temperatura_c), 20) : 20;
     const vientoMaxHoy = eventoActual.length ? Math.max(...eventoActual.map(h => h.viento_kmh), 10) : 10;
     const rafagaMaxHoy = eventoActual.length ? Math.max(...eventoActual.map(h => h.rafagas_kmh), 15) : 15;
-    const visMinHoy = eventoActual.length ? Math.min(...eventoActual.map(h => h.visibility_km), 10) : 10;
+    const visMinHoy = eventoActual.length ? Math.min(...eventoActual.map(h => h.visibilidad_km)) : 999;
 
     const pendiente = loc.topografia.pendiente_max_deg || 0;
     const relieve = loc.topografia.relieve || 'MESETA';
@@ -483,8 +483,21 @@ async function ejecutarSARA() {
         if (nivel === 1 && (lluviaEfectiva24h >= 8.0 || saturacionSuelo >= 30.0 || visMinHoy <= 2.0)) {
           nivel = 2;
           vectorDominante = "VIGILANCIA_NORMAL";
-          tituloDiagnostico = "Vigilancia Preventiva por Lluvia Activa y Niebla";
-          causa = `Precipitación continua moderada (${lluviaEfectiva24h} mm) en valles y lomas de transición.`;
+
+          // N20: identificar el disparador real de la vigilancia
+          if (lluviaEfectiva24h >= 8.0) {
+            tituloDiagnostico = "Vigilancia por Precipitación Activa";
+            causa = `Precipitación activa en las últimas 24h (${lluviaEfectiva24h} mm). Suelo húmedo en valles y lomas de transición.`;
+          } else if (saturacionSuelo >= 30.0) {
+            tituloDiagnostico = "Vigilancia por Suelo Saturado";
+            causa = `Suelo con humedad acumulada (${saturacionSuelo} mm de saturación). Sin lluvia activa, pero terreno sensible a nuevos eventos.`;
+          } else if (visMinHoy <= 2.0) {
+            tituloDiagnostico = "Vigilancia por Niebla Densa";
+            causa = `Visibilidad reducida a ${visMinHoy} km. Niebla densa en valles y lomas de transición.`;
+          } else {
+            tituloDiagnostico = "Vigilancia Preventiva";
+            causa = "Condiciones de vigilancia activa en la zona.";
+          }
         }
       }
     }

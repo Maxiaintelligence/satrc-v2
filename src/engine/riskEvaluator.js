@@ -172,9 +172,26 @@ export function evaluarLocalidad(localidad, serieHoraria, contexto = {}) {
     // Si hay lluvia activa (8 a 30 mm) o bancos de niebla en valles/lomas suaves (10° a 24°), activa legítimamente Nivel 2
     if (nivelAlerta === 1 && (lluviaEfectiva24h >= 8.0 || saturacionTotalSuelo >= 30.0 || visibilidadMinKm <= 2.0)) {
       nivelAlerta = 2; // AMARILLO VIGILANCIA
+
+      // N20: identificar el disparador real de la vigilancia
+      let tituloN2, causaN2;
+      if (lluviaEfectiva24h >= 8.0) {
+        tituloN2 = "Vigilancia por Precipitación Activa";
+        causaN2 = `Precipitación activa en las últimas 24h (${lluviaEfectiva24h.toFixed(1)} mm). Suelo húmedo en valles y lomas de transición.`;
+      } else if (saturacionTotalSuelo >= 30.0) {
+        tituloN2 = "Vigilancia por Suelo Saturado";
+        causaN2 = `Suelo con humedad acumulada (${saturacionTotalSuelo} mm de saturación). Sin lluvia activa, pero terreno sensible a nuevos eventos.`;
+      } else if (visibilidadMinKm <= 2.0) {
+        tituloN2 = "Vigilancia por Niebla Densa";
+        causaN2 = `Visibilidad reducida a ${visibilidadMinKm.toFixed(1)} km. Niebla densa en valles y lomas de transición.`;
+      } else {
+        tituloN2 = "Vigilancia Preventiva";
+        causaN2 = "Condiciones de vigilancia activa en la zona.";
+      }
+
       diagnostico = {
-        titulo: "Vigilancia Preventiva por Lluvia Activa y Niebla",
-        causa: `Precipitación continua moderada (${lluviaEfectiva24h.toFixed(1)} mm) en valles y lomas de transición. Pavimento resbaloso y escurrimientos en vados.`,
+        titulo: tituloN2,
+        causa: causaN2,
         tipoAmenaza: "VIGILANCIA_NORMAL"
       };
     }
