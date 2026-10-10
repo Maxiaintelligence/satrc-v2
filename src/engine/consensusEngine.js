@@ -67,8 +67,10 @@ export function generarConsensoDeterminista(datosHorarios) {
     const h_gem = datosHorarios["relative_humidity_2m_gem_seamless"]?.[i] ?? 50;
     const humedadConsenso = calcularMediana([h_gfs, h_icon, h_gem]);
 
-    // Visibilidad
-    const vis = (datosHorarios["visibility"]?.[i] ?? 10000) / 1000;
+    // Visibilidad (Open-Meteo devuelve visibility_gfs_seamless cuando se piden múltiples modelos)
+    const vis = (datosHorarios["visibility_gfs_seamless"]?.[i]
+              ?? datosHorarios["visibility"]?.[i]
+              ?? 10000) / 1000;
 
     // Dispersión inter-modelo
     const dispersion = Math.max(p_gfs, p_icon, p_gem) - Math.min(p_gfs, p_icon, p_gem);

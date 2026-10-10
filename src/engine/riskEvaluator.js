@@ -47,7 +47,7 @@ export function evaluarLocalidad(localidad, serieHoraria, contexto = {}) {
   let tempMinima = 99;
   let vientoSostenidoMax = 0;
   let rafagaMaxima = 0;
-  let visibilidadMinKm = 10;
+  let visibilidadMinKm = 999;
 
   eventoActual.forEach(h => {
     const ll = h.lluvia_mm || 0;
@@ -68,9 +68,8 @@ export function evaluarLocalidad(localidad, serieHoraria, contexto = {}) {
     if (h.rafagas_kmh && h.rafagas_kmh > rafagaMaxima) {
       rafagaMaxima = h.rafagas_kmh;
     }
-    if (h.visibility !== undefined) {
-      const visKm = h.visibility / 1000;
-      if (visKm < visibilidadMinKm) visibilidadMinKm = visKm;
+    if (h.visibility_km !== undefined) {
+      if (h.visibility_km < visibilidadMinKm) visibilidadMinKm = h.visibility_km;
     }
   });
 
