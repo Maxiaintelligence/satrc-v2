@@ -1,12 +1,8 @@
 import crypto from 'crypto';
 import { put, list } from '@vercel/blob';
 
-/**
- * SatRC V2.0 - Reporte Diocesano On-Demand con Persistencia y Sello en Bitácora
- * Almacena en Vercel Blob: 'reporte_diocesano_vigente.json' y 'bitacora_sara.json'
- */
-
 const BLOQUE_GENESIS = "0000000000000000000000000000000000000000000000000000000000000000";
+const MAX_REGISTROS_BITACORA = 500;
 
 function generarHashSHA256(prevHash, timestamp, datos) {
   return crypto.createHash('sha256')
@@ -14,10 +10,30 @@ function generarHashSHA256(prevHash, timestamp, datos) {
     .digest('hex');
 }
 
-/**
- * C4 — Sanitiza y valida la alertaSMN recibida del frontend.
- * Devuelve un objeto con la forma esperada por el prompt, o null si no es utilizable.
- */
+function normalizarEstadoSituacion(estadoRaw) {
+  if (!estadoRaw || typeof estadoRaw !== 'string') return 'SITUACION_NORMAL';
+  const limpio = estadoRaw.trim().toUpperCase();
+  if (limpio === 'CORRIDA_DEGRADADA') return 'CORRIDA_DEGRADADA';
+  if (limpio === 'SITUACION_CRITICA' || limpio === 'CRITICA' || limpio === 'CRÍTICA' || limpio === 'EMERGENCIA') {
+    return 'SITUACION_CRITICA';
+  }
+  if (limpio === 'SITUACION_GRAVE' || limpio === 'GRAVE' || limpio === 'ALERTA') {
+    return 'SITUACION_GRAVE';
+  }
+  return 'SITUACION_NORMAL';
+}
+
+function siguienteIdBitacora(historial) {
+  if (!Array.isArray(historial) || historial.length === 0) return 1;
+  let maxId = 0;
+  for (const entry of historial) {
+    if (!entry?.id) continue;
+    const num = parseInt(String(entry.id).replace('SARA_LOG_', ''), 10);
+    if (Number.isFinite(num) && num > maxId) maxId = num;
+  }
+  return maxId + 1;
+}
+
 function normalizarAlertaSMN(alertaRaw) {
   if (!alertaRaw || typeof alertaRaw !== 'object') return null;
   if (!alertaRaw.activo) return null;
@@ -55,6 +71,12 @@ export default async function handler(req, res) {
     second: '2-digit',
     hour12: true
   });
+  const horaCorta = ahora.toLocaleTimeString('es-MX', {
+    timeZone: 'America/Mexico_City',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true
+  });
   const timestampIsoUtc = ahora.toISOString();
 
   const { alertaSMN: alertaRaw, resumenSeveridad, focosCriticos } = req.body || {};
@@ -66,7 +88,6 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "Falta configurar GROQ_API_KEY en Vercel" });
   }
 
-  // C4 — Bloque de aviso oficial enriquecido para el prompt
   let bloqueAvisoSMN;
   if (alertaSMN) {
     const estados = alertaSMN.estados_afectados.length > 0
@@ -165,8 +186,10 @@ Devuelve la respuesta en formato JSON estricto.`;
       token: process.env.BLOB_READ_WRITE_TOKEN
     });
 
+    // Leer bitácora + ultimo_dictamen previo (N13: preservar si existe)
     let bitacoraHistorial = [];
     let hashUltimo = BLOQUE_GENESIS;
+    let ultimoDictamenPrevio = null;
 
     try {
       const listado = await list();
@@ -176,6 +199,7 @@ Devuelve la respuesta en formato JSON estricto.`;
         if (rB.ok) {
           const dB = await rB.json();
           bitacoraHistorial = dB.bitacora || [];
+          ultimoDictamenPrevio = dB.ultimo_dictamen || null;
           if (bitacoraHistorial.length > 0) {
             hashUltimo = bitacoraHistorial[bitacoraHistorial.length - 1].hash_completo || BLOQUE_GENESIS;
           }
@@ -191,13 +215,20 @@ Devuelve la respuesta en formato JSON estricto.`;
       aviso_smn_nivel: alertaSMN?.nivel ?? null
     });
 
+    const estadoCalculado = (resumenSeveridad?.totalNivel4 || 0) > 0
+      ? "SITUACION_CRITICA"
+      : ((resumenSeveridad?.totalNivel3 || 0) > 0 ? "SITUACION_GRAVE" : "SITUACION_NORMAL");
+
+    const nuevoId = siguienteIdBitacora(bitacoraHistorial);
+
     const entradaBitacora = {
-      id: `SARA_LOG_${bitacoraHistorial.length + 1}`,
-      origen_evento: "ON_DEMAND_OPERADOR",
+      id: `SARA_LOG_${nuevoId}`,
       fecha_dia_mexico: fechaDiaMexico,
       hora_exacta_mexico: horaExactaMexico,
       timestamp_iso_utc: timestampIsoUtc,
-      estado_situacion: (resumenSeveridad?.totalNivel4 || 0) > 0 ? "SITUACION_CRITICA" : "SITUACION_GRAVE",
+      timestamp_local: horaCorta,
+      origen_evento: "ON_DEMAND_OPERADOR",
+      estado_situacion: normalizarEstadoSituacion(estadoCalculado),
       titulo: "Reporte Diocesano On-Demand Generado por el Operador",
       resumen: reporteJSON.seccion_I_atmosfera,
       prev_hash: hashUltimo.slice(0, 16) + "...",
@@ -207,10 +238,16 @@ Devuelve la respuesta en formato JSON estricto.`;
 
     bitacoraHistorial.push(entradaBitacora);
 
-    await put('bitacora_sara.json', JSON.stringify({
-      bitacora: bitacoraHistorial,
-      ultimo_reporte_id: reporteCompleto.id_reporte
-    }), {
+    if (bitacoraHistorial.length > MAX_REGISTROS_BITACORA) {
+      bitacoraHistorial = bitacoraHistorial.slice(-MAX_REGISTROS_BITACORA);
+    }
+
+    const payloadBitacora = { bitacora: bitacoraHistorial };
+    if (ultimoDictamenPrevio) {
+      payloadBitacora.ultimo_dictamen = ultimoDictamenPrevio;
+    }
+
+    await put('bitacora_sara.json', JSON.stringify(payloadBitacora), {
       access: 'public',
       addRandomSuffix: false,
       allowOverwrite: true,

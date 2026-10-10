@@ -12,7 +12,8 @@ const todasLocalidades = db.localidades || [];
 console.log(`📡 [SARA RUNNER RESILIENTE] Evaluando ${todasLocalidades.length} localidades...`);
 
 const BLOQUE_GENESIS = "0000000000000000000000000000000000000000000000000000000000000000";
-const MIN_HORAS_REQUERIDAS = 192; // 7 días pasados + 1 día futuro para evaluar el evento
+const MIN_HORAS_REQUERIDAS = 192;
+const MAX_REGISTROS_BITACORA = 500;
 
 function generarHashSHA256(prevHash, timestamp, datos) {
   return crypto.createHash('sha256')
@@ -20,13 +21,54 @@ function generarHashSHA256(prevHash, timestamp, datos) {
     .digest('hex');
 }
 
-function obtenerHoraMexico(fecha = new Date()) {
-  return fecha.toLocaleTimeString('es-MX', {
+function obtenerFechaHoraMexico(fecha = new Date()) {
+  const fechaDia = fecha.toLocaleDateString('es-MX', {
+    timeZone: 'America/Mexico_City',
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric'
+  });
+  const horaExacta = fecha.toLocaleTimeString('es-MX', {
+    timeZone: 'America/Mexico_City',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true
+  });
+  const horaCorta = fecha.toLocaleTimeString('es-MX', {
     timeZone: 'America/Mexico_City',
     hour: '2-digit',
     minute: '2-digit',
     hour12: true
   });
+  return { fechaDia, horaExacta, horaCorta };
+}
+
+function normalizarEstadoSituacion(estadoRaw) {
+  if (!estadoRaw || typeof estadoRaw !== 'string') return 'SITUACION_NORMAL';
+  const limpio = estadoRaw.trim().toUpperCase();
+  if (limpio === 'CORRIDA_DEGRADADA') return 'CORRIDA_DEGRADADA';
+  if (limpio === 'SITUACION_CRITICA' || limpio === 'CRITICA' || limpio === 'CRÍTICA' || limpio === 'EMERGENCIA') {
+    return 'SITUACION_CRITICA';
+  }
+  if (limpio === 'SITUACION_GRAVE' || limpio === 'GRAVE' || limpio === 'ALERTA') {
+    return 'SITUACION_GRAVE';
+  }
+  if (limpio === 'SITUACION_ALERTA_PREPARACION' || limpio === 'ALERTA_PREPARACION') {
+    return 'SITUACION_GRAVE';
+  }
+  return 'SITUACION_NORMAL';
+}
+
+function siguienteIdBitacora(historial) {
+  if (!Array.isArray(historial) || historial.length === 0) return 1;
+  let maxId = 0;
+  for (const entry of historial) {
+    if (!entry?.id) continue;
+    const num = parseInt(String(entry.id).replace('SARA_LOG_', ''), 10);
+    if (Number.isFinite(num) && num > maxId) maxId = num;
+  }
+  return maxId + 1;
 }
 
 function extraerValor(h, indice, nombreBase, valorDefecto = 0) {
@@ -37,9 +79,10 @@ function extraerValor(h, indice, nombreBase, valorDefecto = 0) {
          valorDefecto;
 }
 
-async function registrarCorridaDegradada(horaMexicoStr, ahora, motivo) {
+async function registrarCorridaDegradada(horaMexicoStr, fechaDiaMexico, horaExactaMexico, ahora, motivo) {
   try {
     let bitacoraHistorial = [];
+    let ultimoDictamenPrevio = null;
     try {
       const listado = await list();
       const blobB = listado?.blobs?.find(b => b.pathname.includes('bitacora_sara.json'));
@@ -48,6 +91,7 @@ async function registrarCorridaDegradada(horaMexicoStr, ahora, motivo) {
         if (rB.ok) {
           const dB = await rB.json();
           bitacoraHistorial = dB.bitacora || [];
+          ultimoDictamenPrevio = dB.ultimo_dictamen || null;
         }
       }
     } catch (e) {}
@@ -61,10 +105,15 @@ async function registrarCorridaDegradada(horaMexicoStr, ahora, motivo) {
       motivo
     });
 
+    const nuevoId = siguienteIdBitacora(bitacoraHistorial);
+
     bitacoraHistorial.push({
-      id: `SARA_LOG_${bitacoraHistorial.length + 1}`,
+      id: `SARA_LOG_${nuevoId}`,
+      fecha_dia_mexico: fechaDiaMexico,
+      hora_exacta_mexico: horaExactaMexico,
+      timestamp_iso_utc: ahora.toISOString(),
       timestamp_local: horaMexicoStr,
-      timestamp_iso: ahora.toISOString(),
+      origen_evento: "CORRIDA_DEGRADADA",
       estado_situacion: "CORRIDA_DEGRADADA",
       titulo: "Corrida degradada: sin datos meteorológicos reales",
       resumen: `${motivo} a las ${horaMexicoStr}. No se publicó evaluación nueva para evitar alertas falsas. El estado anterior en el sistema permanece vigente.`,
@@ -73,7 +122,16 @@ async function registrarCorridaDegradada(horaMexicoStr, ahora, motivo) {
       hash_completo: nuevoHash
     });
 
-    await put('bitacora_sara.json', JSON.stringify({ bitacora: bitacoraHistorial }), {
+    if (bitacoraHistorial.length > MAX_REGISTROS_BITACORA) {
+      bitacoraHistorial = bitacoraHistorial.slice(-MAX_REGISTROS_BITACORA);
+    }
+
+    const payloadBitacora = { bitacora: bitacoraHistorial };
+    if (ultimoDictamenPrevio) {
+      payloadBitacora.ultimo_dictamen = ultimoDictamenPrevio;
+    }
+
+    await put('bitacora_sara.json', JSON.stringify(payloadBitacora), {
       access: 'public',
       addRandomSuffix: false,
       allowOverwrite: true,
@@ -88,8 +146,8 @@ async function registrarCorridaDegradada(horaMexicoStr, ahora, motivo) {
 
 async function ejecutarSARA() {
   const ahora = new Date();
-  const horaMexicoStr = obtenerHoraMexico(ahora);
-  const proximaCorridaStr = obtenerHoraMexico(new Date(ahora.getTime() + 3 * 3600000));
+  const { fechaDia: fechaDiaMexico, horaExacta: horaExactaMexico, horaCorta: horaMexicoStr } = obtenerFechaHoraMexico(ahora);
+  const proximaCorridaStr = obtenerFechaHoraMexico(new Date(ahora.getTime() + 3 * 3600000)).horaCorta;
 
   // 1. Detección DINÁMICA de Aviso Federal (Sin ningún texto quemado)
   let alertaSMN = null;
@@ -165,12 +223,7 @@ async function ejecutarSARA() {
     console.error("❌ Fallo en Open-Meteo:", e);
   }
 
-  // ============================================================
-  // A5 — MODO DEGRADADO
-  // Si no hay datos meteorológicos reales y suficientes,
-  // NO se inventan valores. NO se publica evaluación nueva.
-  // Se registra la corrida degradada en la bitácora y se sale.
-  // ============================================================
+  // Modo Degradado (A5): NO se inventan valores, NO se publica evaluación nueva
   if (serieHoraria.length < MIN_HORAS_REQUERIDAS) {
     const motivo = falloMeteo || `Serie insuficiente: ${serieHoraria.length} horas (mínimo ${MIN_HORAS_REQUERIDAS})`;
     console.error("⚠️  MODO DEGRADADO ACTIVADO");
@@ -178,13 +231,13 @@ async function ejecutarSARA() {
     console.error("⚠️  No se publicará estado_diocesano.json. El estado anterior en Blob permanece vigente.");
     console.error(`⚠️  Timestamp: ${ahora.toISOString()}`);
 
-    await registrarCorridaDegradada(horaMexicoStr, ahora, motivo);
+    await registrarCorridaDegradada(horaMexicoStr, fechaDiaMexico, horaExactaMexico, ahora, motivo);
 
     console.log("ℹ️  Corrida finalizada en modo degradado. Workflow sale con código 0.");
     process.exit(0);
   }
 
-  // 3. API de 7 Días Previos (d = 1 a 7) — solo se llega aquí con datos reales
+  // 3. API de 7 Días Previos (d = 1 a 7)
   let api7DiasPrevios = 0;
   for (let d = 1; d <= 7; d++) {
     const idxInicio = (d - 1) * 24;
@@ -202,7 +255,7 @@ async function ejecutarSARA() {
   const rafagaMaxHoy = Math.max(...eventoActual.map(h => h.rafagas_kmh), 15);
   const visMinHoy = Math.min(...eventoActual.map(h => h.visibilidad_km), 10);
 
-  // 4. Evaluación de Localidades con Umbral de Ladera en >= 45°
+  // 4. Evaluación de las Localidades
   const evaluaciones = todasLocalidades.map(loc => {
     const esAltiplano = ['APN', 'TIZ', 'PMS', 'ACT'].includes(loc.zona_id);
     const esSierra = ['HUA', 'SPP', 'ZAC', 'CHG', 'ZAH', 'ATG', 'TUL'].includes(loc.zona_id);
@@ -310,7 +363,7 @@ async function ejecutarSARA() {
 
   console.log(`📊 [SARA CLASIFICACIÓN REAL VIVA] N4: ${n4} | N3: ${n3} | N2: ${n2} | N1: ${n1}`);
 
-  // 5. Inferencia con Groq openai/gpt-oss-120b
+  // 5. Inferencia con Groq
   let dictamenSARA = null;
   const apiKeyGroq = process.env.GROQ_API_KEY;
 
@@ -351,19 +404,22 @@ Comunidades críticas bajo tensión: ${JSON.stringify(criticas)}.`
 
   if (!dictamenSARA) {
     dictamenSARA = {
-      estado_situacion: n4 > 0 ? "SITUACION_CRITICA" : (n3 > 0 ? "SITUACION_GRAVE" : (n2 > 0 ? "SITUACION_ALERTA_PREPARACION" : "SITUACION_NORMAL")),
+      estado_situacion: n4 > 0 ? "SITUACION_CRITICA" : (n3 > 0 ? "SITUACION_GRAVE" : (n2 > 0 ? "SITUACION_GRAVE" : "SITUACION_NORMAL")),
       color: n4 > 0 ? "#EF4444" : (n3 > 0 ? "#F97316" : (n2 > 0 ? "#F59E0B" : "#10B981")),
       titulo: n4 > 0 ? "Emergencia por Deslaves en Taludes >= 45°" : (n3 > 0 ? "Alerta Temprana en Laderas Serranas" : "Situación Diocesana de Calma"),
-      comentario_oficial: `Corrida del minuto 21 (${horaMexicoStr}): Monitoreo dinámico activo. Evaluaciones físicas actualizadas.`
+      comentario_oficial: `Corrida autónoma (${horaMexicoStr}): Monitoreo dinámico activo. Evaluaciones físicas actualizadas.`
     };
   }
 
+  // Normalizar estado_situacion (N11)
+  dictamenSARA.estado_situacion = normalizarEstadoSituacion(dictamenSARA.estado_situacion);
   dictamenSARA.hora_evaluacion = horaMexicoStr;
   dictamenSARA.proxima_evaluacion = proximaCorridaStr;
   dictamenSARA.timestamp = ahora.toISOString();
 
   // 6. Bitácora con Hash SHA-256
   let bitacoraHistorial = [];
+  let ultimoDictamenPrevio = null;
   try {
     const listado = await list();
     const blobB = listado?.blobs?.find(b => b.pathname.includes('bitacora_sara.json'));
@@ -372,17 +428,22 @@ Comunidades críticas bajo tensión: ${JSON.stringify(criticas)}.`
       if (rB.ok) {
         const dB = await rB.json();
         bitacoraHistorial = dB.bitacora || [];
+        ultimoDictamenPrevio = dB.ultimo_dictamen || null;
       }
     }
   } catch (e) {}
 
   const prevHash = bitacoraHistorial.length > 0 ? bitacoraHistorial[bitacoraHistorial.length - 1].hash_completo : BLOQUE_GENESIS;
   const nuevoHash = generarHashSHA256(prevHash, dictamenSARA.timestamp, { n4, n3, n2, n1, hora: horaMexicoStr });
+  const nuevoId = siguienteIdBitacora(bitacoraHistorial);
 
   bitacoraHistorial.push({
-    id: `SARA_LOG_${bitacoraHistorial.length + 1}`,
+    id: `SARA_LOG_${nuevoId}`,
+    fecha_dia_mexico: fechaDiaMexico,
+    hora_exacta_mexico: horaExactaMexico,
+    timestamp_iso_utc: dictamenSARA.timestamp,
     timestamp_local: horaMexicoStr,
-    timestamp_iso: dictamenSARA.timestamp,
+    origen_evento: "PROGRAMADO_CRON",
     estado_situacion: dictamenSARA.estado_situacion,
     titulo: dictamenSARA.titulo,
     resumen: dictamenSARA.comentario_oficial,
@@ -391,7 +452,11 @@ Comunidades críticas bajo tensión: ${JSON.stringify(criticas)}.`
     hash_completo: nuevoHash
   });
 
-  // 7. Publicación en Vercel Blob CON allowOverwrite: true
+  if (bitacoraHistorial.length > MAX_REGISTROS_BITACORA) {
+    bitacoraHistorial = bitacoraHistorial.slice(-MAX_REGISTROS_BITACORA);
+  }
+
+  // 7. Publicación en Vercel Blob
   const paqueteMaestro = {
     actualizado_iso: ahora.toISOString(),
     hora_local_mexico: horaMexicoStr,
@@ -408,7 +473,9 @@ Comunidades críticas bajo tensión: ${JSON.stringify(criticas)}.`
       token: process.env.BLOB_READ_WRITE_TOKEN
     });
 
-    await put('bitacora_sara.json', JSON.stringify({ bitacora: bitacoraHistorial, ultimo_dictamen: dictamenSARA }), {
+    const payloadBitacora = { bitacora: bitacoraHistorial, ultimo_dictamen: dictamenSARA };
+
+    await put('bitacora_sara.json', JSON.stringify(payloadBitacora), {
       access: 'public',
       addRandomSuffix: false,
       allowOverwrite: true,
