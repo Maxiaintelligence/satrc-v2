@@ -426,7 +426,7 @@ async function ejecutarSARA() {
     const tempMinHoy = eventoActual.length ? Math.min(...eventoActual.map(h => h.temperatura_c), 20) : 20;
     const vientoMaxHoy = eventoActual.length ? Math.max(...eventoActual.map(h => h.viento_kmh), 10) : 10;
     const rafagaMaxHoy = eventoActual.length ? Math.max(...eventoActual.map(h => h.rafagas_kmh), 15) : 15;
-    const visMinHoy = eventoActual.length ? Math.min(...eventoActual.map(h => h.visibilidad_km)) : 999;
+    const visMinHoy = eventoActual.length ? Math.min(...eventoActual.map(h => h.visibility_km)) : 999;
 
     const pendiente = loc.topografia.pendiente_max_deg || 0;
     const relieve = loc.topografia.relieve || 'MESETA';
@@ -535,7 +535,8 @@ async function ejecutarSARA() {
         saturacionTotalSueloMm: saturacionSuelo,
         lluviaEvento24hMm: parseFloat(lluviaEfectiva24h.toFixed(1)),
         tempMinimaC: tempMinHoy,
-        rafagaMaximaKmh: rafagaMaxHoy
+        rafagaMaximaKmh: rafagaMaxHoy,
+        visibilidadMinKm: visMinHoy
       },
       protocolo: "Consulte al coordinador de Cáritas"
     };
