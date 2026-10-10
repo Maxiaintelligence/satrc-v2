@@ -18,11 +18,111 @@ const TIMEOUT_FETCH_MS = 30000;
 const ESPERA_REINTENTO_MS = 3000;
 
 // ============================================================
-// FASE 1: Selección de nodos regionales (uno por zona)
+// MOTOR DE CONSENSO MULTI-MODELO
+// Replica de consensusEngine.js del frontend.
+// Modelos: GFS (EE.UU.), ICON (Alemania), GEM (Canadá)
+// ============================================================
+
+function calcularMediana(valores) {
+  if (!valores || valores.length === 0) return 0;
+  const ordenados = [...valores].sort((a, b) => a - b);
+  const mitad = Math.floor(ordenados.length / 2);
+  if (ordenados.length % 2 !== 0) {
+    return ordenados[mitad];
+  }
+  return (ordenados[mitad - 1] + ordenados[mitad]) / 2;
+}
+
+function filtrarCerosEspurios(p_gfs, p_icon, p_gem) {
+  const lecturas = [
+    { modelo: 'gfs', valor: Math.max(0, p_gfs || 0) },
+    { modelo: 'icon', valor: Math.max(0, p_icon || 0) },
+    { modelo: 'gem', valor: Math.max(0, p_gem || 0) }
+  ];
+
+  const conLluvia = lecturas.filter(l => l.valor >= 0.5);
+  const ceros = lecturas.filter(l => l.valor < 0.1);
+
+  if (conLluvia.length === 2 && ceros.length === 1) {
+    return conLluvia.map(l => l.valor);
+  }
+  return lecturas.map(l => l.valor);
+}
+
+function generarConsensoDeterminista(datosHorarios) {
+  if (!datosHorarios || !datosHorarios.time) return [];
+
+  const horas = datosHorarios.time;
+  const serieConsenso = [];
+
+  for (let i = 0; i < horas.length; i++) {
+    // --- Precipitación: mediana con filtro de ceros espurios ---
+    const p_gfs = datosHorarios["precipitation_gfs_seamless"]?.[i] ?? datosHorarios["precipitation"]?.[i] ?? 0;
+    const p_icon = datosHorarios["precipitation_icon_seamless"]?.[i] ?? 0;
+    const p_gem = datosHorarios["precipitation_gem_seamless"]?.[i] ?? 0;
+
+    const valoresValidosLluvia = filtrarCerosEspurios(p_gfs, p_icon, p_gem);
+    const lluviaConsenso = calcularMediana(valoresValidosLluvia);
+
+    // --- Temperatura: mediana ---
+    const t_gfs = datosHorarios["temperature_2m_gfs_seamless"]?.[i] ?? datosHorarios["temperature_2m"]?.[i] ?? 15;
+    const t_icon = datosHorarios["temperature_2m_icon_seamless"]?.[i] ?? 15;
+    const t_gem = datosHorarios["temperature_2m_gem_seamless"]?.[i] ?? 15;
+    const tempConsenso = calcularMediana([t_gfs, t_icon, t_gem]);
+
+    // --- Viento sostenido: mediana ---
+    const v_gfs = datosHorarios["wind_speed_10m_gfs_seamless"]?.[i] ?? datosHorarios["wind_speed_10m"]?.[i] ?? 0;
+    const v_icon = datosHorarios["wind_speed_10m_icon_seamless"]?.[i] ?? 0;
+    const v_gem = datosHorarios["wind_speed_10m_gem_seamless"]?.[i] ?? 0;
+    const vientoConsenso = calcularMediana([v_gfs, v_icon, v_gem]);
+
+    // --- Ráfagas: máximo (criterio conservador) ---
+    const r_gfs = datosHorarios["wind_gusts_10m_gfs_seamless"]?.[i] ?? datosHorarios["wind_gusts_10m"]?.[i] ?? 0;
+    const r_icon = datosHorarios["wind_gusts_10m_icon_seamless"]?.[i] ?? 0;
+    const r_gem = datosHorarios["wind_gusts_10m_gem_seamless"]?.[i] ?? 0;
+    const rafagaConsenso = Math.max(r_gfs, r_icon, r_gem);
+
+    // --- Humedad relativa: mediana ---
+    const h_gfs = datosHorarios["relative_humidity_2m_gfs_seamless"]?.[i] ?? datosHorarios["relative_humidity_2m"]?.[i] ?? 50;
+    const h_icon = datosHorarios["relative_humidity_2m_icon_seamless"]?.[i] ?? 50;
+    const h_gem = datosHorarios["relative_humidity_2m_gem_seamless"]?.[i] ?? 50;
+    const humedadConsenso = calcularMediana([h_gfs, h_icon, h_gem]);
+
+    // --- Visibilidad: solo GFS la provee. ICON y GEM no. ---
+    const vis = (datosHorarios["visibility_gfs_seamless"]?.[i]
+              ?? datosHorarios["visibility"]?.[i]
+              ?? 10000) / 1000;
+
+    // --- Confiabilidad según dispersión inter-modelo ---
+    const dispersion = Math.max(p_gfs, p_icon, p_gem) - Math.min(p_gfs, p_icon, p_gem);
+    let confiabilidad = "ALTA";
+    if (dispersion > 12.0) confiabilidad = "EN_DISPUTA";
+    else if (dispersion > 4.0) confiabilidad = "MODERADA";
+
+    serieConsenso.push({
+      fecha_hora: horas[i],
+      lluvia_mm: parseFloat(lluviaConsenso.toFixed(1)),
+      temperatura_c: parseFloat(tempConsenso.toFixed(1)),
+      viento_kmh: parseFloat(vientoConsenso.toFixed(1)),
+      rafagas_kmh: parseFloat(rafagaConsenso.toFixed(1)),
+      humedad_relativa_pct: Math.round(humedadConsenso),
+      visibility_km: vis,
+      confiabilidad: confiabilidad,
+      detalle_modelos: {
+        lluvia: { gfs: p_gfs, icon: p_icon, gem: p_gem },
+        temp: { gfs: t_gfs, icon: t_icon, gem: t_gem }
+      }
+    });
+  }
+
+  return serieConsenso;
+}
+
+// ============================================================
+// SELECCIÓN DE NODOS REGIONALES
 // ============================================================
 
 function seleccionarNodosRegionales() {
-  const nodos = {};
   const zonas = {};
 
   todasLocalidades.forEach(loc => {
@@ -43,26 +143,17 @@ function seleccionarNodosRegionales() {
     }
   });
 
-  Object.values(zonas).forEach(n => { nodos[n.zona_id] = n; });
-  return nodos;
+  return zonas;
 }
 
 // ============================================================
-// FASE 2: Consulta de Open-Meteo por zona, con reintentos
+// CONSULTA DE OPEN-METEO POR ZONA (con reintentos)
 // ============================================================
-
-function extraerValor(h, indice, nombreBase, valorDefecto = 0) {
-  if (!h) return valorDefecto;
-  return h[nombreBase]?.[indice] ??
-         h[`${nombreBase}_gfs_seamless`]?.[indice] ??
-         h[`${nombreBase}_icon_seamless`]?.[indice] ??
-         valorDefecto;
-}
 
 async function consultarZonaUnaVez(nodo) {
   const url = `https://api.open-meteo.com/v1/forecast?latitude=${nodo.lat}&longitude=${nodo.lon}` +
               `&hourly=precipitation,temperature_2m,relative_humidity_2m,wind_speed_10m,wind_gusts_10m,visibility` +
-              `&models=gfs_seamless,icon_seamless&past_days=7&forecast_days=3&timezone=America%2FMexico_City`;
+              `&models=gfs_seamless,icon_seamless,gem_seamless&past_days=7&forecast_days=3&timezone=America%2FMexico_City`;
 
   const res = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_FETCH_MS) });
   if (!res.ok) {
@@ -70,23 +161,11 @@ async function consultarZonaUnaVez(nodo) {
   }
 
   const data = await res.json();
-  const h = data.hourly;
-  if (!h || !h.time) {
+  if (!data.hourly || !data.hourly.time) {
     throw new Error("Respuesta sin bloque hourly");
   }
 
-  const serie = [];
-  for (let i = 0; i < h.time.length; i++) {
-    serie.push({
-      fecha_hora: h.time[i],
-      lluvia_mm: extraerValor(h, i, 'precipitation', 0),
-      temperatura_c: extraerValor(h, i, 'temperature_2m', 15),
-      humedad_relativa_pct: extraerValor(h, i, 'relative_humidity_2m', 60),
-      viento_kmh: extraerValor(h, i, 'wind_speed_10m', 10),
-      rafagas_kmh: extraerValor(h, i, 'wind_gusts_10m', 15),
-      visibilidad_km: extraerValor(h, i, 'visibility', 10000) / 1000
-    });
-  }
+  const serie = generarConsensoDeterminista(data.hourly);
 
   if (serie.length < MIN_HORAS_REQUERIDAS) {
     throw new Error(`Serie insuficiente: ${serie.length} horas (mínimo ${MIN_HORAS_REQUERIDAS})`);
@@ -117,20 +196,15 @@ async function consultarZonaConReintentos(nodo) {
 
 async function cargarSeriesRegionales(nodos) {
   const zonaIds = Object.keys(nodos);
-  console.log(`\n🌐 Consultando ${zonaIds.length} nodos regionales en paralelo...`);
+  console.log(`\n🌐 Consultando ${zonaIds.length} nodos regionales en paralelo (GFS + ICON + GEM)...`);
 
   const t0 = Date.now();
 
   const promesas = zonaIds.map((zonaId, indice) => {
     const nodo = nodos[zonaId];
-    // Stagger: 200ms entre cada fetch para no gatillar rate limits de Open-Meteo
     return new Promise(r => setTimeout(r, indice * 200))
       .then(() => consultarZonaConReintentos(nodo))
-      .then(resultado => ({
-        zonaId,
-        nodo,
-        ...resultado
-      }));
+      .then(resultado => ({ zonaId, nodo, ...resultado }));
   });
 
   const resultados = await Promise.allSettled(promesas);
@@ -167,7 +241,7 @@ async function cargarSeriesRegionales(nodos) {
 }
 
 // ============================================================
-// Helpers (fecha, hash, ID)
+// HELPERS (fecha, hash, IDs, normalización)
 // ============================================================
 
 function generarHashSHA256(prevHash, timestamp, datos) {
@@ -178,23 +252,13 @@ function generarHashSHA256(prevHash, timestamp, datos) {
 
 function obtenerFechaHoraMexico(fecha = new Date()) {
   const fechaDia = fecha.toLocaleDateString('es-MX', {
-    timeZone: 'America/Mexico_City',
-    day: '2-digit',
-    month: 'long',
-    year: 'numeric'
+    timeZone: 'America/Mexico_City', day: '2-digit', month: 'long', year: 'numeric'
   });
   const horaExacta = fecha.toLocaleTimeString('es-MX', {
-    timeZone: 'America/Mexico_City',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: true
+    timeZone: 'America/Mexico_City', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true
   });
   const horaCorta = fecha.toLocaleTimeString('es-MX', {
-    timeZone: 'America/Mexico_City',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: true
+    timeZone: 'America/Mexico_City', hour: '2-digit', minute: '2-digit', hour12: true
   });
   return { fechaDia, horaExacta, horaCorta };
 }
@@ -203,12 +267,8 @@ function normalizarEstadoSituacion(estadoRaw) {
   if (!estadoRaw || typeof estadoRaw !== 'string') return 'SITUACION_NORMAL';
   const limpio = estadoRaw.trim().toUpperCase();
   if (limpio === 'CORRIDA_DEGRADADA') return 'CORRIDA_DEGRADADA';
-  if (limpio === 'SITUACION_CRITICA' || limpio === 'CRITICA' || limpio === 'CRÍTICA' || limpio === 'EMERGENCIA') {
-    return 'SITUACION_CRITICA';
-  }
-  if (limpio === 'SITUACION_GRAVE' || limpio === 'GRAVE' || limpio === 'ALERTA') {
-    return 'SITUACION_GRAVE';
-  }
+  if (limpio === 'SITUACION_CRITICA' || limpio === 'CRITICA' || limpio === 'CRÍTICA' || limpio === 'EMERGENCIA') return 'SITUACION_CRITICA';
+  if (limpio === 'SITUACION_GRAVE' || limpio === 'GRAVE' || limpio === 'ALERTA') return 'SITUACION_GRAVE';
   return 'SITUACION_NORMAL';
 }
 
@@ -224,7 +284,7 @@ function siguienteIdBitacora(historial) {
 }
 
 // ============================================================
-// Registro de corrida degradada (falla total de Open-Meteo)
+// REGISTRO DE CORRIDA DEGRADADA
 // ============================================================
 
 async function registrarCorridaDegradada(horaMexicoStr, fechaDiaMexico, horaExactaMexico, ahora, motivo) {
@@ -247,12 +307,7 @@ async function registrarCorridaDegradada(horaMexicoStr, fechaDiaMexico, horaExac
     const prevHash = bitacoraHistorial.length > 0
       ? bitacoraHistorial[bitacoraHistorial.length - 1].hash_completo
       : BLOQUE_GENESIS;
-
-    const nuevoHash = generarHashSHA256(prevHash, ahora.toISOString(), {
-      tipo: "CORRIDA_DEGRADADA",
-      motivo
-    });
-
+    const nuevoHash = generarHashSHA256(prevHash, ahora.toISOString(), { tipo: "CORRIDA_DEGRADADA", motivo });
     const nuevoId = siguienteIdBitacora(bitacoraHistorial);
 
     bitacoraHistorial.push({
@@ -264,7 +319,7 @@ async function registrarCorridaDegradada(horaMexicoStr, fechaDiaMexico, horaExac
       origen_evento: "CORRIDA_DEGRADADA",
       estado_situacion: "CORRIDA_DEGRADADA",
       titulo: "Corrida degradada: sin datos meteorológicos de ninguna zona",
-      resumen: `${motivo} a las ${horaMexicoStr}. No se publicó evaluación nueva para evitar alertas falsas. El estado anterior en el sistema permanece vigente.`,
+      resumen: `${motivo} a las ${horaMexicoStr}. No se publicó evaluación nueva para evitar alertas falsas.`,
       prev_hash: prevHash.slice(0, 16) + "...",
       hash: nuevoHash.slice(0, 16) + "...",
       hash_completo: nuevoHash
@@ -275,14 +330,10 @@ async function registrarCorridaDegradada(horaMexicoStr, fechaDiaMexico, horaExac
     }
 
     const payloadBitacora = { bitacora: bitacoraHistorial };
-    if (ultimoDictamenPrevio) {
-      payloadBitacora.ultimo_dictamen = ultimoDictamenPrevio;
-    }
+    if (ultimoDictamenPrevio) payloadBitacora.ultimo_dictamen = ultimoDictamenPrevio;
 
     await put('bitacora_sara.json', JSON.stringify(payloadBitacora), {
-      access: 'public',
-      addRandomSuffix: false,
-      allowOverwrite: true,
+      access: 'public', addRandomSuffix: false, allowOverwrite: true,
       token: process.env.BLOB_READ_WRITE_TOKEN
     });
 
@@ -293,7 +344,7 @@ async function registrarCorridaDegradada(horaMexicoStr, fechaDiaMexico, horaExac
 }
 
 // ============================================================
-// Ejecución principal
+// EJECUCIÓN PRINCIPAL
 // ============================================================
 
 async function ejecutarSARA() {
@@ -311,20 +362,10 @@ async function ejecutarSARA() {
       const esIntensa = texto.includes("intensas") || texto.includes("torrenciales");
 
       if (afectaRegion && esIntensa) {
-        alertaSMN = {
-          titulo: "Aviso de Lluvias Intensas CONAGUA/SMN",
-          rango_lluvia_min_mm: 75,
-          rango_lluvia_max_mm: 150,
-          estados_afectados: ["PUE", "HGO", "VER"]
-        };
+        alertaSMN = { titulo: "Aviso de Lluvias Intensas CONAGUA/SMN", rango_lluvia_min_mm: 75, rango_lluvia_max_mm: 150, estados_afectados: ["PUE", "HGO", "VER"] };
         console.log("🏛️ Aviso Severo del SMN activo para la región (75 a 150 mm).");
       } else if (afectaRegion) {
-        alertaSMN = {
-          titulo: "Aviso de Lluvias Fuertes CONAGUA/SMN",
-          rango_lluvia_min_mm: 25,
-          rango_lluvia_max_mm: 50,
-          estados_afectados: ["PUE", "HGO"]
-        };
+        alertaSMN = { titulo: "Aviso de Lluvias Fuertes CONAGUA/SMN", rango_lluvia_min_mm: 25, rango_lluvia_max_mm: 50, estados_afectados: ["PUE", "HGO"] };
         console.log("🏛️ Aviso Preventivo del SMN activo (25 a 50 mm).");
       } else {
         console.log("🏛️ Sin avisos extraordinarios del SMN para Hidalgo/Puebla en este ciclo.");
@@ -345,35 +386,30 @@ async function ejecutarSARA() {
 
   // --- 3. Modo degradado si TODAS las zonas fallaron ---
   if (zonasOk.length === 0) {
-    const motivo = `Falla total de Open-Meteo en las ${Object.keys(nodos).length} zonas. Zonas afectadas: ${zonasFallidas.join(', ')}`;
+    const motivo = `Falla total de Open-Meteo en las ${Object.keys(nodos).length} zonas.`;
     console.error("\n⚠️  MODO DEGRADADO ACTIVADO (falla total)");
     console.error(`⚠️  Motivo: ${motivo}`);
-    console.error("⚠️  No se publicará estado_diocesano.json. El estado anterior en Blob permanece vigente.");
-
     await registrarCorridaDegradada(horaMexicoStr, fechaDiaMexico, horaExactaMexico, ahora, motivo);
-
     console.log("ℹ️  Corrida finalizada en modo degradado. Workflow sale con código 0.");
     process.exit(0);
   }
 
-  // --- 4. Construir seriesPorZona para el motor ---
-  // Cada zona tiene su serie real o un array vacío si falló
+  // --- 4. Construir seriesPorZona ---
   const seriesPorZona = {};
   Object.keys(nodos).forEach(zonaId => {
     seriesPorZona[zonaId] = series[zonaId]?.ok ? series[zonaId].serie : [];
   });
 
-  // --- 5. Evaluación de cada localidad con SU serie regional ---
+  // --- 5. Evaluación por localidad ---
   const evaluaciones = todasLocalidades.map(loc => {
     const zonaId = loc.zona_id;
     const serieZona = seriesPorZona[zonaId] || [];
     const zonaSinDatos = series[zonaId]?.ok === false;
 
-    // Reutilizamos la lógica de evaluación existente pero por zona
     const esAltiplano = ['ACT', 'APN', 'PMN', 'PMS', 'TIZ'].includes(zonaId);
     const esSierra = ['ATG', 'CHG', 'HUA', 'HYC', 'SPP', 'TUL', 'XIC', 'ZAC', 'ZAH'].includes(zonaId);
 
-    // --- Cálculos previos sobre la serie de la zona ---
+    // Cálculos previos sobre la serie consenso de la zona
     let api7DiasPrevios = 0;
     if (serieZona.length >= 168) {
       for (let d = 1; d <= 7; d++) {
@@ -390,9 +426,8 @@ async function ejecutarSARA() {
     const tempMinHoy = eventoActual.length ? Math.min(...eventoActual.map(h => h.temperatura_c), 20) : 20;
     const vientoMaxHoy = eventoActual.length ? Math.max(...eventoActual.map(h => h.viento_kmh), 10) : 10;
     const rafagaMaxHoy = eventoActual.length ? Math.max(...eventoActual.map(h => h.rafagas_kmh), 15) : 15;
-    const visMinHoy = eventoActual.length ? Math.min(...eventoActual.map(h => h.visibilidad_km), 10) : 10;
+    const visMinHoy = eventoActual.length ? Math.min(...eventoActual.map(h => h.visibility_km), 10) : 10;
 
-    // --- Reglas del motor (idénticas a las originales) ---
     const pendiente = loc.topografia.pendiente_max_deg || 0;
     const relieve = loc.topografia.relieve || 'MESETA';
     const esLadera = relieve === 'LADERA' || pendiente >= 25;
@@ -407,7 +442,7 @@ async function ejecutarSARA() {
     let vectorDominante = zonaSinDatos ? "SIN_DATOS_REGIONALES" : "ATMOSFERA_ESTABLE";
     let tituloDiagnostico = zonaSinDatos ? "Sin datos meteorológicos regionales" : "Condiciones de Estabilidad y Calma";
     let causa = zonaSinDatos
-      ? `La zona ${zonaId} no reportó datos meteorológicos en esta corrida. Localidad evaluada con mínimos por defecto.`
+      ? `La zona ${zonaId} no reportó datos meteorológicos en esta corrida.`
       : "Sin perturbaciones climáticas significativas previstas.";
 
     if (!zonaSinDatos) {
@@ -422,7 +457,7 @@ async function ejecutarSARA() {
             nivel = 4;
             vectorDominante = "DESLAVE_CRITICO";
             tituloDiagnostico = "Peligro Crítico de Deslave en Ladera Escarpada";
-            causa = `Suelo saturado (${saturacionSuelo} mm) sobre talud crítico de ${pendiente}°. Falla inminente de talud habitado.`;
+            causa = `Suelo saturado (${saturacionSuelo} mm) sobre talud crítico de ${pendiente}°. Falla inminente.`;
           } else {
             nivel = Math.max(nivel, 3);
             vectorDominante = "DESLAVE_MODERADO";
@@ -502,7 +537,7 @@ async function ejecutarSARA() {
   const sinDatos = evaluaciones.filter(e => e.sin_datos_regionales).length;
   const criticas = evaluaciones.filter(e => e.nivel_alerta >= 3).slice(0, 6).map(c => `${c.nombre} (${c.municipio})`);
 
-  console.log(`📊 [SARA CLASIFICACIÓN MULTI-NODO] N4: ${n4} | N3: ${n3} | N2: ${n2} | N1: ${n1} | Sin datos: ${sinDatos}`);
+  console.log(`📊 [SARA CONSENSO GFS+ICON+GEM] N4: ${n4} | N3: ${n3} | N2: ${n2} | N1: ${n1} | Sin datos: ${sinDatos}`);
 
   // --- 6. Inferencia con Groq ---
   let dictamenSARA = null;
@@ -518,20 +553,15 @@ async function ejecutarSARA() {
           temperature: 0.1,
           response_format: { type: "json_object" },
           messages: [
-            {
-              role: "system",
-              content: `Eres SARA, Oficial Meteoróloga de Guardia de Cáritas Tulancingo. Hora oficial de México: ${horaMexicoStr}.
+            { role: "system", content: `Eres SARA, Oficial Meteoróloga de Guardia de Cáritas Tulancingo. Hora oficial de México: ${horaMexicoStr}.
 Genera el informe diocesano multimodal en JSON con claves: estado_situacion, color, titulo, comentario_oficial.
 REGLA: Si no hay emergencias activas, declara situación normal con serenidad profesional.
-REGLA: NO menciones conteos numéricos de niveles en el comentario. Se agregarán aparte.`
-            },
-            {
-              role: "user",
-              content: `Hora México: ${horaMexicoStr}. Aviso SMN: ${alertaSMN ? alertaSMN.titulo : 'Sin aviso severo vigente'}.
+REGLA: NO menciones conteos numéricos de niveles en el comentario. Se agregarán aparte.` },
+            { role: "user", content: `Hora México: ${horaMexicoStr}. Aviso SMN: ${alertaSMN ? alertaSMN.titulo : 'Sin aviso severo vigente'}.
 Zonas OK: ${zonasOk.length}/${Object.keys(nodos).length}. Zonas sin datos: ${zonasFallidas.join(', ') || 'ninguna'}.
+Consenso: GFS + ICON + GEM.
 Nivel 4: ${n4}, Nivel 3: ${n3}, Nivel 2: ${n2}, Nivel 1: ${n1}.
-Comunidades críticas bajo tensión: ${JSON.stringify(criticas)}.`
-            }
+Comunidades críticas bajo tensión: ${JSON.stringify(criticas)}.` }
           ]
         })
       });
@@ -550,7 +580,7 @@ Comunidades críticas bajo tensión: ${JSON.stringify(criticas)}.`
       estado_situacion: n4 > 0 ? "SITUACION_CRITICA" : (n3 > 0 ? "SITUACION_GRAVE" : "SITUACION_NORMAL"),
       color: n4 > 0 ? "#EF4444" : (n3 > 0 ? "#F97316" : "#10B981"),
       titulo: n4 > 0 ? "Emergencia por Deslaves en Taludes >= 45°" : (n3 > 0 ? "Alerta Temprana en Laderas Serranas" : "Situación Diocesana de Calma"),
-      comentario_oficial: `Corrida autónoma multi-nodo (${horaMexicoStr}): Evaluación sobre ${zonasOk.length} zonas meteorológicas con datos reales.`
+      comentario_oficial: `Corrida autónoma multi-nodo con consenso GFS+ICON+GEM (${horaMexicoStr}): ${zonasOk.length} zonas evaluadas.`
     };
   }
 
@@ -574,7 +604,7 @@ Comunidades críticas bajo tensión: ${JSON.stringify(criticas)}.`
   } catch (e) {}
 
   const prevHash = bitacoraHistorial.length > 0 ? bitacoraHistorial[bitacoraHistorial.length - 1].hash_completo : BLOQUE_GENESIS;
-  const nuevoHash = generarHashSHA256(prevHash, dictamenSARA.timestamp, { n4, n3, n2, n1, zonaOk: zonasOk.length, hora: horaMexicoStr });
+  const nuevoHash = generarHashSHA256(prevHash, dictamenSARA.timestamp, { n4, n3, n2, n1, zonaOk: zonasOk.length, hora: horaMexicoStr, consenso: "GFS+ICON+GEM" });
   const nuevoId = siguienteIdBitacora(bitacoraHistorial);
 
   bitacoraHistorial.push({
@@ -617,25 +647,22 @@ Comunidades críticas bajo tensión: ${JSON.stringify(criticas)}.`
     semaforo: { totalNivel4: n4, totalNivel3: n3, totalNivel2: n2, totalNivel1: n1 },
     zonas_sin_datos: zonasFallidas,
     series_por_zona: seriesPorZonaMeta,
+    motor_consenso: "GFS + ICON + GEM (mediana con filtro de ceros)",
     evaluaciones: evaluaciones
   };
 
   try {
     await put('estado_diocesano.json', JSON.stringify(paqueteMaestro), {
-      access: 'public',
-      addRandomSuffix: false,
-      allowOverwrite: true,
+      access: 'public', addRandomSuffix: false, allowOverwrite: true,
       token: process.env.BLOB_READ_WRITE_TOKEN
     });
 
     await put('bitacora_sara.json', JSON.stringify({ bitacora: bitacoraHistorial, ultimo_dictamen: dictamenSARA }), {
-      access: 'public',
-      addRandomSuffix: false,
-      allowOverwrite: true,
+      access: 'public', addRandomSuffix: false, allowOverwrite: true,
       token: process.env.BLOB_READ_WRITE_TOKEN
     });
 
-    console.log(`✅ [SARA RUNNER] Publicación exitosa con ${zonasOk.length} zonas a las ${horaMexicoStr}.`);
+    console.log(`✅ [SARA RUNNER] Publicación exitosa con ${zonasOk.length} zonas y consenso GFS+ICON+GEM a las ${horaMexicoStr}.`);
   } catch (e) {
     console.error("❌ Error al publicar en Vercel Blob:", e);
     process.exit(1);
