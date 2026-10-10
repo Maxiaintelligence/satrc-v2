@@ -1,42 +1,66 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import db from '../data/localidades.json';
 import { consultarModelosDeterministas } from '../engine/meteoFetcher.js';
 import { generarConsensoDeterminista } from '../engine/consensusEngine.js';
 import { evaluarLocalidad } from '../engine/riskEvaluator.js';
 import RiskMap from '../components/RiskMap.jsx';
 import SatelliteViewer from '../components/SatelliteViewer.jsx';
-import { 
-  Radio, 
-  Power, 
-  Send, 
-  Bot, 
-  ScrollText, 
-  Clock, 
-  AlertOctagon, 
-  AlertTriangle, 
-  ChevronDown, 
-  ChevronUp, 
-  ChevronLeft, 
-  ChevronRight, 
-  X, 
-  ExternalLink, 
-  Mountain, 
-  Waves, 
-  Truck, 
-  TrendingUp, 
-  TrendingDown, 
-  Minus, 
-  Download, 
-  Layers, 
-  RotateCw, 
-  ShieldAlert, 
-  FileText, 
+import {
+  Radio,
+  Power,
+  Send,
+  Bot,
+  ScrollText,
+  Clock,
+  AlertOctagon,
+  AlertTriangle,
+  ChevronDown,
+  ChevronUp,
+  ChevronLeft,
+  ChevronRight,
+  X,
+  ExternalLink,
+  Mountain,
+  Waves,
+  Truck,
+  TrendingUp,
+  TrendingDown,
+  Minus,
+  Download,
+  Layers,
+  RotateCw,
+  ShieldAlert,
+  FileText,
   Printer,
   Sparkles,
   Share2,
   Check,
   ShieldCheck
 } from 'lucide-react';
+
+const INTERVALO_REFRESCO_MS = 5 * 60 * 1000; // 5 minutos
+
+function formatearTimestamp(isoUtc) {
+  if (!isoUtc) return null;
+  try {
+    const fecha = new Date(isoUtc);
+    if (isNaN(fecha.getTime())) return null;
+    const fechaMx = fecha.toLocaleDateString('es-MX', {
+      timeZone: 'America/Mexico_City',
+      day: '2-digit',
+      month: 'short'
+    });
+    const horaMx = fecha.toLocaleTimeString('es-MX', {
+      timeZone: 'America/Mexico_City',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    });
+    return `${fechaMx} • ${horaMx} hrs`;
+  } catch (e) {
+    return null;
+  }
+}
 
 export default function SatRCOperativo({ alCerrarSesion }) {
   const todasLocalidades = db.localidades || [];
@@ -57,6 +81,10 @@ export default function SatRCOperativo({ alCerrarSesion }) {
   const [modalBitacoraAbierto, setModalBitacoraAbierto] = useState(false);
   const [disparandoManual, setDisparandoManual] = useState(false);
   const [comunidadDetalle, setComunidadDetalle] = useState(null);
+
+  // Timestamp de última actualización (N9)
+  const [ultimaActualizacion, setUltimaActualizacion] = useState(null);
+  const [refrescando, setRefrescando] = useState(false);
 
   // Estados del Reporte On-Demand
   const [modalReporteOnDemandAbierto, setModalReporteOnDemandAbierto] = useState(false);
@@ -90,33 +118,81 @@ export default function SatRCOperativo({ alCerrarSesion }) {
     setComunidadFoco(resEvaluadas[0] || null);
   };
 
-  const cargarEstadoServidor = async () => {
-    setCargando(true);
+  const cargarEstadoServidor = async (silencioso = false) => {
+    if (!silencioso) setCargando(true);
+    if (silencioso) setRefrescando(true);
+
     try {
-      const res = await fetch(`/api/sara?t=${Date.now()}`);
+      const res = await fetch(`/api/sara?t=${Date.now()}`, {
+        headers: { 'Cache-Control': 'no-cache' }
+      });
+
       if (res.ok) {
         const data = await res.json();
-        if (data.dictamen) setDictamenSARA(data.dictamen);
+
+        if (data.dictamen) {
+          setDictamenSARA(data.dictamen);
+          // Guardar timestamp del dictamen como marca de "última actualización"
+          if (data.dictamen.timestamp) {
+            setUltimaActualizacion(data.dictamen.timestamp);
+          }
+        }
         if (data.bitacora) setBitacoraSARA(data.bitacora);
         if (data.ultimo_reporte_ondemand) setReporteVigente(data.ultimo_reporte_ondemand);
 
         if (data.evaluaciones && data.evaluaciones.length > 0) {
           setEvaluaciones(data.evaluaciones);
           setComunidadFoco(data.evaluaciones[0] || null);
-        } else {
+        } else if (!silencioso) {
+          // Solo hacer evaluación en vivo si NO es refresh silencioso
           await ejecutarEvaluacionRealEnVivo(data.dictamen);
         }
-      } else {
+      } else if (!silencioso) {
         await ejecutarEvaluacionRealEnVivo();
       }
     } catch (e) {
-      await ejecutarEvaluacionRealEnVivo();
+      if (!silencioso) {
+        console.warn("Fallo en carga inicial, evaluando en vivo:", e.message);
+        await ejecutarEvaluacionRealEnVivo();
+      } else {
+        console.warn("Refresh silencioso falló:", e.message);
+      }
     }
-    setCargando(false);
+
+    if (!silencioso) setCargando(false);
+    if (silencioso) setRefrescando(false);
   };
 
+  // Guardar referencia estable a cargarEstadoServidor para el intervalo
+  const cargarEstadoRef = useRef();
+  cargarEstadoRef.current = cargarEstadoServidor;
+
+  // Carga inicial al montar
   useEffect(() => {
     cargarEstadoServidor();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // N9 — Auto-refresh cada 5 minutos + al volver a la pestaña
+  useEffect(() => {
+    const intervalo = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        cargarEstadoRef.current?.(true);
+      }
+    }, INTERVALO_REFRESCO_MS);
+
+    const alCambiarVisibilidad = () => {
+      if (document.visibilityState === 'visible') {
+        cargarEstadoRef.current?.(true);
+      }
+    };
+
+    document.addEventListener('visibilitychange', alCambiarVisibilidad);
+
+    return () => {
+      clearInterval(intervalo);
+      document.removeEventListener('visibilitychange', alCambiarVisibilidad);
+    };
   }, []);
 
   // Generar Reporte On-Demand con Cabecera x-admin-token
@@ -139,9 +215,9 @@ export default function SatRCOperativo({ alCerrarSesion }) {
     try {
       const res = await fetch('/api/reporte-ondemand', {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
-          'x-admin-token': ADMIN_TOKEN // Cabecera de autenticación requerida
+          'x-admin-token': ADMIN_TOKEN
         },
         body: JSON.stringify({
           resumenSeveridad: { totalNivel4: n4, totalNivel3: n3, totalNivel1: n1 },
@@ -262,9 +338,11 @@ Documento oficial emitido para párrocos, brigadistas y autoridades de auxilio.
     return { texto: "Mejorando", icono: TrendingDown, color: "text-emerald-400" };
   };
 
+  const textoUltimaActualizacion = formatearTimestamp(ultimaActualizacion);
+
   return (
     <div className="space-y-6">
-      
+
       {/* 1. BARRA SUPERIOR DE MANDO */}
       <div className="bg-slate-900 border-2 border-slate-800 p-4 rounded-2xl shadow-xl flex flex-col md:flex-row justify-between items-center gap-4">
         <div className="flex items-center gap-3">
@@ -272,13 +350,19 @@ Documento oficial emitido para párrocos, brigadistas y autoridades de auxilio.
             <Radio className="w-5 h-5 animate-pulse" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-base md:text-lg font-black text-white tracking-wide">
                 Cuarto de Situación Diocesano
               </h2>
               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
-                CRON AUTÓNOMO :21 (ACTIVO)
+                CRON AUTÓNOMO (ACTIVO)
               </span>
+              {textoUltimaActualizacion && (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-slate-800 text-amber-300 border-amber-500/30 flex items-center gap-1">
+                  <Clock className="w-3 h-3" />
+                  Datos: {textoUltimaActualizacion}
+                </span>
+              )}
             </div>
             <p className="text-xs text-slate-400">
               Cáritas Pastoral Social • Arquidiócesis de Tulancingo (405 Localidades)
@@ -287,11 +371,21 @@ Documento oficial emitido para párrocos, brigadistas y autoridades de auxilio.
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {/* BOTÓN REFRESH MANUAL */}
+          <button
+            onClick={() => cargarEstadoServidor(true)}
+            disabled={refrescando}
+            title="Refrescar datos del servidor"
+            className="flex items-center gap-1.5 px-2.5 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-300 hover:text-white rounded-xl text-xs border border-slate-700 transition-all"
+          >
+            <RotateCw className={`w-3.5 h-3.5 ${refrescando ? 'animate-spin' : ''}`} />
+          </button>
+
           {/* BOTÓN REPORTE DIOCESANO ON-DEMAND */}
           <button
             onClick={generarReporteOnDemand}
             className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black rounded-xl text-xs transition-all shadow-lg shadow-amber-500/25 border border-amber-400"
-            title="Generar reporte diocesano en tiempo real con Groq Llama-3.3"
+            title="Generar reporte diocesano en tiempo real"
           >
             <Sparkles className="w-3.5 h-3.5 text-slate-950" />
             <span>Generar Reporte On-Demand</span>
@@ -455,7 +549,7 @@ Documento oficial emitido para párrocos, brigadistas y autoridades de auxilio.
       {modalReporteOnDemandAbierto && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md animate-fade-in print:p-0 print:bg-white">
           <div className="bg-slate-900 border-2 border-slate-700 max-w-4xl w-full rounded-2xl shadow-2xl overflow-hidden flex flex-col text-slate-200 max-h-[92vh] print:max-h-none print:border-0 print:shadow-none print:text-black print:bg-white">
-            
+
             <div className="p-4 bg-slate-800 border-b border-slate-700 flex flex-wrap justify-between items-center gap-2 print:hidden">
               <div className="flex items-center gap-2">
                 <FileText className="w-5 h-5 text-amber-400" />
@@ -500,7 +594,7 @@ Documento oficial emitido para párrocos, brigadistas y autoridades de auxilio.
               {generandoOnDemand ? (
                 <div className="p-16 text-center text-slate-400 flex flex-col items-center justify-center gap-3">
                   <div className="w-8 h-8 border-4 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
-                  <p className="font-bold text-white text-sm">SARA (Groq Llama-3.3-70B) redactando reporte en tiempo real...</p>
+                  <p className="font-bold text-white text-sm">SARA redactando reporte en tiempo real...</p>
                   <p className="text-[11px] text-slate-400">Analizando cuencas y sellando entrada en la bitácora de Vercel Blob.</p>
                 </div>
               ) : reporteVigente ? (
