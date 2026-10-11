@@ -20,7 +20,7 @@ jobs:
           node-version: 22
 
       - name: Instalar Dependencias del Motor
-        run: npm install @vercel/blob
+        run: npm ci --omit=dev
 
       - name: Ejecutar Motor Autónomo Multivectorial SARA
         env:
