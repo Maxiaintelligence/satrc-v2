@@ -5,7 +5,7 @@
 
 export default async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
-  const SMN_AVISOS_URL = "https://smn.conagua.gob.mx/es/alertas-y-avisos-meteorologicos";
+  const SMN_AVISOS_URL = "https://smn.conagua.gob.mx/es/";
 
   const ahora = new Date();
   const fechaHoyStr = ahora.toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City', day: '2-digit', month: 'long', year: 'numeric' });
