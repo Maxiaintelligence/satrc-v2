@@ -115,7 +115,7 @@ export default function App() {
               </div>
               <h2 className="text-xl font-bold text-white mb-2">Acceso a Sala Operativa SatRC</h2>
               <p className="text-xs text-slate-400 mb-6 leading-relaxed">
-                Este módulo es para Coordinadores, Parrocos y Brigadistas de Cáritas Pastoral Social, si requiere ACESSO PIDA SU CLAVE CON LA PASTORAL SOCIAL
+                Este módulo es para Coordinadores, Párrocos y Brigadistas de Cáritas Pastoral Social, si requiere ACCESO PIDA SU CLAVE CON LA PASTORAL SOCIAL
               </p>
               
               <form onSubmit={intentarAccesoAlerta} className="space-y-4">
