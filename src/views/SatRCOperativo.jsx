@@ -550,8 +550,8 @@ Documento oficial emitido para párrocos, brigadistas y autoridades de auxilio.
               <p className="text-xs md:text-sm font-bold text-white">
                 Emitido el {reporteVigente.fecha_dia_mexico} a las {reporteVigente.hora_exacta_mexico} hrs
               </p>
-              <p className="text-[11px] text-slate-300 truncate max-w-xl">
-                {reporteVigente.reporte?.seccion_I_atmosfera?.slice(0, 110)}...
+              <p className="text-[11px] text-slate-300 line-clamp-2 break-words">
+                {reporteVigente.reporte?.seccion_I_atmosfera?.slice(0, 140)}...
               </p>
             </div>
           </div>
@@ -567,38 +567,50 @@ Documento oficial emitido para párrocos, brigadistas y autoridades de auxilio.
         </div>
       )}
 
-      {/* 3. SEMÁFORO INTERACTIVO */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div onClick={() => { setFiltroSemaforo('NIVEL4'); setPaginaActual(1); }} className={`cursor-pointer p-3.5 rounded-xl border-2 transition-all shadow flex justify-between items-center ${filtroSemaforo === 'NIVEL4' ? 'bg-rose-950/90 border-rose-500 scale-[1.02]' : 'bg-slate-900 border-rose-500/40 hover:border-rose-500'}`}>
-          <div>
-            <span className="text-xs font-black text-rose-400 uppercase flex items-center gap-1"><AlertOctagon className="w-3.5 h-3.5" /> Emergencia (N4)</span>
-            <p className="text-[10px] text-slate-400 mt-0.5">Laderas ≥ 45°</p>
-          </div>
-          <span className="text-2xl font-black text-rose-400">{totalNivel4}</span>
+      {/* 3. SEMÁFORO INTERACTIVO — Grid 2x2 */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {/* N1 Estables — verde */}
+        <div
+          onClick={() => { setFiltroSemaforo('NIVEL1'); setPaginaActual(1); }}
+          className={`cursor-pointer rounded-xl p-4 shadow-lg transition-all flex flex-col items-center justify-center text-center ${filtroSemaforo === 'NIVEL1' ? 'scale-[1.02] ring-4 ring-white/30' : 'hover:scale-[1.01]'}`}
+          style={{ backgroundColor: '#10B981' }}
+        >
+          <span className="text-4xl font-black text-white leading-none">{totalNivel1}</span>
+          <span className="text-sm font-black text-white uppercase tracking-wide mt-2">N1 · Estables</span>
+          <span className="text-xs text-white/90 mt-0.5">Altiplano en paz</span>
         </div>
 
-        <div onClick={() => { setFiltroSemaforo('NIVEL3'); setPaginaActual(1); }} className={`cursor-pointer p-3.5 rounded-xl border-2 transition-all shadow flex justify-between items-center ${filtroSemaforo === 'NIVEL3' ? 'bg-orange-950/90 border-orange-500 scale-[1.02]' : 'bg-slate-900 border-orange-500/40 hover:border-orange-500'}`}>
-          <div>
-            <span className="text-xs font-black text-orange-400 uppercase flex items-center gap-1"><AlertTriangle className="w-3.5 h-3.5" /> Alerta Temprana (N3)</span>
-            <p className="text-[10px] text-slate-400 mt-0.5">Laderas 25° a 44°</p>
-          </div>
-          <span className="text-2xl font-black text-orange-400">{totalNivel3}</span>
+        {/* N2 Vigilancia — ámbar */}
+        <div
+          onClick={() => { setFiltroSemaforo('NIVEL2'); setPaginaActual(1); }}
+          className={`cursor-pointer rounded-xl p-4 shadow-lg transition-all flex flex-col items-center justify-center text-center ${filtroSemaforo === 'NIVEL2' ? 'scale-[1.02] ring-4 ring-white/30' : 'hover:scale-[1.01]'}`}
+          style={{ backgroundColor: '#F59E0B' }}
+        >
+          <span className="text-4xl font-black text-white leading-none">{totalNivel2}</span>
+          <span className="text-sm font-black text-white uppercase tracking-wide mt-2">N2 · Vigilancia</span>
+          <span className="text-xs text-white/90 mt-0.5">Valles / Niebla</span>
         </div>
 
-        <div onClick={() => { setFiltroSemaforo('NIVEL2'); setPaginaActual(1); }} className={`cursor-pointer p-3.5 rounded-xl border-2 transition-all shadow flex justify-between items-center ${filtroSemaforo === 'NIVEL2' ? 'bg-amber-950/90 border-amber-500 scale-[1.02]' : 'bg-slate-900 border-slate-800 hover:border-amber-500/60'}`}>
-          <div>
-            <span className="text-xs font-bold text-amber-400 uppercase">Vigilancia (N2)</span>
-            <p className="text-[10px] text-slate-400 mt-0.5">Valles / Niebla</p>
-          </div>
-          <span className="text-2xl font-bold text-amber-400">{totalNivel2}</span>
+        {/* N3 Alerta Temprana — naranja */}
+        <div
+          onClick={() => { setFiltroSemaforo('NIVEL3'); setPaginaActual(1); }}
+          className={`cursor-pointer rounded-xl p-4 shadow-lg transition-all flex flex-col items-center justify-center text-center ${filtroSemaforo === 'NIVEL3' ? 'scale-[1.02] ring-4 ring-white/30' : 'hover:scale-[1.01]'}`}
+          style={{ backgroundColor: '#F97316' }}
+        >
+          <span className="text-4xl font-black text-white leading-none">{totalNivel3}</span>
+          <span className="text-sm font-black text-white uppercase tracking-wide mt-2">N3 · Alerta Temprana</span>
+          <span className="text-xs text-white/90 mt-0.5">Laderas 25° a 44°</span>
         </div>
 
-        <div onClick={() => { setFiltroSemaforo('NIVEL1'); setPaginaActual(1); }} className={`cursor-pointer p-3.5 rounded-xl border-2 transition-all shadow flex justify-between items-center ${filtroSemaforo === 'NIVEL1' ? 'bg-emerald-950/90 border-emerald-500 scale-[1.02]' : 'bg-slate-900 border-slate-800 hover:border-emerald-500/60'}`}>
-          <div>
-            <span className="text-xs font-bold text-emerald-400 uppercase">Estables (N1)</span>
-            <p className="text-[10px] text-slate-400 mt-0.5">Altiplano en paz</p>
-          </div>
-          <span className="text-2xl font-bold text-emerald-400">{totalNivel1}</span>
+        {/* N4 Emergencia — rojo */}
+        <div
+          onClick={() => { setFiltroSemaforo('NIVEL4'); setPaginaActual(1); }}
+          className={`cursor-pointer rounded-xl p-4 shadow-lg transition-all flex flex-col items-center justify-center text-center ${filtroSemaforo === 'NIVEL4' ? 'scale-[1.02] ring-4 ring-white/30' : 'hover:scale-[1.01]'}`}
+          style={{ backgroundColor: '#EF4444' }}
+        >
+          <span className="text-4xl font-black text-white leading-none">{totalNivel4}</span>
+          <span className="text-sm font-black text-white uppercase tracking-wide mt-2">N4 · Emergencia</span>
+          <span className="text-xs text-white/90 mt-0.5">Laderas ≥ 45°</span>
         </div>
       </div>
 

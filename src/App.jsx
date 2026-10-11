@@ -2,11 +2,13 @@ import React, { useState } from 'react';
 import MonitorPublico from './views/MonitorPublico.jsx';
 import SatRCOperativo from './views/SatRCOperativo.jsx';
 import OfficialAlertBanner from './components/OfficialAlertBanner.jsx';
-import { 
-  Lock, 
-  ExternalLink, 
+import {
+  Lock,
+  ExternalLink,
   CloudSun,
-  AlertTriangle
+  AlertTriangle,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 
 export default function App() {
@@ -14,6 +16,7 @@ export default function App() {
   const [autenticado, setAutenticado] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
   const [errorPassword, setErrorPassword] = useState(false);
+  const [mostrarPassword, setMostrarPassword] = useState(false);
 
   // Clave operativa para Cáritas / Operadores
   const CLAVE_ACCESO_OPERATIVO = 'emergencia';
@@ -120,13 +123,23 @@ export default function App() {
               
               <form onSubmit={intentarAccesoAlerta} className="space-y-4">
                 <div>
-                  <input
-                    type="password"
-                    placeholder="Introduce la clave operativa..."
-                    value={passwordInput}
-                    onChange={(e) => setPasswordInput(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 text-white px-4 py-3 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-rose-500 text-center tracking-widest"
-                  />
+                  <div className="relative">
+                    <input
+                      type={mostrarPassword ? 'text' : 'password'}
+                      placeholder="Introduce la clave operativa..."
+                      value={passwordInput}
+                      onChange={(e) => setPasswordInput(e.target.value)}
+                      className="w-full bg-slate-200 border border-slate-300 text-slate-900 px-4 py-3 pr-12 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-rose-500 text-center tracking-widest font-bold placeholder:text-slate-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setMostrarPassword(!mostrarPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-slate-600 hover:text-slate-900 transition-colors"
+                      title={mostrarPassword ? 'Ocultar clave' : 'Mostrar clave'}
+                    >
+                      {mostrarPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
                   {errorPassword && (
                     <p className="text-rose-400 text-xs mt-2 flex items-center justify-center gap-1">
                       <AlertTriangle className="w-3.5 h-3.5" /> Clave incorrecta.
