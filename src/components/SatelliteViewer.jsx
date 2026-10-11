@@ -207,31 +207,46 @@ export default function SatelliteViewer() {
         )}
       </div>
 
-      {/* 4. METADATOS Y DIAGNÓSTICO EXTERIOR (Fuera de la Imagen) */}
-      <div className="p-3.5 bg-slate-950/95 border-t border-slate-800 space-y-2 text-xs">
-        
-        <div className="flex flex-wrap justify-between items-center gap-2">
-          <div className="flex items-center gap-2">
-            <div className="p-1.5 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20">
-              <IconoProducto className="w-4 h-4" />
-            </div>
-            <div>
-              <p className="font-bold text-white text-xs md:text-sm">{productoActivo.name}</p>
-              <p className="text-[10px] text-slate-400">Instrumento {productoActivo.type} • NOAA STAR GOES-19</p>
-            </div>
-          </div>
+      {/* 4. METADATOS Y DIAGNÓSTICO EXTERIOR — Opción A (fichas apiladas) */}
+      <div className="p-3.5 bg-slate-950/95 border-t border-slate-800 space-y-3 text-xs">
 
-          <div className="flex items-center gap-1.5 text-[11px] font-mono bg-slate-900 px-2.5 py-1 rounded-lg border border-slate-800 text-slate-300">
+        {/* BLOQUE 1 — PRODUCTO SATELITAL */}
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-3.5 space-y-2">
+          <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+            <IconoProducto className="w-3.5 h-3.5 text-amber-400" />
+            <span>Producto Satelital</span>
+          </div>
+          <p className="text-lg font-black text-white leading-tight">
+            {productoActivo.shortName}
+          </p>
+          <p className="text-[11px] text-slate-400">
+            {productoActivo.name} • Instrumento {productoActivo.type} • NOAA STAR GOES-19
+          </p>
+        </div>
+
+        {/* BLOQUE 2 — ÚLTIMAS IMÁGENES RECIBIDAS */}
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-3.5 space-y-2">
+          <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
             <Clock className="w-3.5 h-3.5 text-amber-400" />
-            <span>Última pasada real: <strong className="text-white">{horaSatelital}</strong> (hace {minutosAtras} min)</span>
+            <span>Últimas imágenes recibidas a las:</span>
+          </div>
+          <div className="flex items-baseline gap-3 flex-wrap">
+            <span className="text-2xl font-black text-white font-mono leading-none">
+              {horaSatelital}
+            </span>
+            <span className="text-[11px] text-amber-400 font-bold">
+              hace {minutosAtras} min
+            </span>
           </div>
         </div>
 
-        <p className="text-slate-300 text-[11px] leading-relaxed pl-8">
+        {/* Descripción del producto */}
+        <p className="text-slate-300 text-[11px] leading-relaxed px-1">
           {productoActivo.description}
         </p>
 
-        <div className="pt-2 border-t border-slate-800/80 flex justify-between items-center text-[10px] text-slate-500 pl-8">
+        {/* Footer */}
+        <div className="pt-2 border-t border-slate-800/80 flex justify-between items-center text-[10px] text-slate-500">
           <span>Toca la animación para ampliar en pantalla completa.</span>
           <a
             href={productoActivo.officialUrl}
@@ -244,6 +259,7 @@ export default function SatelliteViewer() {
         </div>
 
       </div>
+
 
       {/* 5. MODAL DE ZOOM A PANTALLA COMPLETA DIRECTO EN LA ANIMACIÓN */}
       {modalZoomAbierto && (
