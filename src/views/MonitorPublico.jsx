@@ -20,7 +20,7 @@ import {
   RotateCw
 } from 'lucide-react';
 
-const INTERVALO_REFRESCO_MS = 30 * 60 * 1000; // 30 minutos
+const INTERVALO_REFRESCO_MS = 30 * 60 * 1000;
 
 function formatearTimestamp(isoUtc) {
   if (!isoUtc) return null;
@@ -56,19 +56,16 @@ export default function MonitorPublico() {
   const [pestanaActiva, setPestanaActiva] = useState('hoy');
   const [mostrarDisclaimer, setMostrarDisclaimer] = useState(false);
 
-  // N9-Public — Timestamp y refresh
   const [ultimaConsulta, setUltimaConsulta] = useState(null);
   const [refrescando, setRefrescando] = useState(false);
 
   const listaMunicipios = zonaActiva ? Object.keys(zonaActiva.municipios || {}) : [];
 
-  // Ref para acceder a la localidad activa desde el interval sin stale closure
   const localidadRef = useRef(null);
   useEffect(() => {
     localidadRef.current = localidadActiva;
   }, [localidadActiva]);
 
-  // Al montar o cambiar de zona: fijar el primer municipio y su primera localidad
   useEffect(() => {
     if (zonaActiva && listaMunicipios.length > 0) {
       const primerMun = listaMunicipios[0];
@@ -103,7 +100,6 @@ export default function MonitorPublico() {
     if (loc) setLocalidadActiva(loc);
   };
 
-  // Función de carga reutilizable (usada al cambiar localidad y en el auto-refresh)
   const cargarPronostico = async (localidad, silencioso = false) => {
     if (!localidad) return;
 
@@ -125,7 +121,6 @@ export default function MonitorPublico() {
     if (silencioso) setRefrescando(false);
   };
 
-  // Carga inicial al cambiar de localidad
   useEffect(() => {
     if (localidadActiva) {
       cargarPronostico(localidadActiva, false);
@@ -133,7 +128,6 @@ export default function MonitorPublico() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [localidadActiva]);
 
-  // N9-Public — Auto-refresh cada 30 min + al volver a la pestaña
   useEffect(() => {
     const intervalo = setInterval(() => {
       if (document.visibilityState === 'visible' && localidadRef.current) {
@@ -156,7 +150,6 @@ export default function MonitorPublico() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Eje de tiempo homogéneo y estable: 24 horas naturales completas
   const obtenerHorasPestana = () => {
     if (!datosConsenso || datosConsenso.length < 240) return [];
     if (pestanaActiva === 'hoy') return datosConsenso.slice(168, 192);
@@ -171,12 +164,13 @@ export default function MonitorPublico() {
   const tempMinDia = horasMostradas.length > 0 ? Math.min(...horasMostradas.map(h => h.temperatura_c)).toFixed(1) : '--';
   const vientoMaxDia = horasMostradas.length > 0 ? Math.max(...horasMostradas.map(h => h.rafagas_kmh)).toFixed(1) : '--';
 
-  const anchoGrafica = 920;
-  const altoGrafica = 190;
-  const padLeft = 48;
-  const padRight = 30;
-  const padTop = 32;
-  const padBottom = 38;
+  // CAMBIO 5 — Geometría adaptativa para móvil
+  const anchoGrafica = 500;
+  const altoGrafica = 240;
+  const padLeft = 45;
+  const padRight = 20;
+  const padTop = 40;
+  const padBottom = 50;
 
   const coordX = (i) => padLeft + (i / 23) * (anchoGrafica - padLeft - padRight);
 
@@ -197,13 +191,13 @@ export default function MonitorPublico() {
     }).join(' ');
   };
 
-  const maxLl = Math.max(4, ...horasMostradas.map(h => h.lluvia_mm));
+  const maxLl = Math.max(2, ...horasMostradas.map(h => h.lluvia_mm));
   const escalaYBarra = (mm) => ((mm / maxLl) * (altoGrafica - padTop - padBottom));
 
-  const maxV = Math.max(30, ...horasMostradas.map(h => Math.max(h.viento_kmh, h.rafagas_kmh)));
+  const maxV = Math.max(15, ...horasMostradas.map(h => Math.max(h.viento_kmh, h.rafagas_kmh)));
   const coordYV = (v) => altoGrafica - padBottom - (v / maxV) * (altoGrafica - padTop - padBottom);
 
-  const esHoraReferencia = (i) => i % 3 === 0 || i === 23;
+  const esHoraReferencia = (i) => i % 4 === 0 || i === 23;
 
   const textoUltimaConsulta = formatearTimestamp(ultimaConsulta);
 
@@ -475,33 +469,34 @@ export default function MonitorPublico() {
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl space-y-2">
-              <div className="flex justify-between items-center border-b border-slate-800/80 pb-2">
-                <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                  <Thermometer className="w-4 h-4 text-amber-400" /> Curva de Temperatura Comparativa (°C)
+            {/* CUADRANTE 1: TEMPERATURA */}
+            <div className="bg-slate-100 border border-slate-300 rounded-2xl p-4 shadow-xl space-y-2">
+              <div className="flex justify-between items-center border-b border-slate-300 pb-2">
+                <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                  <Thermometer className="w-4 h-4 text-amber-600" /> Curva de Temperatura Comparativa (°C)
                 </span>
-                <span className="text-[11px] font-mono text-slate-400">
-                  Límites día: <strong className="text-rose-400">{maxT}°C</strong> máx / <strong className="text-sky-400">{minT}°C</strong> mín
+                <span className="text-[11px] font-mono text-slate-600">
+                  Límites día: <strong className="text-rose-600">{maxT}°C</strong> máx / <strong className="text-sky-700">{minT}°C</strong> mín
                 </span>
               </div>
 
               <div className="relative w-full overflow-x-auto">
-                <svg viewBox={`0 0 ${anchoGrafica} ${altoGrafica}`} className="w-full h-52 select-none">
+                <svg viewBox={`0 0 ${anchoGrafica} ${altoGrafica}`} className="w-full h-64 select-none">
                   {[minT, Math.round((minT + maxT) / 2), maxT].map((valY, idx) => {
                     const y = coordYTemp(valY);
                     return (
                       <g key={idx}>
-                        <line x1={padLeft} y1={y} x2={anchoGrafica - padRight} y2={y} stroke="#334155" strokeWidth="1" strokeDasharray="4 4" opacity="0.6" />
-                        <text x={padLeft - 10} y={y + 3.5} fill="#94a3b8" fontSize="11" textAnchor="end" fontFamily="monospace" fontWeight="600">
+                        <line x1={padLeft} y1={y} x2={anchoGrafica - padRight} y2={y} stroke="#cbd5e1" strokeWidth="1" strokeDasharray="4 4" />
+                        <text x={padLeft - 8} y={y + 5} fill="#475569" fontSize="14" textAnchor="end" fontFamily="monospace" fontWeight="700">
                           {valY}°
                         </text>
                       </g>
                     );
                   })}
 
-                  <path d={crearRutaLinea('ecmwf')} fill="none" stroke="#38bdf8" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />
-                  <path d={crearRutaLinea('gfs')} fill="none" stroke="#34d399" strokeWidth="2.5" strokeDasharray="5 3" strokeLinecap="round" strokeLinejoin="round" />
-                  <path d={crearRutaLinea('icon')} fill="none" stroke="#fbbf24" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d={crearRutaLinea('ecmwf')} fill="none" stroke="#0284c7" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d={crearRutaLinea('gfs')} fill="none" stroke="#059669" strokeWidth="4" strokeDasharray="6 4" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d={crearRutaLinea('icon')} fill="none" stroke="#d97706" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
 
                   {horasMostradas.map((h, i) => {
                     const x = coordX(i);
@@ -511,18 +506,18 @@ export default function MonitorPublico() {
                     return (
                       <g key={i}>
                         {esHoraReferencia(i) && (
-                          <line x1={x} y1={padTop} x2={x} y2={altoGrafica - padBottom} stroke="#1e293b" strokeWidth="1" />
+                          <line x1={x} y1={padTop} x2={x} y2={altoGrafica - padBottom} stroke="#e2e8f0" strokeWidth="1" />
                         )}
-                        <circle cx={x} cy={y} r="4" fill="#fbbf24" stroke="#020617" strokeWidth="2" />
+                        <circle cx={x} cy={y} r="5" fill="#d97706" stroke="#ffffff" strokeWidth="2" />
                         {esHoraReferencia(i) && (
-                          <text x={x} y={altoGrafica - 12} fill="#94a3b8" fontSize="11" textAnchor="middle" fontFamily="monospace" fontWeight="600">
+                          <text x={x} y={altoGrafica - 14} fill="#475569" fontSize="14" textAnchor="middle" fontFamily="monospace" fontWeight="700">
                             {horaStr}
                           </text>
                         )}
                         {esHoraReferencia(i) && (
                           <g>
-                            <rect x={x - 14} y={y - 20} width="28" height="15" rx="4" fill="#0f172a" fillOpacity="0.8" />
-                            <text x={x} y={y - 9} fill="#ffffff" fontSize="11" textAnchor="middle" fontWeight="bold">
+                            <rect x={x - 20} y={y - 28} width="40" height="20" rx="4" fill="#ffffff" fillOpacity="0.95" stroke="#94a3b8" strokeWidth="0.5" />
+                            <text x={x} y={y - 14} fill="#0f172a" fontSize="13" textAnchor="middle" fontWeight="bold">
                               {h.temperatura_c}°
                             </text>
                           </g>
@@ -534,24 +529,25 @@ export default function MonitorPublico() {
               </div>
             </div>
 
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl space-y-2">
-              <div className="flex justify-between items-center border-b border-slate-800/80 pb-2">
-                <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                  <CloudRain className="w-4 h-4 text-blue-400" /> Intensidad de Lluvia Horaria (mm/h)
+            {/* CUADRANTE 2: LLUVIA */}
+            <div className="bg-slate-100 border border-slate-300 rounded-2xl p-4 shadow-xl space-y-2">
+              <div className="flex justify-between items-center border-b border-slate-300 pb-2">
+                <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                  <CloudRain className="w-4 h-4 text-blue-700" /> Intensidad de Lluvia Horaria (mm/h)
                 </span>
-                <span className="text-[11px] font-mono text-slate-400">
-                  Total 24h: <strong className="text-blue-400 font-bold">{lluviaTotalDia} mm</strong>
+                <span className="text-[11px] font-mono text-slate-600">
+                  Total 24h: <strong className="text-blue-800 font-bold">{lluviaTotalDia} mm</strong>
                 </span>
               </div>
 
               <div className="relative w-full overflow-x-auto">
-                <svg viewBox={`0 0 ${anchoGrafica} ${altoGrafica}`} className="w-full h-52 select-none">
+                <svg viewBox={`0 0 ${anchoGrafica} ${altoGrafica}`} className="w-full h-64 select-none">
                   {[0, (maxLl / 2).toFixed(1), maxLl.toFixed(1)].map((valY, idx) => {
                     const y = altoGrafica - padBottom - ((valY / maxLl) * (altoGrafica - padTop - padBottom));
                     return (
                       <g key={idx}>
-                        <line x1={padLeft} y1={y} x2={anchoGrafica - padRight} y2={y} stroke="#334155" strokeWidth="1" strokeDasharray="4 4" opacity="0.6" />
-                        <text x={padLeft - 10} y={y + 3.5} fill="#94a3b8" fontSize="11" textAnchor="end" fontFamily="monospace" fontWeight="600">
+                        <line x1={padLeft} y1={y} x2={anchoGrafica - padRight} y2={y} stroke="#cbd5e1" strokeWidth="1" strokeDasharray="4 4" />
+                        <text x={padLeft - 8} y={y + 5} fill="#475569" fontSize="14" textAnchor="end" fontFamily="monospace" fontWeight="700">
                           {valY}
                         </text>
                       </g>
@@ -572,17 +568,17 @@ export default function MonitorPublico() {
                           width="18"
                           height={Math.max(2, altBarra)}
                           rx="3"
-                          fill={h.lluvia_mm > 3 ? '#2563eb' : (h.lluvia_mm > 0.4 ? '#3b82f6' : '#1e293b')}
-                          stroke={h.lluvia_mm > 0.4 ? '#60a5fa' : 'none'}
+                          fill={h.lluvia_mm > 3 ? '#1e3a8a' : (h.lluvia_mm > 0.4 ? '#3b82f6' : '#e2e8f0')}
+                          stroke={h.lluvia_mm > 0.4 ? '#1e40af' : 'none'}
                           strokeWidth="1"
                         />
                         {esHoraReferencia(i) && (
-                          <text x={x} y={altoGrafica - 12} fill="#94a3b8" fontSize="11" textAnchor="middle" fontFamily="monospace" fontWeight="600">
+                          <text x={x} y={altoGrafica - 14} fill="#475569" fontSize="14" textAnchor="middle" fontFamily="monospace" fontWeight="700">
                             {horaStr}
                           </text>
                         )}
                         {h.lluvia_mm > 0 && (
-                          <text x={x} y={y - 5} fill="#93c5fd" fontSize="10" textAnchor="middle" fontWeight="bold">
+                          <text x={x} y={y - 6} fill="#1e3a8a" fontSize="12" textAnchor="middle" fontWeight="bold">
                             {h.lluvia_mm}
                           </text>
                         )}
@@ -593,24 +589,25 @@ export default function MonitorPublico() {
               </div>
             </div>
 
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl space-y-2">
-              <div className="flex justify-between items-center border-b border-slate-800/80 pb-2">
-                <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                  <Droplets className="w-4 h-4 text-cyan-400" /> Humedad Relativa (%)
+            {/* CUADRANTE 3: HUMEDAD */}
+            <div className="bg-slate-100 border border-slate-300 rounded-2xl p-4 shadow-xl space-y-2">
+              <div className="flex justify-between items-center border-b border-slate-300 pb-2">
+                <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                  <Droplets className="w-4 h-4 text-cyan-700" /> Humedad Relativa (%)
                 </span>
-                <span className="text-[11px] font-mono text-slate-400">
+                <span className="text-[11px] font-mono text-slate-600">
                   Saturación ambiental en superficie
                 </span>
               </div>
 
               <div className="relative w-full overflow-x-auto">
-                <svg viewBox={`0 0 ${anchoGrafica} ${altoGrafica}`} className="w-full h-52 select-none">
+                <svg viewBox={`0 0 ${anchoGrafica} ${altoGrafica}`} className="w-full h-64 select-none">
                   {[50, 75, 100].map((pct, idx) => {
                     const y = altoGrafica - padBottom - (pct / 100) * (altoGrafica - padTop - padBottom);
                     return (
                       <g key={idx}>
-                        <line x1={padLeft} y1={y} x2={anchoGrafica - padRight} y2={y} stroke="#334155" strokeWidth="1" strokeDasharray="4 4" opacity="0.6" />
-                        <text x={padLeft - 10} y={y + 3.5} fill="#94a3b8" fontSize="11" textAnchor="end" fontFamily="monospace" fontWeight="600">
+                        <line x1={padLeft} y1={y} x2={anchoGrafica - padRight} y2={y} stroke="#cbd5e1" strokeWidth="1" strokeDasharray="4 4" />
+                        <text x={padLeft - 8} y={y + 5} fill="#475569" fontSize="14" textAnchor="end" fontFamily="monospace" fontWeight="700">
                           {pct}%
                         </text>
                       </g>
@@ -623,7 +620,7 @@ export default function MonitorPublico() {
                       const y = altoGrafica - padBottom - (h.humedad_relativa_pct / 100) * (altoGrafica - padTop - padBottom);
                       return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
                     }).join(' ')}
-                    fill="none" stroke="#22d3ee" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"
+                    fill="none" stroke="#0891b2" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"
                   />
 
                   {horasMostradas.map((h, i) => {
@@ -633,16 +630,16 @@ export default function MonitorPublico() {
 
                     return (
                       <g key={i}>
-                        <circle cx={x} cy={y} r="3.5" fill="#0891b2" stroke="#020617" strokeWidth="1.5" />
+                        <circle cx={x} cy={y} r="4.5" fill="#0e7490" stroke="#ffffff" strokeWidth="2" />
                         {esHoraReferencia(i) && (
-                          <text x={x} y={altoGrafica - 12} fill="#94a3b8" fontSize="11" textAnchor="middle" fontFamily="monospace" fontWeight="600">
+                          <text x={x} y={altoGrafica - 14} fill="#475569" fontSize="14" textAnchor="middle" fontFamily="monospace" fontWeight="700">
                             {horaStr}
                           </text>
                         )}
                         {esHoraReferencia(i) && (
                           <g>
-                            <rect x={x - 16} y={y - 20} width="32" height="15" rx="4" fill="#0f172a" fillOpacity="0.8" />
-                            <text x={x} y={y - 9} fill="#a5f3fc" fontSize="11" textAnchor="middle" fontWeight="bold">
+                            <rect x={x - 22} y={y - 28} width="44" height="20" rx="4" fill="#ffffff" fillOpacity="0.95" stroke="#94a3b8" strokeWidth="0.5" />
+                            <text x={x} y={y - 14} fill="#0f172a" fontSize="13" textAnchor="middle" fontWeight="bold">
                               {h.humedad_relativa_pct}%
                             </text>
                           </g>
@@ -654,24 +651,25 @@ export default function MonitorPublico() {
               </div>
             </div>
 
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl space-y-2">
-              <div className="flex justify-between items-center border-b border-slate-800/80 pb-2">
-                <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                  <Wind className="w-4 h-4 text-teal-400" /> Viento Sostenido vs. Ráfagas Máximas (km/h)
+            {/* CUADRANTE 4: VIENTO */}
+            <div className="bg-slate-100 border border-slate-300 rounded-2xl p-4 shadow-xl space-y-2">
+              <div className="flex justify-between items-center border-b border-slate-300 pb-2">
+                <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                  <Wind className="w-4 h-4 text-teal-700" /> Viento Sostenido vs. Ráfagas Máximas (km/h)
                 </span>
-                <span className="text-[11px] font-mono text-slate-400">
-                  <span className="text-teal-400 font-bold">─ Sostenido</span> | <span className="text-orange-400 font-bold">- - Ráfaga</span>
+                <span className="text-[11px] font-mono text-slate-600">
+                  <span className="text-teal-700 font-bold">─ Sostenido</span> | <span className="text-orange-700 font-bold">- - Ráfaga</span>
                 </span>
               </div>
 
               <div className="relative w-full overflow-x-auto">
-                <svg viewBox={`0 0 ${anchoGrafica} ${altoGrafica}`} className="w-full h-52 select-none">
+                <svg viewBox={`0 0 ${anchoGrafica} ${altoGrafica}`} className="w-full h-64 select-none">
                   {[0, Math.round(maxV / 2), Math.round(maxV)].map((valY, idx) => {
                     const y = coordYV(valY);
                     return (
                       <g key={idx}>
-                        <line x1={padLeft} y1={y} x2={anchoGrafica - padRight} y2={y} stroke="#334155" strokeWidth="1" strokeDasharray="4 4" opacity="0.6" />
-                        <text x={padLeft - 10} y={y + 3.5} fill="#94a3b8" fontSize="11" textAnchor="end" fontFamily="monospace" fontWeight="600">
+                        <line x1={padLeft} y1={y} x2={anchoGrafica - padRight} y2={y} stroke="#cbd5e1" strokeWidth="1" strokeDasharray="4 4" />
+                        <text x={padLeft - 8} y={y + 5} fill="#475569" fontSize="14" textAnchor="end" fontFamily="monospace" fontWeight="700">
                           {valY}
                         </text>
                       </g>
@@ -680,11 +678,11 @@ export default function MonitorPublico() {
 
                   <path
                     d={horasMostradas.map((h, i) => `${i === 0 ? 'M' : 'L'} ${coordX(i)} ${coordYV(h.rafagas_kmh)}`).join(' ')}
-                    fill="none" stroke="#fb923c" strokeWidth="2.5" strokeDasharray="6 3" strokeLinecap="round" strokeLinejoin="round"
+                    fill="none" stroke="#ea580c" strokeWidth="3.5" strokeDasharray="7 4" strokeLinecap="round" strokeLinejoin="round"
                   />
                   <path
                     d={horasMostradas.map((h, i) => `${i === 0 ? 'M' : 'L'} ${coordX(i)} ${coordYV(h.viento_kmh)}`).join(' ')}
-                    fill="none" stroke="#2dd4bf" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"
+                    fill="none" stroke="#0d9488" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"
                   />
 
                   {horasMostradas.map((h, i) => {
@@ -694,16 +692,16 @@ export default function MonitorPublico() {
 
                     return (
                       <g key={i}>
-                        <circle cx={x} cy={yR} r="3" fill="#ea580c" stroke="#020617" strokeWidth="1.5" />
+                        <circle cx={x} cy={yR} r="4" fill="#c2410c" stroke="#ffffff" strokeWidth="1.5" />
                         {esHoraReferencia(i) && (
-                          <text x={x} y={altoGrafica - 12} fill="#94a3b8" fontSize="11" textAnchor="middle" fontFamily="monospace" fontWeight="600">
+                          <text x={x} y={altoGrafica - 14} fill="#475569" fontSize="14" textAnchor="middle" fontFamily="monospace" fontWeight="700">
                             {horaStr}
                           </text>
                         )}
                         {esHoraReferencia(i) && (
                           <g>
-                            <rect x={x - 14} y={yR - 20} width="28" height="15" rx="4" fill="#0f172a" fillOpacity="0.8" />
-                            <text x={x} y={yR - 9} fill="#fed7aa" fontSize="11" textAnchor="middle" fontWeight="bold">
+                            <rect x={x - 20} y={yR - 28} width="40" height="20" rx="4" fill="#ffffff" fillOpacity="0.95" stroke="#94a3b8" strokeWidth="0.5" />
+                            <text x={x} y={yR - 14} fill="#0f172a" fontSize="13" textAnchor="middle" fontWeight="bold">
                               {h.rafagas_kmh}
                             </text>
                           </g>
