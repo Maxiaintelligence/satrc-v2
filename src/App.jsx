@@ -79,7 +79,7 @@ export default function App() {
               }`}
             >
               <CloudSun className="w-4 h-4" />
-              1. Monitor Climático (Público)
+              Monitor Climático
             </button>
 
             <button
@@ -91,7 +91,7 @@ export default function App() {
               }`}
             >
               <Lock className="w-3.5 h-3.5 text-amber-400" />
-              2. SatRC / Alerta Temprana
+              SatRC / Alerta Temprana
             </button>
           </div>
 
@@ -115,7 +115,7 @@ export default function App() {
               </div>
               <h2 className="text-xl font-bold text-white mb-2">Acceso a Sala Operativa SatRC</h2>
               <p className="text-xs text-slate-400 mb-6 leading-relaxed">
-                Este módulo es para coordinadores de albergues, párrocos y brigadistas de Cáritas Pastoral Social. Requiere clave de autorización.
+                Este módulo es para Coordinadores, Parrocos y Brigadistas de Cáritas Pastoral Social, si requiere ACESSO PIDA SU CLAVE CON LA PASTORAL SOCIAL
               </p>
               
               <form onSubmit={intentarAccesoAlerta} className="space-y-4">

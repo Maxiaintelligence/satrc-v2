@@ -450,7 +450,7 @@ export default function MonitorPublico() {
               Evolución Horaria y Comparativa Multi-Modelo (24 Horas)
             </h2>
             <p className="text-xs text-slate-400">
-              Cronograma continuo de 00:00 a 23:00 hrs para análisis sinóptico directo
+              Cronograma continuo de 00:00 a 23:00 hrs para análisis por hora
             </p>
           </div>
 
