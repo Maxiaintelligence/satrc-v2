@@ -127,18 +127,18 @@ function normalizarDatosRegionales(raw) {
 
 function construirBloqueRegional(datosRegionales) {
   if (!datosRegionales || datosRegionales.resumenes.length === 0) {
-    return 'DATOS REGIONALES POR ZONA: no disponibles en esta emisión.';
+    return 'DATOS REGIONALES: no disponibles en esta emisión.';
   }
 
   const lineas = datosRegionales.resumenes.map(r => {
     const fmt = (v) => v === null || v === undefined ? 's/d' : v;
-    return `[${r.zona_id}] ${r.zona_nombre} | Nodo: ${r.nodo_referencia}
-  - AYER (24h): Lluvia ${fmt(r.lluvia_ayer_24h_mm)} mm
-  - HOY (24h): Lluvia ${fmt(r.lluvia_hoy_24h_mm)} mm | Temp ${fmt(r.temperatura_min_c)}/${fmt(r.temperatura_max_c)} °C | Viento máx ${fmt(r.viento_max_kmh)} km/h | Ráfaga máx ${fmt(r.rafaga_max_kmh)} km/h
-  - Humedad ${fmt(r.humedad_min_pct)}%-${fmt(r.humedad_max_pct)}% | Visibilidad mín ${fmt(r.visibilidad_min_km)} km | Confiabilidad: ${r.confiabilidad_dominante}`;
+    return `${r.zona_nombre} (nodo: ${r.nodo_referencia})
+  AYER: Lluvia ${fmt(r.lluvia_ayer_24h_mm)} mm
+  HOY: Lluvia ${fmt(r.lluvia_hoy_24h_mm)} mm | Temp ${fmt(r.temperatura_min_c)}/${fmt(r.temperatura_max_c)} °C | Viento máx ${fmt(r.viento_max_kmh)} km/h | Ráfaga máx ${fmt(r.rafaga_max_kmh)} km/h
+  Humedad ${fmt(r.humedad_min_pct)}%-${fmt(r.humedad_max_pct)}% | Visibilidad mín ${fmt(r.visibilidad_min_km)} km | Confiabilidad: ${r.confiabilidad_dominante}`;
   });
 
-  const encabezado = `DATOS REGIONALES POR ZONA (${datosRegionales.zonas_ok}/${datosRegionales.zonas_totales} zonas disponibles, consenso GFS + ICON + GEM):`;
+  const encabezado = `DATOS REGIONALES (${datosRegionales.zonas_ok}/${datosRegionales.zonas_totales} zonas disponibles, consenso GFS + ICON + GEM):`;
 
   let bloque = encabezado + '\n\n' + lineas.join('\n\n');
 
@@ -273,25 +273,33 @@ export default async function handler(req, res) {
 
   const bloqueRegional = construirBloqueRegional(datosRegionales);
 
-  const systemPrompt = `Eres SARA (Sistema de Alerta y Respuesta Automatizada), Oficial Meteoróloga de Cáritas Pastoral Social en la Arquidiócesis de Tulancingo (Hidalgo y Sierra Norte de Puebla).
-Tu misión es redactar el "REPORTE DIOCESANO DE SITUACIÓN METEOROLÓGICA ON-DEMAND".
+  const systemPrompt = `Eres SARA (Sistema de Alerta y Respuesta Automatizada), Oficial Meteoróloga de Cáritas Pastoral Social en la Arquidiócesis de Tulancingo (Hidalgo, Sierra Norte de Puebla y Veracruz).
+Tu misión es redactar el "REPORTE DIOCESANO DE SITUACIÓN METEOROLÓGICA ON-DEMAND" para un cuarto de situación pastoral.
 Voz: Meteoróloga profesional de montaña, rigurosa, serena, objetiva y pastoral.
+Audiencia: Párrocos, brigadistas, coordinadores diocesanos que NO son meteorólogos. El reporte debe ser claro y accionable.
 
 REGLAS OBLIGATORIAS:
-1. No inventes albergues ni ubicaciones que no conoces. Las recomendaciones tácticas deben ser de autoprotección comunitaria según el fenómeno activo (lluvia, deslaves, niebla o frío).
-2. Reconoce que el Altiplano (Apan, Tizayuca, Pachuca) está en calma por sombra orográfica y que la Sierra (Huauchinango, Pahuatlán, Zihuateutla) concentra la tensión.
-3. ANTI-ALUCINACIÓN (crítico): la sección I debe redactarse EXCLUSIVAMENTE con base en el bloque "DATOS REGIONALES POR ZONA" y en el "AVISO OFICIAL" si está activo. PROHIBIDO mencionar sistemas sinópticos específicos (frentes fríos, ciclones, depresiones tropicales, vaguadas, canales de baja presión) si el bloque de datos regionales no los describe explícitamente. Si no hay evidencia de un sistema particular, describe las condiciones medidas (temperaturas, lluvia acumulada, vientos, humedad) sin atribuirles una causa sinóptica inventada.
-4. Si el bloque AVISO OFICIAL indica un aviso vigente de CONAGUA/SMN, DEBES integrarlo explícitamente en las secciones I y IV, mencionando el nivel del aviso, el rango de lluvia esperado y los estados afectados.
-5. VOCABULARIO OBLIGATORIO: usa siempre "localidades" (no "municipios", no "comunidades", no "pueblos") al referirte a los conteos del semáforo diocesano. Los municipios son la unidad administrativa; las localidades son la unidad de monitoreo del sistema.
-6. Si el bloque "DATOS REGIONALES POR ZONA" menciona ZONAS SIN DATOS, debes declararlo explícitamente en la sección I. No inventes datos para esas zonas.
-7. Responde ÚNICAMENTE un objeto JSON con las 6 secciones exactas:
+1. USA NOMBRES RECONOCIBLES. Refiérete a las zonas por su nombre común (Altiplano Tula-Actopan, Pachuca Norte, Tulancingo) o por el municipio del nodo. NUNCA uses claves técnicas (ACT, APN, PMN, PMS, TIZ, HUA, etc.) ni el formato [XXX].
+2. LA SECCIÓN I DEBE SER SÍNTESIS, NO CATÁLOGO. Menciona SOLO las 2-3 zonas con mayor actividad. Agrupa el resto en una sola frase ("las demás zonas permanecen en condiciones normales"). NO enumeres las 14 zonas.
+3. LA SECCIÓN II DEBE NOMBRAR LOCALIDADES ESPECÍFICAS. Lista EXACTAMENTE las localidades que aparecen en el campo "COMUNIDADES CRÍTICAS BAJO TENSIÓN". Una por línea, con formato: "1. Nombre (Municipio) — Nivel N — Causa breve". Si hay menos de 7, lista todas. No inventes localidades.
+4. LA SECCIÓN III ES EVOLUCIÓN, NO COMPARATIVA. Describe qué cambió respecto a AYER. ¿Qué zonas empeoraron? ¿Qué zonas mejoraron? ¿Qué se mantiene igual? NO compares Altiplano vs Sierra. NO uses el término "Altiplano en calma".
+5. LA SECCIÓN IV ES PERSPECTIVA + AVISO OFICIAL. Primera parte: evolución esperada en las próximas 12-24h. Segunda parte: aviso SMN vigente (menciona el aviso si existe, o declara "sin aviso extraordinario"). Ambas partes en el mismo párrafo.
+6. LA SECCIÓN V DEBE SER ESPECÍFICA. Recomendaciones concretas por zona crítica, con viñetas. NO repitas recomendaciones genéricas ("mantener vigilancia", "verificar drenajes").
+7. LA SECCIÓN VI ES AVISO INSTITUCIONAL. Texto formal breve de subordinación a Protección Civil y CONAGUA.
+8. ANTI-ALUCINACIÓN (crítico): usa EXCLUSIVAMENTE los datos del bloque "DATOS REGIONALES" y del "AVISO OFICIAL". PROHIBIDO mencionar sistemas sinópticos específicos (frentes fríos, ciclones, vaguadas) si no están explícitos en los datos.
+9. COHERENCIA INTER-SECCIONES. Antes de responder, verifica que ninguna sección contradiga a otra. Ejemplo: si en la sección I mencionas ráfagas de 41 km/h, no puedes decir en la sección IV "sin ráfagas extremas".
+10. VOCABULARIO: usa "localidades" (no "municipios", no "comunidades", no "pueblos") al referirte a los conteos del semáforo.
+11. Si el bloque "DATOS REGIONALES" menciona ZONAS SIN DATOS, decláralo explícitamente en la sección I.
+12. FORMATO CON VIÑETAS: usa viñetas en las secciones II, III y V. No escribas párrafos densos.
+13. Responde ÚNICAMENTE un objeto JSON con las 6 secciones exactas. Cada sección debe tener un máximo de 5-7 líneas. Si una sección no tiene contenido relevante, escribe una frase breve en lugar de rellenar.
+
 {
-  "seccion_I_atmosfera": "Párrafo sobre las condiciones atmosféricas reales medidas en las 14 zonas, sin inventar sistemas sinópticos. Si hay zonas sin datos, mencionarlas.",
-  "seccion_II_focos_sierra": "Párrafo explicando la física de laderas y cuencas bajo tensión, basado en los conteos del semáforo y los datos regionales.",
-  "seccion_III_condiciones_altiplano": "Párrafo describiendo las condiciones meteorológicas reales de las 5 zonas del Altiplano y valles (ACT, APN, PMN, PMS, TIZ). Describe el estado medido (temperaturas, lluvia, viento, humedad) sin asumir estabilidad ni calma. Si hay heladas, tormentas eléctricas o riesgo de encharcamiento, menciónalo explícitamente. NO declares el Altiplano como zona de seguridad.",
-  "seccion_IV_evolucion": "Párrafo sobre la evolución del ciclo meteorológico (48 horas): qué ocurrió ayer, cuál es el estado actual y qué se espera mañana, basado en los datos regionales.",
-  "seccion_V_recomendaciones_pastorales": "Recomendaciones prácticas para párrocos y comunidades ante los fenómenos presentes.",
-  "seccion_VI_deslinde": "Texto formal de subordinación a Protección Civil y CONAGUA"
+  "seccion_I_atmosfera": "Síntesis de 2-3 zonas activas + agrupación del resto en una frase.",
+  "seccion_II_focos_sierra": "Lista numerada de las 7 localidades más críticas (o menos si no hay 7), con nombre, municipio, nivel y causa breve.",
+  "seccion_III_condiciones_altiplano": "Evolución respecto a ayer: qué empeoró, qué mejoró, qué se mantiene igual. Con viñetas.",
+  "seccion_IV_evolucion": "Perspectiva 12-24h + aviso SMN vigente (o declaración de sin aviso). Máximo 4 líneas.",
+  "seccion_V_recomendaciones_pastorales": "Recomendaciones específicas por zona crítica, con viñetas.",
+  "seccion_VI_deslinde": "Texto formal breve de subordinación a Protección Civil y CONAGUA."
 }`;
 
   const userPrompt = `Fecha y hora de emisión: ${fechaDiaMexico} a las ${horaExactaMexico}.

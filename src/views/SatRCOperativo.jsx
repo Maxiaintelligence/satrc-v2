@@ -321,7 +321,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
     const n2 = evaluaciones.filter(e => e?.nivel_alerta === 2).length;
     const n1 = evaluaciones.filter(e => e?.nivel_alerta === 1).length;
 
-    const focos = evaluaciones.filter(e => (e?.nivel_alerta ?? 1) >= 3).slice(0, 8).map(c => ({
+    const focos = evaluaciones.filter(e => (e?.nivel_alerta ?? 1) >= 3).slice(0, 7).map(c => ({
       nombre: c.nombre,
       municipio: c.municipio,
       nivel: c.nivel_alerta,
