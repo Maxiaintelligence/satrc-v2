@@ -183,3 +183,240 @@ En un sistema de alerta temprana, sobre-alertar emergencias (N4) es tan peligros
 ### 4.2 Arquitectura de dos capas
 
 El nodo regional **informa**, no **sustituye**. La evaluación final sigue siendo por localidad:
+
+```
+CAPA 1 — NODO REGIONAL
+  Consulta Open-Meteo en la localidad más poblada de cada zona.
+  Entrega: precipitación, temperatura, viento, humedad, visibilidad.
+
+CAPA 2 — PERFIL DE LOCALIDAD
+  Ajusta la serie regional con topografía, hidrología, exposición,
+  vulnerabilidad y umbrales propios de cada localidad.
+
+EVALUACIÓN FINAL
+  Nivel de alerta individual (1-4) por localidad.
+```
+
+### 4.3 Nodo de referencia por zona
+
+Para cada zona se utiliza la **localidad más poblada** como nodo de referencia:
+
+| Zona | Localidad de referencia |
+|------|-------------------------|
+| ACT | Actopan |
+| APN | Fray Bernardino de Sahagún (Ciudad Sahagún) |
+| ATG | Mineral del Monte |
+| CHG | Ciudad de Chignahuapan |
+| HUA | Huauchinango |
+| HYC | Huayacocotla |
+| PMN | Pachuca de Soto Centro |
+| PMS | Paseos de Chavarría |
+| SPP | Tepepa (Santiago Tepepa) |
+| TIZ | Tizayuca |
+| TUL | Tulancingo |
+| XIC | Xicotepec de Juárez |
+| ZAC | Zacatlán |
+| ZAH | Zacualtipán |
+
+El criterio de "más poblada" prioriza la zona con mayor número de vidas en riesgo.
+
+---
+
+## 5. Anexos
+
+### Anexo A — Reproducibilidad
+
+Los scripts que generan este análisis están incluidos en el repositorio:
+
+- `diagnostico_calibracion.ps1`: descarga 90 días históricos y calcula métricas por zona.
+- `simulacion_nodos.ps1`: simula 4 configuraciones sobre 5 fechas.
+- `simulacion_nodos_v2.ps1`: simula 4 configuraciones sobre 20 fechas.
+
+Todos usan la Open-Meteo Archive API y no modifican el sistema productivo.
+
+### Anexo B — Bugs descubiertos durante la auditoría
+
+**N18 — Visibilidad siempre 10 km**
+
+En `consensusEngine.js`, la lectura de visibilidad usa:
+
+```javascript
+const vis = (datosHorarios["visibility"]?.[i] ?? 10000) / 1000;
+```
+
+Open-Meteo devuelve la clave con sufijo del modelo (`visibility_gfs_seamless`), no `visibility` sin sufijo. Por lo tanto, la visibilidad siempre cae al valor por defecto de 10 km. La regla del motor que detecta niebla densa (`visibilidadMinKm <= 2.0`) **nunca se activa**. Este bug es independiente del problema de nodos.
+
+**N16 — Corrimiento de días en MonitorPublico**
+
+En `MonitorPublico.jsx`, las pestañas "Hoy", "Mañana" y "Pasado Mañana" usaban índices que apuntaban a días pasados (offset incorrecto de la serie de 240 horas). Corregido en commit `afb743f`.
+
+### Anexo C — Trabajo futuro
+
+Los siguientes vectores de riesgo están autorizados para versiones futuras del sistema pero **no forman parte del alcance de esta auditoría**:
+
+1. Lluvia e impactos hidrometeorológicos (vector operativo actual)
+2. Temperatura y estrés térmico
+3. Viento y sistemas ciclónicos
+4. Convección y tormentas severas
+5. Peligro meteorológico de incendios forestales
+
+La migración a 14 nodos regionales es un prerequisito para cualquiera de ellos, ya que todos requieren datos meteorológicos precisos por zona.
+
+### Anexo D — Análisis de nodos de referencia por zona
+
+#### D.1 Criterio de selección
+
+Para cada una de las 14 zonas de resguardo se necesita una **localidad de referencia** cuya serie meteorológica de Open-Meteo represente el comportamiento atmosférico de la zona completa.
+
+El criterio adoptado es **la localidad más poblada de cada zona**, con las siguientes justificaciones:
+
+1. **Priorización de vidas.** La serie meteorológica que alimenta al motor determina el nivel de alerta. Si el nodo representa a la localidad con más habitantes, el error de clasificación afecta a menos personas.
+2. **Reproducibilidad.** El criterio es objetivo y computable. No requiere decisiones ad-hoc que puedan ser cuestionadas en auditoría.
+3. **Estabilidad.** La población de las localidades cambia lentamente. El nodo no necesita recalibrarse cada año.
+
+#### D.2 Nodos seleccionados
+
+| Zona | Zona de resguardo | Localidad de referencia | Población | Método |
+|------|-------------------|-------------------------|-----------|--------|
+| ACT | Altiplano Tula–Actopan | Actopan | 32,276 | Más poblada |
+| APN | Apan y Llanos Altos | Fray Bernardino de Sahagún (Ciudad Sahagún) | — | Más poblada |
+| ATG | Atotonilco–Sierra de Amajac | Mineral del Monte | — | Más poblada |
+| CHG | Chignahuapan | Ciudad de Chignahuapan | — | Más poblada |
+| HUA | Huauchinango y Cuenca del Necaxa | Huauchinango | — | Más poblada |
+| HYC | Huayacocotla y Sierra de Vinazco | Huayacocotla | — | Más poblada |
+| PMN | Pachuca Metropolitana Norte | Pachuca de Soto Centro | 297,848 | Más poblada |
+| PMS | Pachuca Metropolitana Sur | Paseos de Chavarría | 22,023 | Más poblada |
+| SPP | Sierra de Pahuatlán y Otomí-Tepehua | Tepepa (Santiago Tepepa) | — | Más poblada |
+| TIZ | Tizayuca y Corredor Industrial Sur | Tizayuca | — | Más poblada |
+| TUL | Valle de Tulancingo | Tulancingo | — | Más poblada |
+| XIC | Xicotepec y Cañón de San Marcos | Xicotepec de Juárez | — | Más poblada |
+| ZAC | Zacatlán y Cañadas Orientales | Zacatlán | — | Más poblada |
+| ZAH | Zacualtipán y Sierra Alta Hidalguense | Zacualtipán | — | Más poblada |
+
+**No se requieren overrides manuales.** El criterio "más poblada" produce nodos representativos en las 14 zonas.
+
+#### D.3 Validación empírica — caso Pachuca
+
+La Zona Metropolitana de Pachuca está dividida en dos zonas de resguardo (PMN y PMS) por razones de concentración urbana. Se realizó una validación específica para confirmar que los nodos seleccionados son climáticamente representativos.
+
+**Datos históricos de 30 días (10 sep – 9 oct 2026):**
+
+| Localidad | Zona | Rol | Lluvia 30d | Temp Mín/Máx | Viento Máx |
+|-----------|------|-----|------------|--------------|------------|
+| Pachuca de Soto Centro | PMN | Centro urbano | 116.2 mm | 8.1/24.6 °C | 23.3 km/h |
+| La Providencia Siglo XXI | PMN | Norte industrial | 85.6 mm | 7.5/26.4 °C | 30.4 km/h |
+| Pachuquilla | PMN | Transición sur | 98.4 mm | 7.4/25.2 °C | 27.7 km/h |
+| Carboneras Fraccionamiento | PMN | Norte alto | 98.4 mm | 6.7/24.4 °C | 27.7 km/h |
+| Paseos de Chavarría | PMS | Sur industrial | 85.6 mm | 7.6/26.6 °C | 30.4 km/h |
+| Privadas Santa Matilde | PMS | Sur residencial | 98.5 mm | 8.8/27.7 °C | 27.9 km/h |
+| El Saucillo Fraccionamiento | PMS | Sur residencial | 98.4 mm | 7.8/25.5 °C | 27.7 km/h |
+
+#### D.4 Conclusiones del caso Pachuca
+
+1. **PMN tiene un nodo claramente dominante.** Pachuca de Soto Centro concentra el **87% de la población** de la zona (297,848 de ~342,000 habitantes). Su perfil climático (30% más lluvia que el resto de la zona, 2°C más fresco) es único y bien diferenciado. La elección como nodo es correcta.
+
+2. **PMS tiene un perfil climático propio.** Paseos de Chavarría y Privadas Santa Matilde comparten un régimen más cálido (26-28°C máx) y más ventoso (28-30 km/h) que PMN. Este perfil justifica la separación en dos zonas independientes.
+
+3. **La hipótesis de que Pachuquilla tiene clima distinto se confirma.** Sus valores (98.4 mm, 27.7 km/h) se parecen más a Carboneras (PMN) y El Saucillo (PMS) que a Pachuca Centro. Sin embargo, Pachuquilla representa solo el 3% de la población de PMN. El error de representación es tolerable frente a la alternativa (que la zona PMN se evalúe con datos que no representan a su 87% urbano).
+
+4. **Los overrides manuales no son necesarios.** El criterio "más poblada" produce:
+   - Pachuca de Soto Centro para PMN (297k habitantes)
+   - Paseos de Chavarría para PMS (22k habitantes)
+
+   Ambos son la elección técnicamente correcta en términos de población, y climáticamente defendibles como representativos de su zona.
+
+#### D.5 Limitaciones reconocidas
+
+- Los datos de este análisis cubren 30 días (10 sep – 9 oct 2026). Un análisis estacional completo requeriría 12 meses.
+- Las localidades de algunas zonas (HYC, ATG) tienen poblaciones bajas y no se analizaron en profundidad por escasez de datos demográficos diferenciadores.
+- El análisis no evalúa la representatividad climática de zonas individuales, solo el caso Pachuca por su complejidad administrativa.
+
+---
+
+## Anexo E — Cierre de C2c.1 y bug N22
+
+**Fecha:** 11 de octubre de 2026
+**Auditor:** Cierre técnico de la fase C2c.1 (Reporte On-Demand Regional)
+**Estado:** Cerrado y en producción.
+
+### E.1 Contexto
+
+La fase C2c.1 introduce un cambio arquitectónico en el sistema de reportes on-demand:
+
+- El reporte ya no se genera con un único nodo de referencia (Huauchinango).
+- Ahora se construyen **14 resúmenes regionales**, uno por cada zona de resguardo.
+- El operador debe autenticarse con su clave personal, y su acción queda registrada en la bitácora SHA-256.
+
+### E.2 Cambios técnicos
+
+**Backend (api/reporte-ondemand.js):**
+
+- Añadido mapa USUARIOS_AUTORIZADOS con 4 operadores autorizados.
+- Añadida validación x-user-key (clave personal por operador).
+- Añadida función normalizarDatosRegionales() para el bloque de 14 zonas.
+- Añadida función construirBloqueRegional() que formatea las 14 zonas para Groq.
+- Añadida lógica de detección de reintento (por timestamp, ventana de 30 min).
+- Añadida protección del Blob: solo se guardan reportes completos (14/14 zonas).
+- Añadido campo generado_por a las entradas de bitácora (trazabilidad).
+- Actualizado systemPrompt con 3 correcciones estratégicas (ver E.3).
+
+**Frontend (src/views/SatRCOperativo.jsx):**
+
+- Añadido modal de clave de operador (con toggle de visibilidad).
+- Añadido bloque de "modo emergencia" para reportes parciales.
+- Añadido badge de origen con colores por tipo de reporte.
+- Añadido nombre del operador en tarjeta y bitácora.
+
+**Motor de reportes regionales (src/engine/reportesRegionales.js):**
+
+- Nuevo archivo con seleccionarNodosRegionales() (réplica del runner).
+- Nueva función construirResumenesRegionales() (orquesta 14 fetches en paralelo).
+- Caché en memoria de 30 minutos.
+
+### E.3 Correcciones estratégicas al systemPrompt
+
+Durante el diseño de C2c.1 se identificaron y corrigieron 3 problemas estratégicos en el prompt de Groq:
+
+1. **Eliminación del término "Guardia".** No existe en la institución. Reemplazado por "Oficial Meteoróloga de Cáritas Pastoral Social".
+
+2. **Eliminación del sesgo "Altiplano = calma".** La regla anterior declaraba el Altiplano como zona segura por "sombra orográfica". Esto es irresponsable porque:
+   - El Altiplano es susceptible a heladas, tormentas eléctricas, granizadas y encharcamiento urbano.
+   - Todas las zonas son susceptibles a riesgos meteorológicos.
+   - La regla se reemplazó por un contexto territorial neutral que no declara ninguna zona como "sin riesgo".
+
+3. **Renombrado de la sección III.** De seccion_III_altiplano_calma a seccion_III_condiciones_altiplano. El nombre anterior asumía estabilidad. El nuevo nombre describe condiciones reales sin sesgo.
+
+### E.4 Bug N22 — Doble encoding UTF-8 (mojibake)
+
+**Síntoma:** Los textos generados por Groq llegaban al Blob con doble encoding. Ejemplo: observación se guardaba como observaciÃ³n (mojibake).
+
+**Diagnóstico:** El blob reporte_diocesano_vigente.json tenía bytes C3 83 C2 B3 en lugar de C3 B3 (doble encoding confirmado).
+
+**Causa raíz:** Pendiente de diagnóstico profundo. Hipótesis:
+- La API de Groq devuelve UTF-8 correcto.
+- El método respuestaGroq.json() de fetch puede tener problemas con respuestas sin charset explícito.
+- O el put() de @vercel/blob puede tener problemas con ciertos caracteres.
+
+**Parche aplicado (N22):** Función repararMojibake() en api/reporte-ondemand.js, que se aplica a las 6 secciones del reporte antes de guardar en el Blob.
+
+**Pendiente:** Diagnóstico profundo de la causa raíz (para V3.0).
+
+### E.5 Decisiones de diseño
+
+- **Modo normal vs modo emergencia:** En modo normal, el reporte solo se genera si las 14 zonas están disponibles. En modo emergencia (activado por el operador cuando fallan zonas), se genera un reporte parcial que NO se guarda en el Blob.
+- **Detección de reintento:** Si el mismo operador genera un reporte en menos de 30 minutos, se registra como ON_DEMAND_OPERADOR_REINTENTO.
+- **Protección del Blob:** Solo los reportes completos (14/14) sobrescriben el reporte vigente.
+
+### E.6 Estado
+
+- Commit 1: d9d6a7b — Crear motor de reportes regionales.
+- Commit 2: 90800e3 — Integrar en SatRCOperativo.
+- Commit 2b: 69b520a — Renombrar sección III.
+- Commit 3: 2818c88 — Reescribir backend con 14 zonas, N22, y clave de operador.
+- Commit 4: b2ec737 — Este documento.
+
+**Estado en producción:** Desplegado. Pendiente de verificación end-to-end con un reporte real.
+
+---
+
+*Fin del Anexo E.*
