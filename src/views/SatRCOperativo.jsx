@@ -460,8 +460,8 @@ ${r.seccion_I_atmosfera}
 II. FOCOS PRIORITARIOS DE TENSIÓN EN LA SIERRA (NIVEL 4 Y NIVEL 3):
 ${r.seccion_II_focos_sierra}
 
-III. CONDICIONES EN EL ALTIPLANO Y VALLES (ZONAS EN ESTABILIDAD):
-${r.seccion_III_altiplano_calma}
+III. CONDICIONES METEOROLÓGICAS EN EL ALTIPLANO Y VALLES:
+${r.seccion_III_condiciones_altiplano}
 
 IV. PRONÓSTICO DE EVOLUCIÓN (PRÓXIMAS 12 A 24 HORAS):
 ${r.seccion_IV_evolucion}
@@ -890,10 +890,10 @@ Documento oficial emitido para párrocos, brigadistas y autoridades de auxilio.
 
                   <div className="space-y-1">
                     <h4 className="font-black text-emerald-400 uppercase tracking-wider text-[11px] print:text-emerald-900">
-                      III. Condiciones en el Altiplano y Valles (Zonas en Estabilidad)
+                      III. Condiciones Meteorológicas en el Altiplano y Valles
                     </h4>
                     <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-slate-200 print:bg-gray-50 print:border-gray-300 print:text-gray-900">
-                      {reporteVigente.reporte?.seccion_III_altiplano_calma}
+                      {reporteVigente.reporte?.seccion_III_condiciones_altiplano}
                     </div>
                   </div>
 
