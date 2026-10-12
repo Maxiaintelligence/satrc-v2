@@ -3,6 +3,7 @@ import db from '../data/localidades.json';
 import { consultarModelosDeterministas } from '../engine/meteoFetcher.js';
 import { generarConsensoDeterminista } from '../engine/consensusEngine.js';
 import { evaluarLocalidad } from '../engine/riskEvaluator.js';
+import { construirResumenesRegionales, invalidarCache } from '../engine/reportesRegionales.js';
 import RiskMap from '../components/RiskMap.jsx';
 import SatelliteViewer from '../components/SatelliteViewer.jsx';
 import {
@@ -40,7 +41,9 @@ import {
   Thermometer,
   Wind,
   Droplets,
-  Eye
+  Eye,
+  EyeOff,
+  User
 } from 'lucide-react';
 
 const INTERVALO_REFRESCO_MS = 5 * 60 * 1000;
@@ -143,6 +146,13 @@ export default function SatRCOperativo({ alCerrarSesion }) {
   const [modalReporteOnDemandAbierto, setModalReporteOnDemandAbierto] = useState(false);
   const [generandoOnDemand, setGenerandoOnDemand] = useState(false);
   const [reporteVigente, setReporteVigente] = useState(null);
+
+  // C2c — Estados del modal de clave de operador
+  const [modalClaveOperadorAbierto, setModalClaveOperadorAbierto] = useState(false);
+  const [claveOperadorInput, setClaveOperadorInput] = useState('');
+  const [claveOperadorVisible, setClaveOperadorVisible] = useState(false);
+  const [errorClaveOperador, setErrorClaveOperador] = useState(false);
+  const [zonasFallidasTemporal, setZonasFallidasTemporal] = useState(null);
   
   const ADMIN_TOKEN = import.meta.env.VITE_SARA_ONDEMAND_TOKEN || "";
 
@@ -276,20 +286,41 @@ export default function SatRCOperativo({ alCerrarSesion }) {
   }, []);
 
   // ============================================================
-  // N12 — Generar Reporte On-Demand con datos atmosféricos reales
+  // C2c — Generar Reporte On-Demand Regional
   // ============================================================
-  const generarReporteOnDemand = async () => {
+
+  const abrirModalClaveOperador = () => {
+    setClaveOperadorInput('');
+    setClaveOperadorVisible(false);
+    setErrorClaveOperador(false);
+    setZonasFallidasTemporal(null);
+    setModalClaveOperadorAbierto(true);
+  };
+
+  const ejecutarGeneracionReporte = async (esModoEmergencia = false) => {
     if (!ADMIN_TOKEN) {
       alert("Error de configuración: VITE_SARA_ONDEMAND_TOKEN no está definido. Contacte al administrador.");
       return;
     }
+    if (!claveOperadorInput.trim()) {
+      setErrorClaveOperador(true);
+      return;
+    }
+
+    setModalClaveOperadorAbierto(false);
     setGenerandoOnDemand(true);
     setModalReporteOnDemandAbierto(true);
+
+    // Invalidar caché si es un reintento (segunda generación consecutiva)
+    if (esModoEmergencia) {
+      invalidarCache();
+    }
 
     const n4 = evaluaciones.filter(e => e?.nivel_alerta === 4).length;
     const n3 = evaluaciones.filter(e => e?.nivel_alerta === 3).length;
     const n2 = evaluaciones.filter(e => e?.nivel_alerta === 2).length;
     const n1 = evaluaciones.filter(e => e?.nivel_alerta === 1).length;
+
     const focos = evaluaciones.filter(e => (e?.nivel_alerta ?? 1) >= 3).slice(0, 8).map(c => ({
       nombre: c.nombre,
       municipio: c.municipio,
@@ -313,22 +344,32 @@ export default function SatRCOperativo({ alCerrarSesion }) {
         }
       : null;
 
-    // N12 — Obtener datos atmosféricos REALES antes de llamar a Groq
-    let datosAtmosfericos = null;
-    let nodoReferencia = null;
+    // C2c — Construir los 14 resúmenes regionales
+    let datosRegionales = null;
     try {
-      const nodo = todasLocalidades.find(l => l.nombre.toLowerCase().includes('huauchinango')) || todasLocalidades[0];
-      nodoReferencia = `${nodo.nombre} (${nodo.municipio})`;
-      const resM = await consultarModelosDeterministas(nodo.coords.lat, nodo.coords.lon);
-      if (resM?.exito && resM?.datos_horarios) {
-        const serie = generarConsensoDeterminista(resM.datos_horarios);
-        datosAtmosfericos = construirResumenAtmosferico(serie, nodoReferencia);
-        if (!datosAtmosfericos) {
-          console.warn("[N12] Serie insuficiente para extraer resumen atmosférico");
-        }
-      }
+      datosRegionales = await construirResumenesRegionales();
     } catch (e) {
-      console.warn("[N12] No se pudo obtener la serie atmosférica para el reporte:", e.message);
+      console.warn("[C2c] No se pudieron construir los resúmenes regionales:", e.message);
+    }
+
+    if (!datosRegionales) {
+      alert("No se pudieron obtener datos meteorológicos regionales. Verifique su conexión.");
+      setGenerandoOnDemand(false);
+      return;
+    }
+
+    // Caso límite: ninguna zona respondió
+    if (datosRegionales.zonas_ok === 0) {
+      alert("No se pudo conectar con Open-Meteo. Ninguna zona reportó datos. Verifique su conexión a internet e intente más tarde.");
+      setGenerandoOnDemand(false);
+      return;
+    }
+
+    // Si es modo normal y faltan zonas, mostrar error y opción de modo emergencia
+    if (!esModoEmergencia && datosRegionales.zonas_ok < datosRegionales.zonas_totales) {
+      setZonasFallidasTemporal(datosRegionales.zonas_fallidas);
+      setGenerandoOnDemand(false);
+      return;
     }
 
     try {
@@ -336,14 +377,15 @@ export default function SatRCOperativo({ alCerrarSesion }) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-admin-token': ADMIN_TOKEN
+          'x-admin-token': ADMIN_TOKEN,
+          'x-user-key': claveOperadorInput
         },
         body: JSON.stringify({
           resumenSeveridad: { totalNivel4: n4, totalNivel3: n3, totalNivel2: n2, totalNivel1: n1 },
           focosCriticos: focos,
           alertaSMN: alertaParaEnviar,
-          datosAtmosfericos: datosAtmosfericos,
-          nodoReferencia: nodoReferencia
+          datosRegionales: datosRegionales,
+          esModoEmergencia: esModoEmergencia
         })
       });
 
@@ -353,14 +395,35 @@ export default function SatRCOperativo({ alCerrarSesion }) {
         if (data.registro_bitacora) {
           setBitacoraSARA(prev => [...prev, data.registro_bitacora]);
         }
+        setZonasFallidasTemporal(null);
+      } else if (res.status === 401) {
+        setErrorClaveOperador(true);
+        setModalClaveOperadorAbierto(true);
+        setModalReporteOnDemandAbierto(false);
       } else {
         const err = await res.json();
-        alert(`Aviso de seguridad: ${err.error || 'No se pudo generar el reporte'}`);
+        alert(`Error: ${err.error || 'No se pudo generar el reporte'}`);
       }
     } catch (e) {
       console.error("Error generando reporte On-Demand:", e);
+      alert("Error de red. Verifique su conexión a internet.");
     }
     setGenerandoOnDemand(false);
+  };
+
+  const confirmarClaveOperador = () => {
+    ejecutarGeneracionReporte(false);
+  };
+
+  const generarReporteParcial = () => {
+    ejecutarGeneracionReporte(true);
+  };
+
+  const cerrarModalClaveOperador = () => {
+    setModalClaveOperadorAbierto(false);
+    setClaveOperadorInput('');
+    setClaveOperadorVisible(false);
+    setErrorClaveOperador(false);
   };
 
   const compartirPorWhatsApp = () => {
@@ -511,7 +574,7 @@ Documento oficial emitido para párrocos, brigadistas y autoridades de auxilio.
           </button>
 
           <button
-            onClick={generarReporteOnDemand}
+            onClick={abrirModalClaveOperador}
             className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black rounded-xl text-xs transition-all shadow-lg shadow-amber-500/25 border border-amber-400"
             title="Generar reporte diocesano en tiempo real"
           >
@@ -544,12 +607,35 @@ Documento oficial emitido para párrocos, brigadistas y autoridades de auxilio.
               <FileText className="w-5 h-5 text-amber-400" />
             </div>
             <div>
-              <span className="text-[10px] uppercase font-black text-amber-400 tracking-wider block">
-                Último Reporte Diocesano Emitido en el Servidor
-              </span>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[10px] uppercase font-black text-amber-400 tracking-wider block">
+                  Último Reporte Diocesano Emitido en el Servidor
+                </span>
+                {(() => {
+                  const origen = reporteVigente.origen || 'ON_DEMAND_OPERADOR';
+                  const colores = {
+                    PROGRAMADO_REPORTE_DIARIO: { bg: 'bg-emerald-600/20', border: 'border-emerald-500/40', text: 'text-emerald-300', label: 'Automático' },
+                    PROGRAMADO_CRON: { bg: 'bg-emerald-600/20', border: 'border-emerald-500/40', text: 'text-emerald-300', label: 'Automático' },
+                    ON_DEMAND_OPERADOR: { bg: 'bg-blue-600/20', border: 'border-blue-500/40', text: 'text-blue-300', label: 'On-Demand' },
+                    ON_DEMAND_OPERADOR_REINTENTO: { bg: 'bg-amber-600/20', border: 'border-amber-500/40', text: 'text-amber-300', label: 'Reintento' }
+                  };
+                  const c = colores[origen] || colores.ON_DEMAND_OPERADOR;
+                  return (
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${c.bg} ${c.border} ${c.text}`}>
+                      {c.label}
+                    </span>
+                  );
+                })()}
+              </div>
               <p className="text-xs md:text-sm font-bold text-white">
                 Emitido el {reporteVigente.fecha_dia_mexico} a las {reporteVigente.hora_exacta_mexico} hrs
               </p>
+              {reporteVigente.generado_por && (
+                <p className="text-[11px] text-amber-300 font-semibold flex items-center gap-1">
+                  <User className="w-3 h-3" />
+                  Generado por: {reporteVigente.generado_por}
+                </p>
+              )}
               <p className="text-[11px] text-slate-300 line-clamp-2 break-words">
                 {reporteVigente.reporte?.seccion_I_atmosfera?.slice(0, 140)}...
               </p>
@@ -731,13 +817,43 @@ Documento oficial emitido para párrocos, brigadistas y autoridades de auxilio.
             </div>
 
             <div className="p-6 overflow-y-auto space-y-5 text-xs leading-relaxed font-sans print:p-6 print:text-xs">
-              {generandoOnDemand ? (
-                <div className="p-16 text-center text-slate-400 flex flex-col items-center justify-center gap-3">
-                  <div className="w-8 h-8 border-4 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
-                  <p className="font-bold text-white text-sm">SARA redactando reporte en tiempo real...</p>
-                  <p className="text-[11px] text-slate-400">Consultando datos atmosféricos reales y sellando entrada en la bitácora.</p>
-                </div>
-              ) : reporteVigente ? (
+{generandoOnDemand ? (
+  <div className="p-16 text-center text-slate-400 flex flex-col items-center justify-center gap-3">
+    <div className="w-8 h-8 border-4 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
+    <p className="font-bold text-white text-sm">SARA redactando reporte en tiempo real...</p>
+    <p className="text-[11px] text-slate-400">Consultando 14 zonas regionales. Esto puede tardar hasta 30 segundos en conexiones lentas.</p>
+  </div>
+) : zonasFallidasTemporal ? (
+  <div className="p-8 text-center space-y-4">
+    <div className="inline-flex items-center justify-center w-12 h-12 bg-amber-500/20 rounded-full">
+      <AlertTriangle className="w-6 h-6 text-amber-400" />
+    </div>
+    <div className="space-y-2">
+      <h3 className="text-lg font-black text-white">Reporte no generado</h3>
+      <p className="text-sm text-slate-300 leading-relaxed">
+        El reporte requiere las 14 zonas completas, pero <strong className="text-amber-400">{zonasFallidasTemporal.length} zonas no respondieron</strong>:
+      </p>
+      <p className="text-xs text-slate-400 font-mono">{zonasFallidasTemporal.join(', ')}</p>
+      <p className="text-xs text-slate-400 leading-relaxed pt-2">
+        Esto puede deberse a la calidad de su conexión a internet. Si necesita el reporte ahora, puede generarlo en <strong className="text-amber-300">modo emergencia</strong> (parcial) e intentar de nuevo más tarde para obtener el completo.
+      </p>
+    </div>
+    <div className="flex flex-col sm:flex-row gap-2 justify-center pt-2">
+      <button
+        onClick={() => { setZonasFallidasTemporal(null); setModalReporteOnDemandAbierto(false); }}
+        className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold"
+      >
+        Cancelar
+      </button>
+      <button
+        onClick={generarReporteParcial}
+        className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-black shadow-lg"
+      >
+        Generar reporte parcial (modo emergencia)
+      </button>
+    </div>
+  </div>
+) : reporteVigente ? (
                 <>
                   <div className="border-b-2 border-amber-500 pb-3 flex justify-between items-start">
                     <div>
@@ -938,6 +1054,12 @@ Documento oficial emitido para párrocos, brigadistas y autoridades de auxilio.
                     </span>
                     <p className="text-white font-bold text-xs">{entry.titulo}</p>
                   </div>
+                  {entry.generado_por && (
+                    <p className="text-[11px] text-amber-300 font-semibold flex items-center gap-1.5">
+                      <User className="w-3 h-3" />
+                      Generado por: {entry.generado_por}
+                    </p>
+                  )}
                   <p className="text-slate-300 text-[11px] font-sans leading-relaxed">{entry.resumen}</p>
                 </div>
               ))}
@@ -946,6 +1068,59 @@ Documento oficial emitido para párrocos, brigadistas y autoridades de auxilio.
             <div className="p-3 bg-slate-950 border-t border-slate-800 flex justify-between items-center text-xs text-slate-500 px-4">
               <span>Preservación permanente en Vercel Blob.</span>
               <button onClick={() => setModalBitacoraAbierto(false)} className="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-bold">Cerrar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CLAVE OPERADOR */}
+      {modalClaveOperadorAbierto && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md animate-fade-in">
+          <div className="bg-slate-900 border-2 border-amber-500/40 max-w-md w-full rounded-2xl shadow-2xl overflow-hidden flex flex-col text-slate-200">
+            <div className="p-4 bg-amber-500/10 border-b border-amber-500/30 flex items-center gap-2">
+              <ShieldCheck className="w-5 h-5 text-amber-400" />
+              <h3 className="font-black text-sm text-white">Autenticación de Operador</h3>
+            </div>
+            <div className="p-5 space-y-3">
+              <p className="text-xs text-slate-300 leading-relaxed">
+                Ingrese su clave personal para generar el reporte diocesano. Su acción quedará registrada en la bitácora auditable.
+              </p>
+              <div className="relative">
+                <input
+                  type={claveOperadorVisible ? 'text' : 'password'}
+                  value={claveOperadorInput}
+                  onChange={(e) => { setClaveOperadorInput(e.target.value); setErrorClaveOperador(false); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') confirmarClaveOperador(); }}
+                  placeholder="Clave de operador"
+                  autoFocus
+                  className={`w-full px-3 py-2.5 pr-10 bg-slate-950 border rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 ${errorClaveOperador ? 'border-rose-500' : 'border-slate-700'}`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setClaveOperadorVisible(!claveOperadorVisible)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-amber-400"
+                >
+                  {claveOperadorVisible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+              {errorClaveOperador && (
+                <p className="text-xs text-rose-400 font-semibold">Clave inválida. Intente de nuevo.</p>
+              )}
+            </div>
+            <div className="p-4 bg-slate-950/60 border-t border-slate-800 flex justify-end gap-2">
+              <button
+                onClick={cerrarModalClaveOperador}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmarClaveOperador}
+                disabled={!claveOperadorInput.trim()}
+                className="px-4 py-2 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 rounded-xl text-xs font-black"
+              >
+                Generar Reporte
+              </button>
             </div>
           </div>
         </div>
