@@ -460,22 +460,22 @@ Hora Exacta de Emisión: ${reporteVigente.hora_exacta_mexico} (Hora del Centro d
 Consenso de Modelos: ${reporteVigente.consenso_modelos}
 --------------------------------------------------------------------------------
 
-I. DINÁMICA ATMOSFÉRICA REGIONAL:
+I. ESTADO GENERAL:
 ${r.seccion_I_atmosfera}
 
-II. FOCOS PRIORITARIOS DE TENSIÓN EN LA SIERRA (NIVEL 4 Y NIVEL 3):
+II. ZONAS QUE REQUIEREN ATENCIÓN:
 ${r.seccion_II_focos_sierra}
 
-III. CONDICIONES METEOROLÓGICAS EN EL ALTIPLANO Y VALLES:
+III. EVOLUCIÓN DE LAS CONDICIONES:
 ${r.seccion_III_condiciones_altiplano}
 
-IV. PRONÓSTICO DE EVOLUCIÓN (PRÓXIMAS 12 A 24 HORAS):
+IV. PERSPECTIVA Y AVISO OFICIAL:
 ${r.seccion_IV_evolucion}
 
-V. RECOMENDACIONES TÁCTICAS SEGÚN CONDICIONES ACTIVAS:
+V. RECOMENDACIONES TÁCTICAS:
 ${r.seccion_V_recomendaciones_pastorales}
 
-VI. AVISO INSTITUCIONAL Y COORDINACIÓN CON PROTECCIÓN CIVIL:
+VI. AVISO INSTITUCIONAL:
 ${r.seccion_VI_deslinde}
 
 --------------------------------------------------------------------------------
@@ -878,7 +878,7 @@ Documento oficial emitido para párrocos, brigadistas y autoridades de auxilio.
 
                   <div className="space-y-1">
                     <h4 className="font-black text-amber-400 uppercase tracking-wider text-[11px] print:text-amber-900">
-                      I. Dinámica Atmosférica Regional
+                      I. Estado General
                     </h4>
                     <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-slate-200 print:bg-gray-50 print:border-gray-300 print:text-gray-900">
                       {reporteVigente.reporte?.seccion_I_atmosfera}
@@ -887,7 +887,7 @@ Documento oficial emitido para párrocos, brigadistas y autoridades de auxilio.
 
                   <div className="space-y-1">
                     <h4 className="font-black text-rose-400 uppercase tracking-wider text-[11px] print:text-rose-900">
-                      II. Focos Prioritarios de Tensión en la Sierra (Nivel 4 y Nivel 3)
+                      II. Zonas que Requieren Atención
                     </h4>
                     <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-slate-200 print:bg-gray-50 print:border-gray-300 print:text-gray-900">
                       {reporteVigente.reporte?.seccion_II_focos_sierra}
@@ -896,7 +896,7 @@ Documento oficial emitido para párrocos, brigadistas y autoridades de auxilio.
 
                   <div className="space-y-1">
                     <h4 className="font-black text-emerald-400 uppercase tracking-wider text-[11px] print:text-emerald-900">
-                      III. Condiciones Meteorológicas en el Altiplano y Valles
+                      III. Evolución de las Condiciones
                     </h4>
                     <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-slate-200 print:bg-gray-50 print:border-gray-300 print:text-gray-900">
                       {reporteVigente.reporte?.seccion_III_condiciones_altiplano}
@@ -905,7 +905,7 @@ Documento oficial emitido para párrocos, brigadistas y autoridades de auxilio.
 
                   <div className="space-y-1">
                     <h4 className="font-black text-cyan-400 uppercase tracking-wider text-[11px] print:text-cyan-900">
-                      IV. Pronóstico de Evolución (Próximas 12 a 24 Horas)
+                      IV. Perspectiva y Aviso Oficial
                     </h4>
                     <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-slate-200 print:bg-gray-50 print:border-gray-300 print:text-gray-900">
                       {reporteVigente.reporte?.seccion_IV_evolucion}
@@ -914,7 +914,7 @@ Documento oficial emitido para párrocos, brigadistas y autoridades de auxilio.
 
                   <div className="space-y-1">
                     <h4 className="font-black text-amber-300 uppercase tracking-wider text-[11px] print:text-amber-900">
-                      V. Recomendaciones Tácticas según Condiciones Activas
+                      V. Recomendaciones Tácticas
                     </h4>
                     <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-slate-100 print:bg-amber-50 print:border-amber-300 print:text-gray-900">
                       {reporteVigente.reporte?.seccion_V_recomendaciones_pastorales}
@@ -922,7 +922,7 @@ Documento oficial emitido para párrocos, brigadistas y autoridades de auxilio.
                   </div>
 
                   <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 text-[10px] text-slate-400 space-y-1 print:bg-gray-50 print:border-gray-200 print:text-gray-600">
-                    <p className="font-bold text-slate-300 print:text-black">VI. Aviso Institucional y Coordinación con Protección Civil:</p>
+                    <p className="font-bold text-slate-300 print:text-black">VI. Aviso Institucional:</p>
                     <p>{reporteVigente.reporte?.seccion_VI_deslinde}</p>
                   </div>
 
