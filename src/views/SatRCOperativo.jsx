@@ -321,7 +321,13 @@ export default function SatRCOperativo({ alCerrarSesion }) {
     const n2 = evaluaciones.filter(e => e?.nivel_alerta === 2).length;
     const n1 = evaluaciones.filter(e => e?.nivel_alerta === 1).length;
 
-    const focos = evaluaciones.filter(e => (e?.nivel_alerta ?? 1) >= 3).slice(0, 7).map(c => ({
+    const focosN3N4 = evaluaciones.filter(e => (e?.nivel_alerta ?? 1) >= 3);
+    const focos = (focosN3N4.length > 0
+      ? focosN3N4
+      : evaluaciones
+          .filter(e => e?.nivel_alerta === 2)
+          .sort((a, b) => (b?.impactoSistemico?.poblacionDirecta ?? 0) - (a?.impactoSistemico?.poblacionDirecta ?? 0))
+    ).slice(0, 7).map(c => ({
       nombre: c.nombre,
       municipio: c.municipio,
       nivel: c.nivel_alerta,
