@@ -876,6 +876,27 @@ Documento oficial emitido para párrocos, brigadistas y autoridades de auxilio.
                     </div>
                   </div>
 
+                  {/* Sección 0 — Decisión Operativa destacada */}
+                  {reporteVigente.reporte?.seccion_0_decision && (
+                    <div
+                      className="p-4 rounded-xl border-l-4"
+                      style={{
+                        borderColor: reporteVigente.dictamen?.color || '#10B981',
+                        backgroundColor: `${reporteVigente.dictamen?.color || '#10B981'}15`
+                      }}
+                    >
+                      <span
+                        className="text-[10px] font-black uppercase tracking-widest opacity-90"
+                        style={{ color: reporteVigente.dictamen?.color || '#10B981' }}
+                      >
+                        Decisión Operativa
+                      </span>
+                      <p className="text-sm md:text-base font-bold text-white mt-1.5 leading-snug print:text-black">
+                        {reporteVigente.reporte.seccion_0_decision}
+                      </p>
+                    </div>
+                  )}
+
                   <div className="space-y-1">
                     <h4 className="font-black text-amber-400 uppercase tracking-wider text-[11px] print:text-amber-900">
                       I. Estado General
