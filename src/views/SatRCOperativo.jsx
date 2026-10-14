@@ -72,6 +72,51 @@ function formatearTimestamp(isoUtc) {
 }
 
 /**
+ * Componente para renderizar texto con viñetas y negritas desde Groq.
+ * Detecta líneas con `-`, `•` o `*` y las renderiza como lista.
+ * Detecta `**texto**` y lo renderiza en negrita.
+ */
+function TextoEnriquecido({ texto, className = "" }) {
+  if (!texto || typeof texto !== 'string') return null;
+
+  const lineas = texto.split('\n').filter(l => l.trim().length > 0);
+
+  const renderizarNegritas = (linea) => {
+    const partes = linea.split(/(\*\*[^*]+\*\*)/g);
+    return partes.map((parte, i) => {
+      if (parte.startsWith('**') && parte.endsWith('**')) {
+        return <strong key={i} className="font-bold text-white">{parte.slice(2, -2)}</strong>;
+      }
+      return <span key={i}>{parte}</span>;
+    });
+  };
+
+  const esVineta = (linea) => /^\s*[-•*]\s+/.test(linea);
+
+  const parrafos = [];
+  let listaActual = [];
+
+  lineas.forEach((linea, idx) => {
+    if (esVineta(linea)) {
+      const contenido = linea.replace(/^\s*[-•*]\s+/, '');
+      listaActual.push(<li key={idx} className="ml-4 list-disc">{renderizarNegritas(contenido)}</li>);
+    } else {
+      if (listaActual.length > 0) {
+        parrafos.push(<ul key={`ul-${idx}`} className="space-y-1 my-1">{listaActual}</ul>);
+        listaActual = [];
+      }
+      parrafos.push(<p key={`p-${idx}`} className="my-1">{renderizarNegritas(linea)}</p>);
+    }
+  });
+
+  if (listaActual.length > 0) {
+    parrafos.push(<ul key="ul-final" className="space-y-1 my-1">{listaActual}</ul>);
+  }
+
+  return <div className={className}>{parrafos}</div>;
+}
+
+/**
  * N12 — Extrae un resumen atmosférico real de la serie de consenso.
  * La serie tiene 240 h: índices 0-167 son las últimas 7 días pasadas,
  * índice 168 es "ahora" (aprox), y 168-239 son el pronóstico.
@@ -902,7 +947,7 @@ Documento oficial emitido para párrocos, brigadistas y autoridades de auxilio.
                       I. Estado General
                     </h4>
                     <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-slate-200 print:bg-gray-50 print:border-gray-300 print:text-gray-900">
-                      {reporteVigente.reporte?.seccion_I_atmosfera}
+                      <TextoEnriquecido texto={reporteVigente.reporte?.seccion_I_atmosfera} />
                     </div>
                   </div>
 
@@ -911,7 +956,7 @@ Documento oficial emitido para párrocos, brigadistas y autoridades de auxilio.
                       II. Zonas que Requieren Atención
                     </h4>
                     <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-slate-200 print:bg-gray-50 print:border-gray-300 print:text-gray-900">
-                      {reporteVigente.reporte?.seccion_II_focos_sierra}
+                      <TextoEnriquecido texto={reporteVigente.reporte?.seccion_II_focos_sierra} />
                     </div>
                   </div>
 
@@ -920,7 +965,7 @@ Documento oficial emitido para párrocos, brigadistas y autoridades de auxilio.
                       III. Evolución de las Condiciones
                     </h4>
                     <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-slate-200 print:bg-gray-50 print:border-gray-300 print:text-gray-900">
-                      {reporteVigente.reporte?.seccion_III_condiciones_altiplano}
+                      <TextoEnriquecido texto={reporteVigente.reporte?.seccion_III_condiciones_altiplano} />
                     </div>
                   </div>
 
@@ -929,7 +974,7 @@ Documento oficial emitido para párrocos, brigadistas y autoridades de auxilio.
                       IV. Perspectiva y Aviso Oficial
                     </h4>
                     <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-slate-200 print:bg-gray-50 print:border-gray-300 print:text-gray-900">
-                      {reporteVigente.reporte?.seccion_IV_evolucion}
+                      <TextoEnriquecido texto={reporteVigente.reporte?.seccion_IV_evolucion} />
                     </div>
                   </div>
 
@@ -938,7 +983,7 @@ Documento oficial emitido para párrocos, brigadistas y autoridades de auxilio.
                       V. Recomendaciones Tácticas
                     </h4>
                     <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-slate-100 print:bg-amber-50 print:border-amber-300 print:text-gray-900">
-                      {reporteVigente.reporte?.seccion_V_recomendaciones_pastorales}
+                      <TextoEnriquecido texto={reporteVigente.reporte?.seccion_V_recomendaciones_pastorales} />
                     </div>
                   </div>
 
