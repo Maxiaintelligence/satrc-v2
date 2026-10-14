@@ -156,14 +156,31 @@ export async function construirResumenesRegionales() {
   const nodos = seleccionarNodosRegionales();
   const zonaIds = Object.keys(nodos);
 
-  const promesas = zonaIds.map((zonaId, indice) => {
-    const nodo = nodos[zonaId];
-    return new Promise(r => setTimeout(r, indice * STAGGER_MS))
-      .then(() => consultarZonaConReintentos(nodo))
-      .then(resultado => ({ zonaId, nodo, ...resultado }));
-  });
+  // Procesar en lotes de 4 para no saturar las conexiones del navegador.
+  // El navegador limita a ~6 conexiones simultáneas por dominio.
+  const TAMANO_LOTE = 4;
+  const DELAY_ENTRE_LOTES_MS = 500;
 
-  const resultados = await Promise.allSettled(promesas);
+  const resultados = [];
+
+  for (let i = 0; i < zonaIds.length; i += TAMANO_LOTE) {
+    const lote = zonaIds.slice(i, i + TAMANO_LOTE);
+    console.log(`[Reportes Regionales] Lote ${Math.floor(i / TAMANO_LOTE) + 1}: ${lote.join(', ')}`);
+
+    const promesasLote = lote.map(zonaId => {
+      const nodo = nodos[zonaId];
+      return consultarZonaConReintentos(nodo)
+        .then(resultado => ({ zonaId, nodo, ...resultado }));
+    });
+
+    const resultadosLote = await Promise.allSettled(promesasLote);
+    resultadosLote.forEach(r => resultados.push(r));
+
+    // Delay entre lotes (excepto después del último)
+    if (i + TAMANO_LOTE < zonaIds.length) {
+      await new Promise(r => setTimeout(r, DELAY_ENTRE_LOTES_MS));
+    }
+  }
 
   const resumenes = [];
   const zonasOk = [];
