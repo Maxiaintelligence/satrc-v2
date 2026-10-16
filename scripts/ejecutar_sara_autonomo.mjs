@@ -240,6 +240,27 @@ async function cargarSeriesRegionales(nodos) {
   return { series, zonasOk, zonasFallidas };
 }
 
+/**
+ * N24 — Reparación de doble encoding UTF-8 (mojibake).
+ * Réplica del parche aplicado en api/reporte-ondemand.js.
+ * Corrige textos como "atmÃ³sferas" → "atmósferas".
+ */
+function repararMojibake(texto) {
+  if (typeof texto !== 'string' || !texto) return texto;
+  const tieneMojibake = /[ÃÂ][\u0080-\u00BF]/.test(texto);
+  if (!tieneMojibake) return texto;
+  try {
+    const bytes = Buffer.from(texto, 'latin1');
+    const reparado = bytes.toString('utf8');
+    if (reparado.length < texto.length && !/[ÃÂ][\u0080-\u00BF]/.test(reparado)) {
+      return reparado;
+    }
+    return texto;
+  } catch (e) {
+    return texto;
+  }
+}
+
 // ============================================================
 // HELPERS (fecha, hash, IDs, normalización)
 // ============================================================
@@ -567,7 +588,7 @@ async function ejecutarSARA() {
           temperature: 0.1,
           response_format: { type: "json_object" },
           messages: [
-            { role: "system", content: `Eres SARA, Oficial Meteoróloga de Guardia de Cáritas Tulancingo. Hora oficial de México: ${horaMexicoStr}.
+            { role: "system", content: `Eres SARA, Oficial Meteoróloga de Cáritas Pastoral Social en la Arquidiócesis de Tulancingo. Hora oficial de México: ${horaMexicoStr}.
 Genera el informe diocesano multimodal en JSON con claves: estado_situacion, color, titulo, comentario_oficial.
 REGLA: Si no hay emergencias activas, declara situación normal con serenidad profesional.
 REGLA: NO menciones conteos numéricos de niveles en el comentario. Se agregarán aparte.` },
@@ -602,6 +623,10 @@ Comunidades críticas bajo tensión: ${JSON.stringify(criticas)}.` }
   dictamenSARA.hora_evaluacion = horaMexicoStr;
   dictamenSARA.proxima_evaluacion = proximaCorridaStr;
   dictamenSARA.timestamp = ahora.toISOString();
+
+  // N24 — Reparar mojibake en los textos del dictamen
+  if (typeof dictamenSARA.titulo === 'string') dictamenSARA.titulo = repararMojibake(dictamenSARA.titulo);
+  if (typeof dictamenSARA.comentario_oficial === 'string') dictamenSARA.comentario_oficial = repararMojibake(dictamenSARA.comentario_oficial);
 
   // --- 7. Bitácora ---
   let bitacoraHistorial = [];

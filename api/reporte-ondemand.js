@@ -294,12 +294,17 @@ REGLAS OBLIGATORIAS:
 7. LA SECCIÓN V ES LISTA DE VERIFICACIÓN. Estructura las recomendaciones por MOMENTO, no por zona: (a) Antes de salir, (b) Durante la actividad, (c) Si empeora, (d) Para reanudar. NO repitas recomendaciones genéricas ("mantener vigilancia", "verificar drenajes"). Traduce datos a consecuencias: si hay ráfagas de 52 km/h, di "revisar techumbres y estructuras ligeras".
 8. LA SECCIÓN VI ES AVISO INSTITUCIONAL. Texto formal breve de subordinación a Protección Civil y CONAGUA.
 9. TRADUCE NIVELES A DECISIONES OPERATIVAS. Cuando menciones el nivel de una zona, aclara qué significa para una brigada: N1 = continuar con actividades normales; N2 = reforzar precauciones; N3 = restringir actividades específicas; N4 = suspender actividades expuestas.
-10. ANTI-ALUCINACIÓN (crítico): usa EXCLUSIVAMENTE los datos del bloque "DATOS REGIONALES" y del "AVISO OFICIAL". PROHIBIDO mencionar sistemas sinópticos específicos (frentes fríos, ciclones, vaguadas) si no están explícitos en los datos.
-11. COHERENCIA INTER-SECCIONES. Antes de responder, verifica que ninguna sección contradiga a otra. Ejemplo: si en la sección I mencionas ráfagas de 41 km/h, no puedes decir en la sección IV "sin ráfagas extremas".
-12. VOCABULARIO: usa "localidades" (no "municipios", no "comunidades", no "pueblos") al referirte a los conteos del semáforo.
-13. Si el bloque "DATOS REGIONALES" menciona ZONAS SIN DATOS, decláralo explícitamente en la sección I.
-14. FORMATO CON VIÑETAS: usa viñetas en las secciones 0, II, III y V. No escribas párrafos densos.
-15. Responde ÚNICAMENTE un objeto JSON con las 7 secciones exactas. Cada sección debe tener un máximo de 5-7 líneas. Si una sección no tiene contenido relevante, escribe una frase breve en lugar de rellenar.
+10. CLASIFICACIÓN DE VIENTO (crítico): No describas como "fuertes" las ráfagas por debajo de 60 km/h. Usa esta escala explícita:
+   - Ráfagas < 40 km/h: suaves, sin mención especial.
+   - Ráfagas 40-59 km/h: moderadas, requieren precaución en actividades expuestas.
+   - Ráfagas ≥ 60 km/h: fuertes, requieren restricción de actividades.
+   Algunas zonas del territorio tienen viento estructuralmente más fuerte por su altitud (Atotonilco-Sierra de Amajac a 2,700 msnm, Pachuca Metropolitana Norte a 2,400 msnm). Si sus ráfagas están por debajo de 60 km/h, descríbelas como "moderadas para esa zona", no como "fuertes".
+11. ANTI-ALUCINACIÓN (crítico): usa EXCLUSIVAMENTE los datos del bloque "DATOS REGIONALES" y del "AVISO OFICIAL". PROHIBIDO mencionar sistemas sinópticos específicos (frentes fríos, ciclones, vaguadas) si no están explícitos en los datos.
+12. COHERENCIA INTER-SECCIONES. Antes de responder, verifica que ninguna sección contradiga a otra. Ejemplo: si en la sección I mencionas ráfagas de 41 km/h, no puedes decir en la sección IV "sin ráfagas extremas".
+13. VOCABULARIO: usa "localidades" (no "municipios", no "comunidades", no "pueblos") al referirte a los conteos del semáforo.
+14. Si el bloque "DATOS REGIONALES" menciona ZONAS SIN DATOS, decláralo explícitamente en la sección I.
+15. FORMATO CON VIÑETAS: usa viñetas en las secciones 0, II, III y V. No escribas párrafos densos.
+16. Responde ÚNICAMENTE un objeto JSON con las 7 secciones exactas. Cada sección debe tener un máximo de 5-7 líneas. Si una sección no tiene contenido relevante, escribe una frase breve en lugar de rellenar.
 
 {
   "seccion_0_decision": "DECISIÓN OPERATIVA del día: fenómeno principal, zonas afectadas, acción inmediata. Máximo 3 líneas.",
