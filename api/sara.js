@@ -77,6 +77,48 @@ function tokenValido(req) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
+/**
+ * N27 — Reparación de doble encoding UTF-8 (mojibake).
+ * 
+ * El runtime de GitHub Actions introduce doble encoding al guardar en 
+ * @vercel/blob. Este parche revierte el daño en la LECTURA del endpoint.
+ * 
+ * Réplica del parche aplicado en api/reporte-ondemand.js y en el runner.
+ */
+function repararMojibake(texto) {
+  if (typeof texto !== 'string' || !texto) return texto;
+  const tieneMojibake = /[ÃÂ][\u0080-\u00BF]/.test(texto);
+  if (!tieneMojibake) return texto;
+  try {
+    const bytes = Buffer.from(texto, 'latin1');
+    const reparado = bytes.toString('utf8');
+    if (reparado.length < texto.length && !/[ÃÂ][\u0080-\u00BF]/.test(reparado)) {
+      return reparado;
+    }
+    return texto;
+  } catch (e) {
+    return texto;
+  }
+}
+
+/**
+ * N27 — Repara los textos de un objeto recursivamente.
+ * Aplica repararMojibake a cada string encontrado.
+ */
+function repararObjeto(obj) {
+  if (obj === null || obj === undefined) return obj;
+  if (typeof obj === 'string') return repararMojibake(obj);
+  if (Array.isArray(obj)) return obj.map(repararObjeto);
+  if (typeof obj === 'object') {
+    const copia = {};
+    for (const clave of Object.keys(obj)) {
+      copia[clave] = repararObjeto(obj[clave]);
+    }
+    return copia;
+  }
+  return obj;
+}
+
 async function leerJSONBlob(blob, ahora) {
   const res = await fetch(`${blob.url}?t=${ahora.getTime()}`, { cache: 'no-store' });
   if (!res.ok) throw new Error(`Lectura de ${blob.pathname} falló: HTTP ${res.status}`);
@@ -144,15 +186,16 @@ export default async function handler(req, res) {
   }
 
   if (estadoMaestro && estadoMaestro.evaluaciones && estadoMaestro.evaluaciones.length > 0 && !forzar) {
+    // N27 — Reparar mojibake en todos los textos antes de servir al frontend
     return res.json({
-      ultimo_reporte_ondemand: ultimoReporteGuardado,
+      ultimo_reporte_ondemand: repararObjeto(ultimoReporteGuardado),
       exito: true,
       origen: "VERCEL_BLOB_ACTUALIZADO",
       hora_servidor_mexico: estadoMaestro.hora_local_mexico || horaMexicoStr,
-      dictamen: estadoMaestro.dictamen || ultimoDictamen,
+      dictamen: repararObjeto(estadoMaestro.dictamen || ultimoDictamen),
       semaforo: estadoMaestro.semaforo,
-      evaluaciones: estadoMaestro.evaluaciones,
-      bitacora: historialBitacora
+      evaluaciones: repararObjeto(estadoMaestro.evaluaciones),
+      bitacora: repararObjeto(historialBitacora)
     });
   }
 
@@ -280,14 +323,16 @@ Comunidades críticas: ${JSON.stringify(resumenSeveridad?.criticasNombres || [])
     console.error("Bitácora no escrita: la lectura previa falló y se evitó sobrescribir la cadena.");
   }
 
+  // N27 — Reparar mojibake en todos los textos antes de servir al frontend
   return res.json({
-    ultimo_reporte_ondemand: ultimoReporteGuardado,
+    ultimo_reporte_ondemand: repararObjeto(ultimoReporteGuardado),
     exito: true,
     origen: "RESPUESTA_EN_VIVO",
     hora_servidor_mexico: horaMexicoStr,
-    dictamen: dictamenFinal,
-    bitacora: historialBitacora,
+    dictamen: repararObjeto(dictamenFinal),
+    bitacora: repararObjeto(historialBitacora),
     bitacora_guardada: bitacoraGuardada,
-    evaluaciones: estadoMaestro?.evaluaciones || null
+    evaluaciones: repararObjeto(estadoMaestro?.evaluaciones || null)
   });
+  
 }
