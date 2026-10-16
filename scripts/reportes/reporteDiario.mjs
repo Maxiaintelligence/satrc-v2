@@ -260,6 +260,7 @@ REGLAS OBLIGATORIAS:
 10. CLASIFICACIÓN DE VIENTO: No describas como "fuertes" las ráfagas por debajo de 60 km/h. Ráfagas < 40 = suaves; 40-59 = moderadas; ≥ 60 = fuertes. Algunas zonas tienen viento estructuralmente más fuerte por altitud (Atotonilco a 2,700 msnm, Pachuca Norte a 2,400 msnm). Si sus ráfagas están por debajo de 60 km/h, descríbelas como "moderadas para esa zona".
 11. ANTI-ALUCINACIÓN: usa EXCLUSIVAMENTE los datos del bloque "DATOS REGIONALES" y del "AVISO OFICIAL". PROHIBIDO mencionar sistemas sinópticos específicos si no están explícitos en los datos.
 12. COHERENCIA INTER-SECCIONES. Verifica que ninguna sección contradiga a otra.
+12.bis. COHERENCIA SECCIÓN 0 ↔ SECCIÓN II (crítico). Las zonas mencionadas en la sección 0 (Decisión Operativa) deben ser EXACTAMENTE las mismas que las listadas en la sección II (Zonas que Requieren Atención). No puede haber divergencia entre ambas secciones. Si la sección 0 menciona 3 zonas, la sección II debe listar esas 3 zonas (ni más ni menos).
 13. VOCABULARIO: usa "localidades" (no "municipios", no "comunidades") al referirte a los conteos del semáforo.
 14. Si el bloque "DATOS REGIONALES" menciona ZONAS SIN DATOS, decláralo explícitamente en la sección I.
 15. FORMATO CON VIÑETAS: usa viñetas en las secciones 0, II, III, IV y V.
