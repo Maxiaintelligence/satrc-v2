@@ -3,6 +3,7 @@ import path from 'path';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { put, list } from '@vercel/blob';
+import { generarReporteDiario } from './reportes/reporteDiario.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rutaJSON = path.join(__dirname, '../src/data/localidades.json');
@@ -291,6 +292,45 @@ function normalizarEstadoSituacion(estadoRaw) {
   if (limpio === 'SITUACION_CRITICA' || limpio === 'CRITICA' || limpio === 'CRÍTICA' || limpio === 'EMERGENCIA') return 'SITUACION_CRITICA';
   if (limpio === 'SITUACION_GRAVE' || limpio === 'GRAVE' || limpio === 'ALERTA') return 'SITUACION_GRAVE';
   return 'SITUACION_NORMAL';
+}
+
+/**
+ * N28 — Detección de la ventana del reporte diario.
+ * 
+ * Reglas:
+ * 1. La hora México debe ser >= 06:00.
+ * 2. No debe existir una entrada PROGRAMADO_REPORTE_DIARIO con la fecha de hoy.
+ * 
+ * @param {string} horaMexicoStr - Hora en formato "06:00 a.m."
+ * @param {string} fechaDiaMexico - Fecha en formato "16 de octubre de 2026"
+ * @param {Array} bitacoraHistorial - Historial de bitácora
+ * @returns {boolean} - true si debe generarse el reporte diario
+ */
+function debeGenerarReporteDiario(horaMexicoStr, fechaDiaMexico, bitacoraHistorial) {
+  // 1. Parsear la hora: extraer la hora en formato 24h
+  const match = horaMexicoStr.match(/(\d{1,2}):(\d{2})\s*(a\.m\.|p\.m\.)/i);
+  if (!match) return false;
+
+  let horas = parseInt(match[1], 10);
+  const minutos = parseInt(match[2], 10);
+  const periodo = match[3].toLowerCase();
+
+  if (periodo.startsWith('p') && horas !== 12) horas += 12;
+  if (periodo.startsWith('a') && horas === 12) horas = 0;
+
+  // 2. Verificar que la hora >= 6:00 (360 minutos desde medianoche)
+  const minutosDesdeMedianoche = horas * 60 + minutos;
+  if (minutosDesdeMedianoche < 360) {
+    return false; // aún no son las 6 AM
+  }
+
+  // 3. Verificar que no exista un reporte diario hoy
+  const yaExiste = bitacoraHistorial.some(entry =>
+    entry.origen_evento === 'PROGRAMADO_REPORTE_DIARIO' &&
+    entry.fecha_dia_mexico === fechaDiaMexico
+  );
+
+  return !yaExiste;
 }
 
 function siguienteIdBitacora(historial) {
@@ -689,6 +729,36 @@ Comunidades críticas bajo tensión: ${JSON.stringify(criticas)}.` }
     motor_consenso: "GFS + ICON + GEM (mediana con filtro de ceros)",
     evaluaciones: evaluaciones
   };
+
+  // --- 7.5. Reporte Diario Automático (6:00 AM) ---
+  // N28: Detectar si toca generar el reporte diario.
+  if (apiKeyGroq && debeGenerarReporteDiario(horaMexicoStr, fechaDiaMexico, bitacoraHistorial)) {
+    console.log('\n📋 [N28] Es la ventana del reporte diario. Generando...');
+    try {
+      const resultado = await generarReporteDiario({
+        seriesPorZona,
+        nodos,
+        evaluaciones,
+        semaforo: { totalNivel4: n4, totalNivel3: n3, totalNivel2: n2, totalNivel1: n1 },
+        alertaSMN,
+        fechaDiaMexico,
+        horaExactaMexico,
+        horaMexicoStr,
+        apiKeyGroq,
+        blobToken: process.env.BLOB_READ_WRITE_TOKEN
+      });
+      console.log(`📋 [N28] Reporte diario ${resultado.es_parcial ? 'PARCIAL' : 'COMPLETO'} generado.`);
+
+      // Añadir la entrada del reporte diario al historial de bitácora local
+      if (resultado.registro_bitacora) {
+        bitacoraHistorial.push(resultado.registro_bitacora);
+      }
+    } catch (e) {
+      console.error('❌ [N28] Fallo generando reporte diario:', e.message);
+      // No interrumpir el flujo principal. El estado se publica igual.
+    }
+  }
+
 
   try {
     await put('estado_diocesano.json', JSON.stringify(paqueteMaestro), {
