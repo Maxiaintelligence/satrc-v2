@@ -4,6 +4,7 @@ import { consultarModelosDeterministas } from '../engine/meteoFetcher.js';
 import { generarConsensoDeterminista } from '../engine/consensusEngine.js';
 import SatelliteViewer from '../components/SatelliteViewer.jsx';
 import DisclaimerModal from '../components/DisclaimerModal.jsx';
+import ReporteModalPublico from '../components/ReporteModalPublico.jsx';
 import {
   CloudRain,
   Thermometer,
@@ -17,7 +18,8 @@ import {
   Building2,
   Bot,
   Clock,
-  RotateCw
+  RotateCw,
+  ChevronRight
 } from 'lucide-react';
 
 const INTERVALO_REFRESCO_MS = 30 * 60 * 1000;
@@ -50,6 +52,8 @@ export default function MonitorPublico() {
   const [zonaActiva, setZonaActiva] = useState(listaZonas[0] || null);
   const [municipioActivo, setMunicipioActivo] = useState('');
   const [localidadActiva, setLocalidadActiva] = useState(null);
+  const [reporteVigente, setReporteVigente] = useState(null);
+  const [modalReportePublicoAbierto, setModalReportePublicoAbierto] = useState(false);
 
   const [cargando, setCargando] = useState(false);
   const [datosConsenso, setDatosConsenso] = useState([]);
@@ -78,6 +82,44 @@ export default function MonitorPublico() {
       }
     }
   }, [zonaActiva]);
+
+    // N28 — Cargar el reporte vigente para mostrar la decisión operativa
+  useEffect(() => {
+    let cancelado = false;
+
+    async function cargarReporteVigente() {
+      try {
+        const res = await fetch(`/api/sara?t=${Date.now()}`, {
+          headers: { 'Cache-Control': 'no-cache' }
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelado && data.ultimo_reporte_ondemand) {
+          setReporteVigente(data.ultimo_reporte_ondemand);
+        }
+      } catch (e) {
+        console.warn("[Reporte] No se pudo cargar el reporte vigente:", e.message);
+      }
+    }
+
+    cargarReporteVigente();
+    const intervalo = setInterval(cargarReporteVigente, INTERVALO_REFRESCO_MS);
+
+    return () => {
+      cancelado = true;
+      clearInterval(intervalo);
+    };
+  }, []);
+
+  // Determinar si el reporte vigente es de hoy y NO es parcial
+  const fechaHoy = new Date().toLocaleDateString('es-MX', {
+    timeZone: 'America/Mexico_City',
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric'
+  });
+  const reporteEsDeHoy = reporteVigente && reporteVigente.fecha_dia_mexico === fechaHoy;
+  const reporteMostrable = reporteEsDeHoy && !reporteVigente.es_parcial;
 
   const manejarCambioMunicipio = (e) => {
     const munSeleccionado = e.target.value;
@@ -204,6 +246,39 @@ export default function MonitorPublico() {
   return (
     <div className="space-y-6">
       <DisclaimerModal abierto={mostrarDisclaimer} alCerrar={() => setMostrarDisclaimer(false)} />
+
+      {/* ========================================================== */}
+      {/* 0.bis. BLOQUE DE DECISIÓN OPERATIVA DEL DÍA                 */}
+      {/* ========================================================== */}
+      {reporteMostrable && reporteVigente.reporte?.seccion_0_decision && (
+        <div className="bg-slate-900 border-2 border-amber-500/40 rounded-2xl p-4 md:p-5 shadow-xl">
+          <div className="flex items-start gap-3">
+            <div className="p-2 bg-amber-500/10 text-amber-400 border border-amber-500/30 rounded-xl flex-shrink-0">
+              <Info className="w-5 h-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap mb-2">
+                <span className="text-[10px] uppercase font-black text-amber-400 tracking-wider">
+                  Decisión Operativa del Día
+                </span>
+                <span className="text-[10px] text-slate-400">
+                  {reporteVigente.fecha_dia_mexico} • {reporteVigente.hora_exacta_mexico} hrs
+                </span>
+              </div>
+              <p className="text-sm md:text-base font-bold text-white leading-snug">
+                {reporteVigente.reporte.seccion_0_decision}
+              </p>
+              <button
+                onClick={() => setModalReportePublicoAbierto(true)}
+                className="mt-3 flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-lg text-xs font-bold transition-all"
+              >
+                Ver reporte completo
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ========================================================== */}
       {/* 0. BARRA DE ESTADO — N9-Public                              */}
@@ -724,6 +799,15 @@ export default function MonitorPublico() {
       <div className="pt-2">
         <SatelliteViewer />
       </div>
+
+      {/* ========================================================== */}
+      {/* MODAL DEL REPORTE COMPLETO (vista pública)                 */}
+      {/* ========================================================== */}
+      <ReporteModalPublico
+        abierto={modalReportePublicoAbierto}
+        alCerrar={() => setModalReportePublicoAbierto(false)}
+        reporteVigente={reporteVigente}
+      />
 
     </div>
   );
