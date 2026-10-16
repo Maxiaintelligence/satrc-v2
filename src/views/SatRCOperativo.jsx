@@ -352,15 +352,44 @@ export default function SatRCOperativo({ alCerrarSesion }) {
       : null;
 
     // C2c — Construir los 14 resúmenes regionales
+    // N30 — Reintento automático hasta 2 veces si faltan zonas
     let datosRegionales = null;
-    try {
-      datosRegionales = await construirResumenesRegionales();
-    } catch (e) {
-      console.warn("[C2c] No se pudieron construir los resúmenes regionales:", e.message);
+    const MAX_INTENTOS = 2;
+    let intentoActual = 0;
+
+    while (intentoActual < MAX_INTENTOS) {
+      intentoActual++;
+      try {
+        console.log(`[C2c] Intento ${intentoActual}/${MAX_INTENTOS} de construir resúmenes regionales`);
+        datosRegionales = await construirResumenesRegionales();
+      } catch (e) {
+        console.warn(`[C2c] Intento ${intentoActual} falló:`, e.message);
+        datosRegionales = null;
+      }
+
+      if (!datosRegionales) {
+        if (intentoActual < MAX_INTENTOS) {
+          invalidarCache();
+          await new Promise(r => setTimeout(r, 1000));
+          continue;
+        }
+        break;
+      }
+
+      // Si es la primera pasada y faltan zonas, invalidar caché y reintentar
+      if (!esModoEmergencia && datosRegionales.zonas_ok < datosRegionales.zonas_totales && intentoActual < MAX_INTENTOS) {
+        console.log(`[C2c] Cobertura insuficiente (${datosRegionales.zonas_ok}/${datosRegionales.zonas_totales}). Reintentando...`);
+        invalidarCache();
+        await new Promise(r => setTimeout(r, 1000));
+        continue;
+      }
+
+      // Si ya es el último intento o el modo emergencia, aceptar el resultado
+      break;
     }
 
     if (!datosRegionales) {
-      alert("No se pudieron obtener datos meteorológicos regionales. Verifique su conexión.");
+      alert("No se pudieron obtener datos meteorológicos regionales después de 2 intentos. Verifique su conexión.");
       setGenerandoOnDemand(false);
       return;
     }
@@ -372,7 +401,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
       return;
     }
 
-    // Si es modo normal y faltan zonas, mostrar error y opción de modo emergencia
+    // Si es modo normal y aún faltan zonas tras los 2 intentos, mostrar error y opción de modo emergencia
     if (!esModoEmergencia && datosRegionales.zonas_ok < datosRegionales.zonas_totales) {
       setZonasFallidasTemporal(datosRegionales.zonas_fallidas);
       setGenerandoOnDemand(false);
@@ -460,6 +489,9 @@ Fecha de Emisión: ${reporteVigente.fecha_dia_mexico}
 Hora Exacta de Emisión: ${reporteVigente.hora_exacta_mexico} (Hora del Centro de México)
 Consenso de Modelos: ${reporteVigente.consenso_modelos}
 --------------------------------------------------------------------------------
+
+DECISIÓN OPERATIVA DEL DÍA:
+${r.seccion_0_decision || '(sin decisión operativa)'}
 
 I. ESTADO GENERAL:
 ${r.seccion_I_atmosfera}
