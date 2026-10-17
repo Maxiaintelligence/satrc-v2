@@ -258,7 +258,26 @@ async function cargarSeriesRegionales(nodos) {
   return { series, zonasOk, zonasFallidas };
 }
 
-
+/**
+ * N24 — Reparación de doble encoding UTF-8 (mojibake).
+ * Réplica del parche aplicado en api/reporte-ondemand.js.
+ * Corrige textos como "atmÃ³sferas" → "atmósferas".
+ */
+function repararMojibake(texto) {
+  if (typeof texto !== 'string' || !texto) return texto;
+  const tieneMojibake = /[ÃÂ][\u0080-\u00BF]/.test(texto);
+  if (!tieneMojibake) return texto;
+  try {
+    const bytes = Buffer.from(texto, 'latin1');
+    const reparado = bytes.toString('utf8');
+    if (reparado.length < texto.length && !/[ÃÂ][\u0080-\u00BF]/.test(reparado)) {
+      return reparado;
+    }
+    return texto;
+  } catch (e) {
+    return texto;
+  }
+}
 
 // ============================================================
 // HELPERS (fecha, hash, IDs, normalización)
