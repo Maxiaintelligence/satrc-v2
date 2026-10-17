@@ -40,3 +40,17 @@ Este documento registra los bugs estructurales resueltos en Octubre de 2026 (Fas
 ## N37 — Sección 0 no aparecía en el TXT descargable (Resuelto)
 - **Síntoma:** El operador descargaba el TXT y no veía la "Decisión Operativa".
 - **Fix:** Se añadió `DECISIÓN OPERATIVA DEL DÍA:` al generador de TXT en `SatRCOperativo.jsx`.
+
+
+## N26 — Cobertura de zonas en el runner (Resuelto en Etapa 3)
+
+- **Síntoma:** el runner (`scripts/ejecutar_sara_autonomo.mjs`) reportaba `zonas_ok = 9/14` en días de alta latencia de Open-Meteo. 5 zonas quedaban sin datos, y sus 405 localidades se marcaban como `sin_datos_regionales: true` → Nivel 1 (falso negativo).
+- **Causa:** la función `cargarSeriesRegionales()` disparaba 14 fetches con un stagger de 200ms, pero **las 14 quedaban en vuelo simultáneamente**. Con `TIMEOUT_FETCH_MS = 30000` y 2 reintentos por zona, se acumulaban hasta 14 conexiones concurrentes a Open-Meteo. Open-Meteo comenzaba a rechazar o demorar algunas.
+- **Fix (Etapa 3):** se replicó el patrón de **lotes de 4** que ya funcionaba en `src/engine/reportesRegionales.js` (frontend).
+  - Cada lote dispara 4 fetches en vuelo.
+  - `Promise.allSettled(lote)` espera a que los 4 terminen (con o sin éxito).
+  - Delay de 500ms entre lotes.
+  - Reintentos internos de `consultarZonaConReintentos()` no cambian (2 intentos × 30s por zona).
+- **Verificación:** corrida de GitHub Actions (run `39067735652`) con `zonas_ok = 14/14` en 2.7s.
+- **Commit:** `3ee8253` (fix), `da696cc` (restauración de `repararMojibake` eliminada por error en `3ee8253`).
+- **Estado:** ✅ Cerrado en Etapa 3.
