@@ -26,3 +26,17 @@ Este documento registra los bugs estructurales resueltos en Octubre de 2026 (Fas
 ## N30/N31 — Fricción en On-Demand y Falta de Sección 0 en TXT
 - **Síntoma:** Si fallaban zonas, el operador debía reintentar manualmente. Además, el TXT descargable no incluía la Decisión Operativa.
 - **Fix:** Se añadió un reintento automático (2 intentos) en `SatRCOperativo.jsx` y se agregó la sección 0 al generador del TXT.
+
+## N35 — El Parser del SMN (Resuelto)
+- **Síntoma:** El SMN emitió alerta de Lluvias Torrenciales, pero el sistema decía "Sin aviso".
+- **Causa:** El endpoint consultaba un webservice equivocado.
+- **Fix:** Se reescribió `api/smn.js` para hacer scraping a la página principal del SMN, buscando patrones de texto ("torrenciales", "hidalgo", "puebla") y asignando nivel 3.
+
+## N36 — Groq alucinaba "Situación Normal" con N4=19 (Resuelto)
+- **Síntoma:** El runner reportó 19 emergencias, pero Groq escribió "Situación Meteorológica Normal".
+- **Causa:** El prompt era ambiguo y la regla de "no mencionar números" hacía que Groq ignorara el contexto.
+- **Fix:** Se añadió la `REGLA CRÍTICA DE COHERENCIA` en el prompt del runner y se le pasó el nivel del SMN en el `userPrompt`.
+
+## N37 — Sección 0 no aparecía en el TXT descargable (Resuelto)
+- **Síntoma:** El operador descargaba el TXT y no veía la "Decisión Operativa".
+- **Fix:** Se añadió `DECISIÓN OPERATIVA DEL DÍA:` al generador de TXT en `SatRCOperativo.jsx`.

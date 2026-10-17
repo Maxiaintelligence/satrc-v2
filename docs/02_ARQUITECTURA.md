@@ -1,31 +1,24 @@
-# SatRC V2.0 — Arquitectura Técnica
+# SatRC V2.0 — Arquitectura y Frontend (Nivel Ingeniería)
 
-## 1. Stack Tecnológico
-- **Frontend:** React 19 + Vite + Tailwind CSS. Mapas con Leaflet.
-- **Backend:** Vercel Serverless Functions (Node.js 22).
-- **Runner Autónomo:** GitHub Actions (Node.js 22).
-- **Almacenamiento:** Vercel Blob (3 archivos JSON: `estado_diocesano.json`, `bitacora_sara.json`, `reporte_diocesano_vigente.json`).
-- **Base de Datos Local:** `src/data/localidades.json` (incluida en el bundle).
-- **Servicios Externos:** Open-Meteo (clima), Groq (IA), SMN/CONAGUA (avisos), NOAA (satélite).
+## 1. El Estado en el Frontend
+El frontend **no calcula riesgo complejo en tiempo real**. Su única fuente de verdad es el Blob (`estado_diocesano.json`). Si el Blob falla, el frontend tiene un "fallback en vivo" que evalúa en el navegador.
 
-## 2. Las 5 Capas
-1.  **Capa 1 (Presentación):** PWA en Vercel Static. Vistas: `MonitorPublico` y `SatRCOperativo`.
-2.  **Capa 2 (API Serverless):** Endpoints en `/api`. Destacan `/api/sara` (lectura estado), `/api/smn` (parser avisos), `/api/reporte-ondemand` (generación Groq).
-3.  **Capa 3 (Motor Autónomo):** `scripts/ejecutar_sara_autonomo.mjs`. Disparado por `cron-job.org` cada 3 horas. Consume Open-Meteo, evalúa 405 localidades y publica en Blob.
-4.  **Capa 4 (Almacenamiento):** Vercel Blob. Es la "fuente de verdad" para el frontend.
-5.  **Capa 5 (Datos Externos):** APIs de terceros.
+## 2. Vistas Principales
+- `MonitorPublico.jsx`: Vista pública. Selector de Zona -> Municipio -> Localidad. Usa Open-Meteo para gráficas. No tiene botones de exportación.
+- `SatRCOperativo.jsx`: Sala de mando. Semáforo de 4 niveles. Botón de On-Demand.
 
-## 3. Flujo de Datos (Runner Autónomo)
-1. `cron-job.org` dispara una petición HTTP al endpoint `/api/disparar-workflow`.
-2. Este endpoint, usando un PAT de GitHub, dispara el workflow `sara_cron.yml`.
-3. El runner descarga los datos de 14 nodos regionales (Open-Meteo).
-4. Genera consenso (GFS + ICON + GEM).
-5. Evalúa las 405 localidades con el `riskEvaluator.js`.
-6. Consulta el SMN y a Groq para el dictamen diario.
-7. Si es la ventana de las 6:00 AM, genera el Reporte Diario Automático.
-8. Publica el estado y la bitácora en Vercel Blob.
+## 3. El Motor de Reportes Regionales (`src/engine/reportesRegionales.js`)
+Creado en Octubre 2026. No existía antes.
+- `seleccionarNodosRegionales()`: Replica la lógica del runner.
+- `construirResumenesRegionales()`: **Crítico**. Hace 14 fetches a Open-Meteo con límite de 4 lotes concurrentes (`TAMANO_LOTE = 4`). Si haces más de 4, el navegador colapsa por límite de conexiones.
+- `invalidarCache()`: Borra la caché de 30 minutos. Se usa cuando el operador reintenta.
 
-## 4. Puntos Críticos de Diseño (ADRs)
-- **ADR-001 (Nodos):** Se usan 14 nodos (uno por zona) en lugar de 1 solo (Huauchinango) para evitar el sesgo climático (Bug original).
-- **ADR-007 (Bitácora):** Encadenamiento SHA-256 para auditar decisiones y evitar manipulaciones.
-- **ADR-009 (Semáforo):** 4 niveles (N1-N4) alineados con Protección Civil.
+## 4. Modales (Refactor Octubre 2026)
+Antes había un solo modal gigante en `SatRCOperativo.jsx`. Se dividió en 3:
+1.  `ReporteCuerpo.jsx`: El HTML de las 7 secciones. 100% reutilizable.
+2.  `ReporteModalOperativo.jsx`: Usa el cuerpo + Botones (WhatsApp, Descargar, Imprimir). Solo para operadores.
+3.  `ReporteModalPublico.jsx`: Usa el cuerpo + Sin botones. Solo para el Monitor.
+
+## 5. El Problema del Encoding UTF-8 (N27)
+`@vercel/blob` en el runner guarda strings con doble encoding (ej. `ó` se guarda como `Ã³`).
+El frontend **NO** tiene la culpa. El endpoint `/api/sara.js` lee el Blob y ejecuta `repararObjeto()` antes de enviarlo al frontend. Si modificas `/api/sara.js`, asegúrate de no romper esta función.
