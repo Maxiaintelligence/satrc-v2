@@ -630,9 +630,13 @@ async function ejecutarSARA() {
           messages: [
             { role: "system", content: `Eres SARA, Oficial Meteoróloga de Cáritas Pastoral Social en la Arquidiócesis de Tulancingo. Hora oficial de México: ${horaMexicoStr}.
 Genera el informe diocesano multimodal en JSON con claves: estado_situacion, color, titulo, comentario_oficial.
-REGLA: Si no hay emergencias activas, declara situación normal con serenidad profesional.
-REGLA: NO menciones conteos numéricos de niveles en el comentario. Se agregarán aparte.` },
-            { role: "user", content: `Hora México: ${horaMexicoStr}. Aviso SMN: ${alertaSMN ? alertaSMN.titulo : 'Sin aviso severo vigente'}.
+REGLA CRÍTICA DE COHERENCIA (OBLIGATORIA):
+- Si N4 > 0: estado_situacion DEBE ser "SITUACION_CRITICA", color DEBE ser "#EF4444", titulo DEBE mencionar la emergencia (ej. "Emergencia por Lluvias Torrenciales en la Región").
+- Si N4 = 0 y N3 > 0: estado_situacion DEBE ser "SITUACION_GRAVE", color DEBE ser "#F97316", titulo DEBE mencionar alerta (ej. "Alerta Temprana por Lluvias Intensas").
+- Si N4 = 0 y N3 = 0: estado_situacion DEBE ser "SITUACION_NORMAL", color DEBE ser "#10B981", titulo DEBE ser sereno.
+Esta regla es determinista. NO puedes declarar "Normal" si hay N4 > 0 o N3 > 0. El conteo de niveles es la fuente de verdad.
+REGLA: NO menciones conteos numéricos en el comentario_oficial. Se agregarán aparte en la bitácora.` },
+{ role: "user", content: `Hora México: ${horaMexicoStr}. Aviso SMN: ${alertaSMN ? `${alertaSMN.titulo} (Nivel ${alertaSMN.nivel || 'N/D'}, lluvia esperada ${alertaSMN.rango_lluvia_min_mm || 0}-${alertaSMN.rango_lluvia_max_mm || 0} mm)` : 'Sin aviso severo vigente'}.
 Zonas OK: ${zonasOk.length}/${Object.keys(nodos).length}. Zonas sin datos: ${zonasFallidas.join(', ') || 'ninguna'}.
 Consenso: GFS + ICON + GEM.
 Nivel 4: ${n4}, Nivel 3: ${n3}, Nivel 2: ${n2}, Nivel 1: ${n1}.
