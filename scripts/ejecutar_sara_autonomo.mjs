@@ -197,40 +197,57 @@ async function consultarZonaConReintentos(nodo) {
 
 async function cargarSeriesRegionales(nodos) {
   const zonaIds = Object.keys(nodos);
-  console.log(`\n🌐 Consultando ${zonaIds.length} nodos regionales en paralelo (GFS + ICON + GEM)...`);
+  console.log(`\n🌐 Consultando ${zonaIds.length} nodos regionales en lotes de 4 (GFS + ICON + GEM)...`);
 
   const t0 = Date.now();
 
-  const promesas = zonaIds.map((zonaId, indice) => {
-    const nodo = nodos[zonaId];
-    return new Promise(r => setTimeout(r, indice * 200))
-      .then(() => consultarZonaConReintentos(nodo))
-      .then(resultado => ({ zonaId, nodo, ...resultado }));
-  });
-
-  const resultados = await Promise.allSettled(promesas);
+  // N26 — Lotes de 4 en vuelo simultáneo para no saturar Open-Meteo.
+  // Réplica del patrón usado en src/engine/reportesRegionales.js (frontend).
+  // Cada lote espera a que sus 4 fetches terminen antes de disparar el siguiente.
+  const TAMANO_LOTE = 4;
+  const DELAY_ENTRE_LOTES_MS = 500;
 
   const series = {};
   const zonasOk = [];
   const zonasFallidas = [];
 
-  resultados.forEach((r, i) => {
-    const zonaId = zonaIds[i];
-    if (r.status === 'fulfilled') {
-      series[zonaId] = r.value;
-      if (r.value.ok) {
-        zonasOk.push(`${zonaId}(${r.value.serie.length}h)`);
-        console.log(`  ✅ [${zonaId}] ${r.value.serie.length}h en ${r.value.intentos} intento(s)`);
+  for (let i = 0; i < zonaIds.length; i += TAMANO_LOTE) {
+    const lote = zonaIds.slice(i, i + TAMANO_LOTE);
+    const numeroLote = Math.floor(i / TAMANO_LOTE) + 1;
+    const totalLotes = Math.ceil(zonaIds.length / TAMANO_LOTE);
+    console.log(`\n  📦 Lote ${numeroLote}/${totalLotes}: ${lote.join(', ')}`);
+
+    const promesasLote = lote.map(zonaId => {
+      const nodo = nodos[zonaId];
+      return consultarZonaConReintentos(nodo)
+        .then(resultado => ({ zonaId, nodo, ...resultado }));
+    });
+
+    const resultadosLote = await Promise.allSettled(promesasLote);
+
+    resultadosLote.forEach((r, j) => {
+      const zonaId = lote[j];
+      if (r.status === 'fulfilled') {
+        series[zonaId] = r.value;
+        if (r.value.ok) {
+          zonasOk.push(`${zonaId}(${r.value.serie.length}h)`);
+          console.log(`    ✅ [${zonaId}] ${r.value.serie.length}h en ${r.value.intentos} intento(s)`);
+        } else {
+          zonasFallidas.push(zonaId);
+          console.warn(`    ❌ [${zonaId}] Falló después de ${r.value.intentos} intentos: ${r.value.error}`);
+        }
       } else {
+        series[zonaId] = { ok: false, serie: [], error: r.reason?.message || 'Promise rechazada', intentos: 0 };
         zonasFallidas.push(zonaId);
-        console.warn(`  ❌ [${zonaId}] Falló después de ${r.value.intentos} intentos: ${r.value.error}`);
+        console.error(`    ❌ [${zonaId}] Error inesperado: ${r.reason?.message}`);
       }
-    } else {
-      series[zonaId] = { ok: false, serie: [], error: r.reason?.message || 'Promise rechazada', intentos: 0 };
-      zonasFallidas.push(zonaId);
-      console.error(`  ❌ [${zonaId}] Error inesperado: ${r.reason?.message}`);
+    });
+
+    // Delay entre lotes (excepto después del último)
+    if (i + TAMANO_LOTE < zonaIds.length) {
+      await new Promise(r => setTimeout(r, DELAY_ENTRE_LOTES_MS));
     }
-  });
+  }
 
   const dt = ((Date.now() - t0) / 1000).toFixed(1);
   console.log(`\n📊 Cobertura: ${zonasOk.length}/${zonaIds.length} zonas OK en ${dt}s`);
@@ -241,26 +258,7 @@ async function cargarSeriesRegionales(nodos) {
   return { series, zonasOk, zonasFallidas };
 }
 
-/**
- * N24 — Reparación de doble encoding UTF-8 (mojibake).
- * Réplica del parche aplicado en api/reporte-ondemand.js.
- * Corrige textos como "atmÃ³sferas" → "atmósferas".
- */
-function repararMojibake(texto) {
-  if (typeof texto !== 'string' || !texto) return texto;
-  const tieneMojibake = /[ÃÂ][\u0080-\u00BF]/.test(texto);
-  if (!tieneMojibake) return texto;
-  try {
-    const bytes = Buffer.from(texto, 'latin1');
-    const reparado = bytes.toString('utf8');
-    if (reparado.length < texto.length && !/[ÃÂ][\u0080-\u00BF]/.test(reparado)) {
-      return reparado;
-    }
-    return texto;
-  } catch (e) {
-    return texto;
-  }
-}
+
 
 // ============================================================
 // HELPERS (fecha, hash, IDs, normalización)
