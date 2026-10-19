@@ -1,53 +1,122 @@
 # SatRC V2.0 — Motor de Evaluación de Riesgo (Nivel Ingeniería)
 
-Este documento detalla la lógica exacta de los motores de evaluación. Cualquier modificación aquí requiere pruebas empíricas con los scripts de PowerShell en `scripts/diagnostico/`.
+> Este documento detalla la lógica exacta de los motores de evaluación. Cualquier modificación aquí requiere pruebas empíricas con los scripts de PowerShell en `scripts/diagnostico/`.
 
-## 1. El Runner Autónomo (`scripts/ejecutar_sara_autonomo.mjs`)
+## Índice
+
+1. [El Runner Autónomo](#1-el-runner-autónomo)
+2. [Las 6 reglas de evaluación](#2-las-6-reglas-de-evaluación)
+3. [Cálculo de la saturación (API)](#3-cálculo-de-la-saturación-api)
+4. [Aplicación del aviso SMN (H-MOTOR-06)](#4-aplicación-del-aviso-smn-h-motor-06)
+
+---
+
+## 1. El Runner Autónomo
+
+**Archivo:** `scripts/ejecutar_sara_autonomo.mjs`
 
 El runner es el corazón del sistema. Corre en GitHub Actions (Node.js 22).
 
-### 1.1 Flujo de Ejecución
-1.  **Aviso SMN:** Consulta `https://smn.conagua.gob.mx/es/` buscando "torrenciales", "hidalgo", etc. Si hay aviso, eleva la `lluvia_efectiva` mínima para las zonas de Sierra.
-2.  **Nodos Regionales:** La función `seleccionarNodosRegionales()` agrupa las 405 localidades por `zona_id` y selecciona la de mayor `vulnerabilidad.poblacion` como nodo.
-3.  **Fetch en Paralelo:** `cargarSeriesRegionales()` usa `Promise.allSettled` con un *stagger* (retraso) de 200ms entre cada fetch a Open-Meteo. Si falla, reintenta 2 veces con 3s de espera.
-4.  **Consenso:** `generarConsensoDeterminista()` se aplica a cada zona.
-5.  **Evaluación:** Se aplica `riskEvaluator.js` a las 405 localidades usando la serie de su zona.
-6.  **Publicación:** Se guarda en Vercel Blob (`estado_diocesano.json` y `bitacora_sara.json`).
+### 1.1 Flujo de ejecución (estado actual, Etapa 3)
 
-### 1.2 El Bug Original (El Nodo Único)
-El código anterior a Octubre 2026 usaba solo el nodo de **Huauchinango** para evaluar las 405 localidades. Esto causaba que localidades secas del Altiplano (ej. Actopan) se reportaran como N2 por lluvias que solo ocurrían en la Sierra. **ADR-001** corrigió esto usando los 14 nodos.
+1. **Aviso SMN:** consulta `https://smn.conagua.gob.mx/es/` buscando "torrenciales", "hidalgo", etc. Si hay aviso, eleva la `lluvia_efectiva` mínima para las zonas de Sierra (solo si el estado de la localidad está en el aviso).
+2. **Nodos regionales:** la función `seleccionarNodosRegionales()` (importada de `src/lib/compartido/nodos.js`) agrupa las 405 localidades por `zona_id` y selecciona como nodo la de mayor `vulnerabilidad.poblacion`.
+3. **Fetch en paralelo (lotes de 4):** `cargarSeriesRegionales()` usa lotes de 4 peticiones concurrentes con un delay de 500 ms entre lotes. Si falla una zona, reintenta 2 veces con 3 s de espera. *(N26 resuelto)*.
+4. **Consenso:** `generarConsensoDeterminista()` se aplica a cada zona.
+5. **Evaluación:** se aplica `riskEvaluator.js` a las 405 localidades usando la serie de su zona.
+6. **Publicación:** se guarda en Vercel Blob (`estado_diocesano.json` y `bitacora_sara.json`).
 
-## 2. Las 6 Reglas de Evaluación (`src/engine/riskEvaluator.js`)
+### 1.2 El bug original (el nodo único)
 
-La función `evaluarLocalidad(localidad, serieHoraria, contexto)` aplica estas reglas en orden:
+El código anterior a Octubre 2026 usaba solo el nodo de Huauchinango para evaluar las 405 localidades. Esto causaba que localidades secas del Altiplano (ej. Actopan) se reportaran como N2 por lluvias que solo ocurrían en la Sierra. **ADR-001** corrigió esto usando los 14 nodos.
+
+---
+
+## 2. Las 6 reglas de evaluación
+
+**Archivo:** `src/engine/riskEvaluator.js`
+
+La función `evaluarLocalidad(localidad, serieHoraria, contexto)` aplica estas reglas **en orden**:
+
+| # | Regla | Resultado |
+|---|---|---|
+| 1 | Protección Altiplano | N1 |
+| 2 | Deslave crítico | N4 |
+| 3 | Deslave moderado | N3 |
+| 4 | Inundación fluvial | N4 / N3 |
+| 5 | Corte vial | N3 |
+| 6 | Vigilancia | N2 |
 
 ### Regla 1 — Protección Altiplano (N1)
-Aplica a: `ACT, APN, PMN, PMS, TIZ`.
-Si el terreno es plano (`pendiente_max_deg < 15`), lluvia `< 20mm`, temp `> 2°C` y viento `< 40km/h` -> **N1**.
 
-### Regla 2 — Deslave Crítico (N4)
-Aplica a: Zonas de Sierra.
-Si `pendiente >= 45°` **Y** `saturacion_total >= 65.0 mm` -> **N4**.
-*Física:* A 45°, el suelo falla geométricamente si está saturado.
+**Aplica a:** `ACT`, `APN`, `PMN`, `PMS`, `TIZ`.
 
-### Regla 3 — Deslave Moderado (N3)
-Si `pendiente >= 25°` (pero <45°) **Y** `saturacion_total >= 65.0 mm` -> **N3**.
+Si se cumplen **todas** estas condiciones → **N1**:
 
-### Regla 4 — Inundación Fluvial (N4/N3)
-Si `dist_cauce_km <= 0.8` **Y** `TWI >= 12` **Y** `lluvia_efectiva >= 35mm`.
-Si `lluvia >= 65mm` o `poblacion_aguas_arriba >= 50000` -> **N4**, sino **N3**.
+- Terreno plano (`pendiente_max_deg < 15`)
+- Lluvia < 20 mm
+- Temperatura > 2 °C
+- Viento < 40 km/h
 
-### Regla 5 — Corte Vial (N3)
-Si acceso es `CAMINO_TERRACERIA` o `BRECHA` **Y** `lluvia >= 20mm` o `saturacion >= 50mm` -> **N3**.
+### Regla 2 — Deslave crítico (N4)
+
+**Aplica a:** zonas de Sierra.
+
+Si `pendiente >= 45°` **Y** `saturacion_total >= 65.0 mm` → **N4**.
+
+> **Física:** a 45°, el suelo falla geométricamente si está saturado.
+
+### Regla 3 — Deslave moderado (N3)
+
+Si `pendiente >= 25°` (pero `< 45°`) **Y** `saturacion_total >= 65.0 mm` → **N3**.
+
+### Regla 4 — Inundación fluvial (N4 / N3)
+
+Condiciones de entrada (**todas**):
+
+- `dist_cauce_km <= 0.8`
+- `TWI >= 12`
+- `lluvia_efectiva >= 35 mm`
+
+Resultado:
+
+- Si `lluvia >= 65 mm` **o** `poblacion_aguas_arriba >= 50000` → **N4**
+- Si no → **N3**
+
+### Regla 5 — Corte vial (N3)
+
+Si `acceso` es `CAMINO_TERRACERIA` o `BRECHA` **Y** (`lluvia >= 20 mm` **o** `saturacion >= 50 mm`) → **N3**.
 
 ### Regla 6 — Vigilancia (N2)
-Si lluvia `>= 8mm` o saturación `>= 30mm` o visibilidad `<= 2km` (niebla) -> **N2**.
 
-## 3. Cálculo de la Saturación (API)
-El cálculo es determinista (no usa IA):
-`Saturación = API_7dias + Lluvia_24h`.
-El API decae exponencialmente: `Lluvia_dia * (0.85 ^ (8 - dia))`.
-*Si el suelo tiene >65mm de saturación y la pendiente es alta, el riesgo es real.*
+Si se cumple **cualquiera** → **N2**:
 
-## 4. Cobertura de Nodos (Problema N26 pendiente)
-Actualmente, el runner tiene un `TIMEOUT_FETCH_MS = 30000`. En días de alta latencia de Open-Meteo, algunas zonas fallan. El sistema marca esas zonas como `sin_datos_regionales` y sus localidades quedan en N1 (falso negativo). Se planea aplicar el fix de lotes de 4 que se usó en el frontend.
+- `lluvia >= 8 mm`
+- `saturacion >= 30 mm`
+- `visibilidad <= 2 km` (niebla)
+
+---
+
+## 3. Cálculo de la saturación (API)
+
+El cálculo es **determinista** (no usa IA):
+
+```text
+Saturación = API_7dias + Lluvia_24h
+```
+
+El API decae exponencialmente:
+
+```text
+Lluvia_dia * (0.85 ^ (8 - dia))
+```
+
+Si el suelo tiene > 65 mm de saturación y la pendiente es alta, el riesgo es real.
+
+---
+
+## 4. Aplicación del aviso SMN (H-MOTOR-06)
+
+A partir de la Etapa 3, `lluviaEfectiva24h` **NO** se aplica a todas las zonas de Sierra por igual. Solo se aplica el piso de lluvia del aviso (`rango_lluvia_min_mm`) si la localidad pertenece a uno de los `estados_afectados` (`HGO`, `PUE`, `VER`).
+
+Si el aviso es solo para `VER`, las localidades de Hidalgo y Puebla usan su lluvia real de Open-Meteo, evitando la sobre-alertación masiva.
