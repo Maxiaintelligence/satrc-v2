@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { put, list } from '@vercel/blob';
+import { repararMojibake } from '../src/lib/compartido/mojibake.js';
 
 const BLOQUE_GENESIS = "0000000000000000000000000000000000000000000000000000000000000000";
 const MAX_REGISTROS_BITACORA = 500;
@@ -66,31 +67,6 @@ function normalizarAlertaSMN(alertaRaw) {
     rango_lluvia_max_mm: typeof alertaRaw.rango_lluvia_max_mm === 'number' ? alertaRaw.rango_lluvia_max_mm : null,
     fecha_sincronizacion: String(alertaRaw.fecha_sincronizacion || '').slice(0, 50)
   };
-}
-
-/**
- * N22 — Reparación de doble encoding UTF-8 (mojibake).
- * 
- * Groq devuelve ocasionalmente texto con doble encoding: "ó" se convierte
- * en "Ã³". Este parche revierte esa corrupción antes de guardar en el Blob.
- * 
- * Causa raíz pendiente de diagnóstico profundo (V3.0). Este parche es 
- * defensivo y no rompe nada si el texto ya está correcto.
- */
-function repararMojibake(texto) {
-  if (typeof texto !== 'string' || !texto) return texto;
-  const tieneMojibake = /[ÃÂ][\u0080-\u00BF]/.test(texto);
-  if (!tieneMojibake) return texto;
-  try {
-    const bytes = Buffer.from(texto, 'latin1');
-    const reparado = bytes.toString('utf8');
-    if (reparado.length < texto.length && !/[ÃÂ][\u0080-\u00BF]/.test(reparado)) {
-      return reparado;
-    }
-    return texto;
-  } catch (e) {
-    return texto;
-  }
 }
 
 function normalizarDatosRegionales(raw) {
