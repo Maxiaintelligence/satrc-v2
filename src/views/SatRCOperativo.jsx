@@ -3,7 +3,7 @@ import db from '../data/localidades.json';
 import { consultarModelosDeterministas } from '../engine/meteoFetcher.js';
 import { generarConsensoDeterminista } from '../engine/consensusEngine.js';
 import { evaluarLocalidad } from '../engine/riskEvaluator.js';
-import { construirResumenesRegionales, invalidarCache } from '../engine/reportesRegionales.js';
+import { construirResumenesRegionales, invalidarCache, seleccionarNodosRegionales } from '../engine/reportesRegionales.js';
 import RiskMap from '../components/RiskMap.jsx';
 import SatelliteViewer from '../components/SatelliteViewer.jsx';
 import ReporteModalOperativo from '../components/ReporteModalOperativo.jsx';
@@ -191,19 +191,56 @@ export default function SatRCOperativo({ alCerrarSesion }) {
   }, []);
 
   const ejecutarEvaluacionRealEnVivo = async (alertaParaEvaluar = null) => {
-    const nodoSierra = todasLocalidades.find(l => l.nombre.toLowerCase().includes('huauchinango')) || todasLocalidades[0];
-    let serieConsenso = [];
+    // H-MOTOR-04 — Fallback con 14 nodos regionales (uno por zona).
+    // Antes usaba solo el nodo Huauchinango para las 405 localidades (bug ADR-001 reintroducido).
+    // Ahora replica la lógica del runner: 1 fetch por zona, 1 serie por zona, evaluación localidad a localidad.
 
-    try {
-      const resM = await consultarModelosDeterministas(nodoSierra.coords.lat, nodoSierra.coords.lon);
-      if (resM?.exito && resM?.datos_horarios) {
-        serieConsenso = generarConsensoDeterminista(resM.datos_horarios);
+    const nodosRegionales = seleccionarNodosRegionales();
+    const zonaIds = Object.keys(nodosRegionales);
+
+    // Construir 14 series en lotes de 4 (misma lógica que reportesRegionales.js)
+    const TAMANO_LOTE = 4;
+    const DELAY_ENTRE_LOTES_MS = 500;
+
+    const seriesPorZona = {};
+
+    for (let i = 0; i < zonaIds.length; i += TAMANO_LOTE) {
+      const lote = zonaIds.slice(i, i + TAMANO_LOTE);
+
+      const promesasLote = lote.map(async (zonaId) => {
+        const nodo = nodosRegionales[zonaId];
+        try {
+          const resM = await consultarModelosDeterministas(nodo.lat, nodo.lon);
+          if (resM?.exito && resM?.datos_horarios) {
+            const serie = generarConsensoDeterminista(resM.datos_horarios);
+            return { zonaId, serie, ok: true };
+          }
+        } catch (e) {
+          // Zona falla silenciosamente, queda sin datos
+        }
+        return { zonaId, serie: [], ok: false };
+      });
+
+      const resultadosLote = await Promise.allSettled(promesasLote);
+
+      resultadosLote.forEach((r) => {
+        if (r.status === 'fulfilled' && r.value) {
+          seriesPorZona[r.value.zonaId] = r.value.serie;
+        }
+      });
+
+      // Delay entre lotes (excepto después del último)
+      if (i + TAMANO_LOTE < zonaIds.length) {
+        await new Promise(r => setTimeout(r, DELAY_ENTRE_LOTES_MS));
       }
-    } catch (e) {}
+    }
 
+    // Evaluar cada localidad con la serie de su zona
     const resEvaluadas = todasLocalidades.map(loc => {
+      const zonaId = loc.zona_id;
+      const serieZona = seriesPorZona[zonaId] || [];
       try {
-        return evaluarLocalidad(loc, serieConsenso, { alertaSMN: alertaParaEvaluar });
+        return evaluarLocalidad(loc, serieZona, { alertaSMN: alertaParaEvaluar });
       } catch (err) {
         return null;
       }
