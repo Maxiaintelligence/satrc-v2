@@ -7,6 +7,7 @@ import { construirResumenesRegionales, invalidarCache, seleccionarNodosRegionale
 import RiskMap from '../components/RiskMap.jsx';
 import SatelliteViewer from '../components/SatelliteViewer.jsx';
 import ReporteModalOperativo from '../components/ReporteModalOperativo.jsx';
+import { formatearTimestamp } from '../lib/compartido/fechas.js';
 import {
   Radio,
   Power,
@@ -49,28 +50,6 @@ import {
 
 const INTERVALO_REFRESCO_MS = 5 * 60 * 1000;
 const INTERVALO_SMN_MS = 30 * 60 * 1000;
-
-function formatearTimestamp(isoUtc) {
-  if (!isoUtc) return null;
-  try {
-    const fecha = new Date(isoUtc);
-    if (isNaN(fecha.getTime())) return null;
-    const fechaMx = fecha.toLocaleDateString('es-MX', {
-      timeZone: 'America/Mexico_City',
-      day: '2-digit',
-      month: 'short'
-    });
-    const horaMx = fecha.toLocaleTimeString('es-MX', {
-      timeZone: 'America/Mexico_City',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false
-    });
-    return `${fechaMx} • ${horaMx} hrs`;
-  } catch (e) {
-    return null;
-  }
-}
 
 /**
  * N12 — Extrae un resumen atmosférico real de la serie de consenso.

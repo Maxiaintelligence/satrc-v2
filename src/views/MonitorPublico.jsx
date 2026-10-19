@@ -5,6 +5,7 @@ import { generarConsensoDeterminista } from '../engine/consensusEngine.js';
 import SatelliteViewer from '../components/SatelliteViewer.jsx';
 import DisclaimerModal from '../components/DisclaimerModal.jsx';
 import ReporteModalPublico from '../components/ReporteModalPublico.jsx';
+import { formatearTimestamp } from '../lib/compartido/fechas.js';
 import {
   CloudRain,
   Thermometer,
@@ -23,28 +24,6 @@ import {
 } from 'lucide-react';
 
 const INTERVALO_REFRESCO_MS = 30 * 60 * 1000;
-
-function formatearTimestamp(isoUtc) {
-  if (!isoUtc) return null;
-  try {
-    const fecha = new Date(isoUtc);
-    if (isNaN(fecha.getTime())) return null;
-    const fechaMx = fecha.toLocaleDateString('es-MX', {
-      timeZone: 'America/Mexico_City',
-      day: '2-digit',
-      month: 'short'
-    });
-    const horaMx = fecha.toLocaleTimeString('es-MX', {
-      timeZone: 'America/Mexico_City',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false
-    });
-    return `${fechaMx} • ${horaMx} hrs`;
-  } catch (e) {
-    return null;
-  }
-}
 
 export default function MonitorPublico() {
   const listaZonas = Object.values(db.indices.zonas);
