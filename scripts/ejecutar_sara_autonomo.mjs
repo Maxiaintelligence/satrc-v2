@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { put, list } from '@vercel/blob';
 import { generarReporteDiario } from './reportes/reporteDiario.mjs';
+import { seleccionarNodosRegionales as seleccionarNodosRegionalesShared } from '../src/lib/compartido/nodos.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rutaJSON = path.join(__dirname, '../src/data/localidades.json');
@@ -123,28 +124,13 @@ function generarConsensoDeterminista(datosHorarios) {
 // SELECCIÓN DE NODOS REGIONALES
 // ============================================================
 
+/**
+ * Wrapper local: pasa `todasLocalidades` a la función compartida.
+ * Mantiene la firma `seleccionarNodosRegionales()` sin parámetros
+ * para no romper los callers existentes en el runner.
+ */
 function seleccionarNodosRegionales() {
-  const zonas = {};
-
-  todasLocalidades.forEach(loc => {
-    const zonaId = loc.zona_id;
-    if (!zonaId) return;
-
-    const poblacion = parseInt(loc.vulnerabilidad?.poblacion || 0, 10);
-    if (!zonas[zonaId] || poblacion > zonas[zonaId].poblacion) {
-      zonas[zonaId] = {
-        zona_id: zonaId,
-        zona_nombre: loc.zona_nombre || zonaId,
-        localidad: loc.nombre,
-        municipio: loc.municipio,
-        lat: loc.coords.lat,
-        lon: loc.coords.lon,
-        poblacion
-      };
-    }
-  });
-
-  return zonas;
+  return seleccionarNodosRegionalesShared(todasLocalidades);
 }
 
 // ============================================================

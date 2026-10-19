@@ -14,6 +14,7 @@
 import db from '../data/localidades.json';
 import { consultarModelosDeterministas } from './meteoFetcher.js';
 import { generarConsensoDeterminista } from './consensusEngine.js';
+import { seleccionarNodosRegionales as seleccionarNodosRegionalesShared } from '../lib/compartido/nodos.js';
 
 // ============================================================
 // CACHÉ GLOBAL DE SERIES (a nivel de módulo)
@@ -32,32 +33,19 @@ const ESPERA_REINTENTO_MS = 3000;    // 3 segundos entre reintentos
 const STAGGER_MS = 200;              // 200 ms entre cada fetch
 
 /**
- * Selecciona la localidad más poblada de cada zona como nodo de referencia.
- * Réplica de scripts/ejecutar_sara_autonomo.mjs (seleccionarNodosRegionales).
+ * Wrapper local: pasa `db.localidades` a la función compartida.
+ * Mantiene la firma `seleccionarNodosRegionales()` sin parámetros
+ * para no romper los callers existentes en el frontend.
+ *
+ * @returns {Object} Nodos regionales indexados por zona_id.
+ */
+/**
+ * Wrapper local: pasa `db.localidades` a la función compartida.
+ * Mantiene la firma `seleccionarNodosRegionales()` sin parámetros
+ * para no romper los callers existentes en el frontend.
  */
 export function seleccionarNodosRegionales() {
-  const todasLocalidades = db.localidades || [];
-  const zonas = {};
-
-  todasLocalidades.forEach(loc => {
-    const zonaId = loc.zona_id;
-    if (!zonaId) return;
-
-    const poblacion = parseInt(loc.vulnerabilidad?.poblacion || 0, 10);
-    if (!zonas[zonaId] || poblacion > zonas[zonaId].poblacion) {
-      zonas[zonaId] = {
-        zona_id: zonaId,
-        zona_nombre: loc.zona_nombre || zonaId,
-        localidad: loc.nombre,
-        municipio: loc.municipio,
-        lat: loc.coords.lat,
-        lon: loc.coords.lon,
-        poblacion
-      };
-    }
-  });
-
-  return zonas;
+  return seleccionarNodosRegionalesShared(db.localidades || []);
 }
 
 /**
