@@ -81,11 +81,12 @@ export function evaluarLocalidad(localidad, serieHoraria, contexto = {}) {
   const alertaSMN = contexto.alertaSMN;
   const bajoAvisoFederalSierra = alertaSMN && esZonaSierraExpuesta && (
     (localidad.estado.toLowerCase().includes('puebla') && alertaSMN.estados_afectados?.includes('PUE')) ||
-    (localidad.estado.toLowerCase().includes('hidalgo') && alertaSMN.estados_afectados?.includes('HGO'))
+    (localidad.estado.toLowerCase().includes('hidalgo') && alertaSMN.estados_afectados?.includes('HGO')) ||
+    (localidad.estado.toLowerCase().includes('veracruz') && alertaSMN.estados_afectados?.includes('VER'))
   );
 
   const lluviaEfectiva24h = bajoAvisoFederalSierra
-    ? Math.max(lluviaEventoActual24h, alertaSMN.rango_lluvia_min_mm || 75)
+    ? Math.max(lluviaEventoActual24h, alertaSMN.rango_lluvia_min_mm || 0)
     : lluviaEventoActual24h;
 
   const saturacionTotalSuelo = parseFloat((apiPrevio + lluviaEfectiva24h).toFixed(1));

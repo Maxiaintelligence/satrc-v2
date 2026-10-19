@@ -593,7 +593,16 @@ async function ejecutarSARA() {
     const twi = loc.topografia.twi || 0;
     const esTerraceria = loc.vulnerabilidad.acceso_vial === 'CAMINO_TERRACERIA' || loc.vulnerabilidad.acceso_vial === 'BRECHA';
 
-    const lluviaEfectiva24h = (esSierra && alertaSMN) ? Math.max(lluviaEventoHoy, alertaSMN.rango_lluvia_min_mm) : lluviaEventoHoy;
+    // H-MOTOR-06 — Solo aplicar el piso del aviso SMN si la localidad está en un estado afectado.
+    // El parser SMN detecta 3 estados (HGO, PUE, VER). Antes se aplicaba el piso a TODAS las zonas de Sierra, sobre-alertando.
+    const estadoAfectado = !!(alertaSMN?.estados_afectados?.some(e =>
+      (e === 'HGO' && loc.estado?.toLowerCase().includes('hidalgo')) ||
+      (e === 'PUE' && loc.estado?.toLowerCase().includes('puebla')) ||
+      (e === 'VER' && loc.estado?.toLowerCase().includes('veracruz'))
+    ));
+    const lluviaEfectiva24h = (esSierra && alertaSMN && estadoAfectado)
+      ? Math.max(lluviaEventoHoy, alertaSMN.rango_lluvia_min_mm || 0)
+      : lluviaEventoHoy;
     const saturacionSuelo = parseFloat((api7DiasPrevios + lluviaEfectiva24h).toFixed(1));
 
     let nivel = 1;
