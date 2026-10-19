@@ -430,27 +430,107 @@ async function ejecutarSARA() {
   const { fechaDia: fechaDiaMexico, horaExacta: horaExactaMexico, horaCorta: horaMexicoStr } = obtenerFechaHoraMexico(ahora);
   const proximaCorridaStr = obtenerFechaHoraMexico(new Date(ahora.getTime() + 3 * 3600000)).horaCorta;
 
-  // --- 1. Aviso SMN ---
+  // --- 1. Aviso SMN (scraping de la página principal, alineado con api/smn.js) ---
   let alertaSMN = null;
   try {
-    const resSMN = await fetch("https://smn.conagua.gob.mx/tools/GUI/webservices/index.php?method=1").catch(() => null);
+    const SMN_URL = "https://smn.conagua.gob.mx/es/";
+    const resSMN = await fetch(SMN_URL, {
+      signal: AbortSignal.timeout(10000),
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36 SatRC-Runner/2.0",
+        "Accept": "text/html,application/xhtml+xml"
+      }
+    }).catch(() => null);
+
     if (resSMN && resSMN.ok) {
       const texto = (await resSMN.text()).toLowerCase();
-      const afectaRegion = texto.includes("hidalgo") || texto.includes("puebla") || texto.includes("veracruz");
-      const esIntensa = texto.includes("intensas") || texto.includes("torrenciales");
 
-      if (afectaRegion && esIntensa) {
-        alertaSMN = { titulo: "Aviso de Lluvias Intensas CONAGUA/SMN", rango_lluvia_min_mm: 75, rango_lluvia_max_mm: 150, estados_afectados: ["PUE", "HGO", "VER"] };
-        console.log("🏛️ Aviso Severo del SMN activo para la región (75 a 150 mm).");
-      } else if (afectaRegion) {
-        alertaSMN = { titulo: "Aviso de Lluvias Fuertes CONAGUA/SMN", rango_lluvia_min_mm: 25, rango_lluvia_max_mm: 50, estados_afectados: ["PUE", "HGO"] };
-        console.log("🏛️ Aviso Preventivo del SMN activo (25 a 50 mm).");
+      // Detección de entidades de la jurisdicción diocesana
+      const mencionaHidalgo = texto.includes("hidalgo");
+      const mencionaPuebla = texto.includes("puebla");
+      const mencionaVeracruz = texto.includes("veracruz");
+      const afectaRegion = mencionaHidalgo || mencionaPuebla || mencionaVeracruz;
+
+      // Detección de fenómenos con patrones reales del SMN
+      const hayTorrenciales = texto.includes("torrenciales");
+      const hayIntensas = texto.includes("lluvias intensas") || texto.includes("lluvias puntuales intensas");
+      const hayFuertes = texto.includes("lluvias fuertes") || texto.includes("lluvias muy fuertes");
+      const hayChubascos = texto.includes("chubascos");
+      const hayFrenteFrio = texto.includes("frente frío") || texto.includes("masa de aire polar");
+      const hayCiclon = texto.includes("huracán") || texto.includes("tormenta tropical") || texto.includes("ciclón");
+
+      if (afectaRegion) {
+        const estados = [];
+        if (mencionaHidalgo) estados.push("HGO");
+        if (mencionaPuebla) estados.push("PUE");
+        if (mencionaVeracruz) estados.push("VER");
+
+        if (hayTorrenciales) {
+          alertaSMN = {
+            activo: true,
+            nivel: 3,
+            severidad: "Aviso Severo",
+            titulo: "Lluvias Torrenciales en la Región",
+            rango_lluvia_min_mm: 75,
+            rango_lluvia_max_mm: 150,
+            estados_afectados: estados
+          };
+          console.log(`🏛️ Aviso Severo del SMN (Lluvias Torrenciales) para ${estados.join(', ')}.`);
+        } else if (hayIntensas) {
+          alertaSMN = {
+            activo: true,
+            nivel: 2,
+            severidad: "Aviso Preventivo",
+            titulo: "Lluvias Intensas en la Región",
+            rango_lluvia_min_mm: 25,
+            rango_lluvia_max_mm: 75,
+            estados_afectados: estados
+          };
+          console.log(`🏛️ Aviso Preventivo del SMN (Lluvias Intensas) para ${estados.join(', ')}.`);
+        } else if (hayFuertes || hayChubascos) {
+          alertaSMN = {
+            activo: true,
+            nivel: 2,
+            severidad: "Aviso Preventivo",
+            titulo: "Lluvias Fuertes en la Región",
+            rango_lluvia_min_mm: 10,
+            rango_lluvia_max_mm: 25,
+            estados_afectados: estados
+          };
+          console.log(`🏛️ Aviso Preventivo del SMN (Lluvias Fuertes) para ${estados.join(', ')}.`);
+        } else if (hayFrenteFrio) {
+          alertaSMN = {
+            activo: true,
+            nivel: 2,
+            severidad: "Aviso Preventivo",
+            titulo: "Frente Frío en la Región",
+            rango_lluvia_min_mm: 0,
+            rango_lluvia_max_mm: 25,
+            estados_afectados: estados
+          };
+          console.log(`🏛️ Aviso Preventivo del SMN (Frente Frío) para ${estados.join(', ')}.`);
+        } else if (hayCiclon) {
+          alertaSMN = {
+            activo: true,
+            nivel: 3,
+            severidad: "Aviso Severo",
+            titulo: "Ciclón o Tormenta Tropical en la Región",
+            rango_lluvia_min_mm: 50,
+            rango_lluvia_max_mm: 200,
+            estados_afectados: estados
+          };
+          console.log(`🏛️ Aviso Severo del SMN (Ciclón/Tormenta Tropical) para ${estados.join(', ')}.`);
+        } else {
+          console.log("🏛️ La región aparece en la página del SMN, pero sin fenómeno severo detectado.");
+        }
       } else {
-        console.log("🏛️ Sin avisos extraordinarios del SMN para Hidalgo/Puebla en este ciclo.");
+        console.log("🏛️ Sin avisos extraordinarios del SMN para Hidalgo/Puebla/Veracruz en este ciclo.");
       }
+    } else {
+      console.log("🏛️ Sin conexión con SMN; evaluando únicamente con modelos meteorológicos vivos.");
     }
   } catch (e) {
-    console.log("🏛️ Sin conexión con SMN; evaluando únicamente con modelos meteorológicos vivos.");
+    console.log("🏛️ Error consultando el SMN; evaluando únicamente con modelos meteorológicos vivos.");
   }
 
   // --- 2. Cargar series por zona ---
