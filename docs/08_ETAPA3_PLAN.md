@@ -1,7 +1,7 @@
 # SatRC V2.0 — Plan de Etapa 3 (Deuda Técnica)
 
 **Fecha de inicio:** Octubre 2026
-**Estado:** En curso
+**Estado:** En curso (H0–H3, H6 cerrados; H4, H5, H7a, H7b, H8, H9 pendientes)
 **Objetivo rector:** Cerrar deuda técnica, establecimiento de tests y documentación. **NO agregar features nuevas.**
 
 > ⚠️ **Etapa 3 ≠ Versión 3.0.** La Etapa 3 es el trabajo actual de deuda técnica.
@@ -19,13 +19,19 @@
 - Último commit al inicio: `484f833` — `docs: reescribe documentacion de ingenieria profunda`.
 - Working tree: limpio.
 
-### Producción
+### Producción (al inicio)
 
 - Endpoint `/api/sara`: `origen = VERCEL_BLOB_ACTUALIZADO`.
 - Semáforo: N4=19, N3=51, N2=203, N1=132 (total 405).
 - Título del dictamen: "Emergencia por Lluvias Torrenciales en la Región".
 - Endpoint `/api/smn`: `activo=true, nivel=3, titulo="Lluvias Torrenciales en la Región"`.
 - Hora servidor México: 12:00 p.m.
+
+### Producción (actual, tras H0–H6)
+
+- Semáforo: N4=4, N3=24, N2=249, N1=128.
+- Bitácora: 181 entradas.
+- Título: "Emergencia por Lluvias Torrenciales en la Región" (sin mojibake).
 
 ### Infraestructura
 
@@ -44,7 +50,7 @@
 ### Variables de entorno en PowerShell del dev
 
 - **Ninguna cargada.** No hay `GROQ_API_KEY`, `BLOB_READ_WRITE_TOKEN`, `CRON_SECRET`, `GITHUB_PAT` en la sesión.
-- Implicación: no se puede correr el runner completo en local. **Decisión de Etapa 3: la verificación funcional es 100% en GitHub Actions.**
+- Implicación: no se puede correr el runner completo en local. **Decisión de Etapa 3: la verificación funcional es 100% en GitHub Actions.** `node --check` y `npm run build` sí se usan (sintaxis, no corrida completa).
 
 ---
 
@@ -62,71 +68,72 @@
 
 ---
 
-## 3. Roadmap de Etapa 3 (9 hitos, 25 commits)
+## 3. Roadmap de Etapa 3 (9 hitos, 25 commits) — Estado actual
 
-### H0 — Documentación de línea base
-- Crear `docs/08_ETAPA3_PLAN.md` (este archivo) y `docs/09_HALLAZGOS_ETAPA3.md`.
-- **Sin tocar código.**
-- **Commit:** `docs(etapa3): linea base, nomenclatura y 35 hallazgos`
+### H0 — Documentación de línea base — ✅ COMPLETO
+- Creados `docs/08_ETAPA3_PLAN.md` y `docs/09_HALLAZGOS_ETAPA3.md`.
+- **Commit:** `ca1bb21` — `docs(etapa3): linea base, nomenclatura y 35 hallazgos`.
 
-### H1 — Cerrar N26 (cobertura del runner)
-- Refactor `cargarSeriesRegionales()` en `scripts/ejecutar_sara_autonomo.mjs`: lotes de 4 en vuelo, `Promise.allSettled(lote)`, delay entre lotes.
-- **NO `--dry-run`.** Verificación 100% en GitHub Actions.
-- **Criterio de aceptación:** 1 corrida de GitHub Actions con `zonas_ok = 14/14` y `zonas_fallidas = []`.
+### H1 — Cerrar N26 (cobertura del runner) — ✅ COMPLETO
+- Refactor `cargarSeriesRegionales()` en `scripts/ejecutar_sara_autonomo.mjs`: lotes de 4 en vuelo, `Promise.allSettled(lote)`, delay de 500ms entre lotes.
+- **Verificación:** corrida `39067735652` con `14/14 zonas OK en 2.7s`.
 - **Commits:**
-  1. `fix(runner): aplica lotes de 4 en cargarSeriesRegionales (N26)`
-  2. `docs(runner): cierra N26 en historial de bugs`
+  1. `3ee8253` — `fix(runner): aplica lotes de 4 en cargarSeriesRegionales (N26)`.
+  2. `da696cc` — `fix(runner): restaura repararMojibake eliminada por error en 3ee8253`.
+  3. `2f8fd22` — `docs(runner): cierra N26 en historial de bugs`.
 
-### H2 — Limpieza de backend
-- **2a:** Sincronizar parser SMN del runner con `api/smn.js` (H-MOTOR-02).
-- **2b:** Eliminar `api/glm.js` (código muerto confirmado, H-API-07).
-- **Commits:**
-  1. `fix(runner): sincroniza parser SMN con api/smn.js (H-MOTOR-02)`
-  2. `chore(api): elimina glm.js (código muerto, H-API-07)`
+### H2 — Limpieza de backend — ✅ COMPLETO
+- **H2a:** Parser SMN del runner sincronizado con `api/smn.js` (H-MOTOR-02). Commit `2cb3231` + docs `c89a7ac`.
+- **H2b:** Eliminado `api/glm.js` (H-API-07, H-API-08, H-API-09). Commit `840c671` + docs `107834b`.
+- **H2c:** Fix H-MOTOR-06 (lluvia efectiva solo a estados afectados). Commit `12375d0` + docs `df3f7ad`.
 
-### H3 — Fallback del frontend con 14 nodos
+### H3 — Fallback del frontend con 14 nodos — ✅ COMPLETO
 - `SatRCOperativo.jsx` → `ejecutarEvaluacionRealEnVivo` usa los 14 nodos (H-MOTOR-04).
-- **Commit:** `fix(ui): fallback en vivo usa 14 nodos regionales (H-MOTOR-04)`
+- **Commit:** `9a05052` + docs `b7c037f`.
 
-### H6 — DRY (extraer duplicados)
-- `repararMojibake`, `repararObjeto` → `src/lib/compartido/mojibake.js`
-- `normalizarDatosRegionales`, `construirBloqueRegional` → `src/lib/compartido/regionales.js`
-- `seleccionarNodosRegionales` → `src/lib/compartido/nodos.js`
-- `formatearTimestamp` → `src/lib/compartido/fechas.js`
-- `TextoEnriquecido` → `src/lib/compartido/markdown.jsx`
-- **Commits:** 5 (uno por función extraída)
+### H6 — DRY (extraer duplicados) — ✅ COMPLETO
+- 5 módulos compartidos creados en `src/lib/compartido/`:
+  - **H6.1:** `formatearTimestamp` → `fechas.js` (commit `742ead5`).
+  - **H6.2:** `TextoEnriquecido` → `markdown.jsx` (commit `<hash>`).
+  - **H6.3:** `seleccionarNodosRegionales` → `nodos.js` (commit `e81da8d`).
+  - **H6.4:** `repararMojibake` + `repararObjeto` → `mojibake.js` (5 commits atómicos: `39049be`, `9d9dd40`, `<hash>`, `<hash>`, `<hash>`).
+  - **H6.5:** `normalizarDatosRegionales` + `construirBloqueRegional` → `regionales.js` (commit `<hash>`).
+- **14 copias eliminadas. 7 funciones en 5 módulos.**
+- **Documentación:** H-FUNC-01 cerrado en `04_HISTORIAL_BUGS.md`.
 
-### H7a — Vitest bloqueante (antes de H4)
-- Reescribir `test_regresion_fase1.mjs` con schema Zod real (H-TEST-01, H-TEST-02).
-- Tests reales de `riskEvaluator` (6 reglas con fixtures sintéticos).
-- Tests reales de `consensusEngine` (incluye N18).
+### H7a — Vitest bloqueante (antes de H4) — ⏳ PENDIENTE (siguiente)
+- Instalar Vitest.
 - Agregar `"test": "vitest run"` en `package.json` (H-TEST-03).
-- **Commits:** 4
+- Migrar los 4 `.mjs` rotos a Vitest (H-TEST-01).
+- Reescribir `test_regresion_fase1.mjs` con schema Zod real (H-TEST-02).
+- Tests reales de `riskEvaluator` (6 reglas + N18).
+- Tests reales de `consensusEngine` (incluye N18).
+- **Commits estimados:** 4-6.
 
-### H4 — Motor unificado (Opción A: gemelo separado)
+### H4 — Motor unificado (Opción A: gemelo separado) — ⏳ PENDIENTE
 - Extraer `scripts/engine/riskEvaluatorRunner.mjs` como gemelo documentado del frontend (H-MOTOR-01).
 - **NO unificar con `src/engine/riskEvaluator.js`.** Esa unificación va a V3.0.
-- **Commits:** 2
+- **Commits:** 2.
 
-### H5 — N18 + H-SEG-01
+### H5 — N18 + H-SEG-01 — ⏳ PENDIENTE
 - **N18:** fix de 1 línea en `consensusEngine.js` (`visibility` → `visibility_gfs_seamless`).
 - **H-SEG-01:** documentar en docs (no tocar código).
-- **Commits:** 2
+- **Commits:** 2.
 
-### H7b — Vitest resto
+### H7b — Vitest resto — ⏳ PENDIENTE
 - Tests de `repararMojibake`, `normalizarDatosRegionales`, `formatearTimestamp`, `parseNoaaStamp`.
-- **Commits:** 2
+- **Commits:** 2.
 
-### H8 — Zod activo
+### H8 — Zod activo — ⏳ PENDIENTE
 - Actualizar `estadoDiocesanoSchema.js` con `origen`, `ultimo_reporte_ondemand`, `bitacora`.
 - Validar en `/api/sara.js` antes de responder.
 - Validar en runner antes de `put()`.
-- **Commits:** 3
+- **Commits:** 3.
 
-### H9 — Cierre documental
+### H9 — Cierre documental — ⏳ PENDIENTE
 - Actualizar `04_HISTORIAL_BUGS.md`, `06_PENDIENTES.md`, `AUDITORIA_MOTOR.md`, handover.
 - Tag git `etapa-3-cerrada`.
-- **Commit:** `docs(etapa3): cierra etapa 3 y consolida backlog`
+- **Commit:** `docs(etapa3): cierra etapa 3 y consolida backlog`.
 
 ---
 
@@ -163,18 +170,18 @@ Cada commit sigue el ciclo:
 
 La Etapa 3 se considera cerrada cuando:
 
-- [ ] Los 35 hallazgos están documentados en `09_HALLAZGOS_ETAPA3.md`.
-- [ ] N26 cerrado: 1 corrida de GitHub Actions con `zonas_ok = 14/14`.
-- [ ] `api/glm.js` eliminado.
-- [ ] Parser SMN del runner sincronizado con `api/smn.js`.
-- [ ] Fallback del frontend usa 14 nodos.
-- [ ] Funciones duplicadas extraídas a `src/lib/compartido/`.
-- [ ] Vitest instalado, `npm test` funciona, CI corre en push.
-- [ ] `riskEvaluatorRunner.mjs` extraído.
-- [ ] N18 fixeado en `consensusEngine.js`.
-- [ ] Zod activo en `/api/sara` y en el runner.
-- [ ] `04_HISTORIAL_BUGS.md`, `06_PENDIENTES.md`, `AUDITORIA_MOTOR.md` y handover actualizados.
-- [ ] Tag git `etapa-3-cerrada`.
+- [x] Los 35 hallazgos están documentados en `09_HALLAZGOS_ETAPA3.md`.
+- [x] N26 cerrado: corrida `39067735652` con `14/14 zonas OK`.
+- [x] `api/glm.js` eliminado.
+- [x] Parser SMN del runner sincronizado con `api/smn.js`.
+- [x] Fallback del frontend usa 14 nodos.
+- [x] Funciones duplicadas extraídas a `src/lib/compartido/`.
+- [ ] Vitest instalado, `npm test` funciona, CI corre en push. (H7a)
+- [ ] `riskEvaluatorRunner.mjs` extraído. (H4)
+- [ ] N18 fixeado en `consensusEngine.js`. (H5)
+- [ ] Zod activo en `/api/sara` y en el runner. (H8)
+- [ ] `04_HISTORIAL_BUGS.md`, `06_PENDIENTES.md`, `AUDITORIA_MOTOR.md` y handover actualizados. (H9)
+- [ ] Tag git `etapa-3-cerrada`. (H9)
 
 ---
 
@@ -194,4 +201,3 @@ La Etapa 3 se considera cerrada cuando:
 ---
 
 **Fin del plan de Etapa 3.**
-

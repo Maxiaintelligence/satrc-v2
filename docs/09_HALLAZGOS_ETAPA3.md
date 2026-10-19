@@ -1,7 +1,7 @@
 # SatRC V2.0 — Hallazgos de Etapa 3
 
 **Fecha:** Octubre 2026
-**Total:** 35 hallazgos (5 🔴 Alta, 16 🟡 Media, 13 🟢 Baja, 1 ⚠️ Documentación)
+**Total:** 36 hallazgos (5 🔴 Alta, 17 🟡 Media, 13 🟢 Baja, 1 ⚠️ Documentación)
 **Estado:** Documentados. Los resueltos en Etapa 3 se marcan con ✅. Los que van a V3.0 se marcan con ⏸️.
 
 > Este documento es el registro completo de deuda técnica detectada durante la auditoría previa a la Etapa 3.
@@ -14,7 +14,7 @@
 | Severidad | Cantidad | IDs |
 |---|---|---|
 | 🔴 Alta | 5 | H-MOTOR-01, H-MOTOR-02, H-MOTOR-04, H-MOTOR-05, H-TEST-01 |
-| 🟡 Media | 16 | H-MOTOR-03, H-SEG-01, H-API-07, H-UI-01, H-UI-02, H-UI-03, H-UI-08, H-UI-13, H-UI-14, H-UI-22, H-DIAG-01, H-DIAG-04, H-TEST-02, H-TEST-03, H-ENV-01, N18 |
+| 🟡 Media | 17 | H-MOTOR-03, H-SEG-01, H-API-07, H-UI-01, H-UI-02, H-UI-03, H-UI-08, H-UI-13, H-UI-14, H-UI-22, H-DIAG-01, H-DIAG-04, H-TEST-02, H-TEST-03, H-ENV-01, H-FUNC-01, N18 |
 | 🟢 Baja | 13 | H-API-02, H-API-05, H-API-08, H-API-09, H-UI-04, H-UI-07, H-UI-09, H-UI-10, H-UI-11, H-UI-19, H-UI-23, H-INFRA-01, H-NOM-01 |
 | ⚠️ Documentación | 1 | H-API-01 |
 
@@ -76,7 +76,7 @@
 
 ---
 
-## 🟡 Media prioridad (16)
+## 🟡 Media prioridad (17)
 
 ### H-MOTOR-03 — Reporte diario exige 216h, runner filtra 192h
 
@@ -187,6 +187,21 @@
 - **Propuesta de fix:** H1 documenta cómo se verifica en GitHub Actions (UI o API con `CRON_SECRET`). No se agrega `--dry-run`.
 - **Estado:** ✅ Se resuelve en H1 (documentación).
 
+### H-FUNC-01 — Funciones duplicadas
+
+- **Síntoma:** 14 copias de 7 funciones utilitarias esparcidas en `api/`, `scripts/` y `src/`:
+  - `formatearTimestamp`: 2 copias.
+  - `TextoEnriquecido`: 1 copia interna.
+  - `seleccionarNodosRegionales`: 2 copias.
+  - `repararMojibake`: 4 copias.
+  - `repararObjeto`: 1 copia interna.
+  - `normalizarDatosRegionales`: 2 copias.
+  - `construirBloqueRegional`: 2 copias.
+- **Causa:** evolución incremental. Cada feature nueva copiaba funciones en vez de importarlas.
+- **Impacto:** divergencia entre copias (ej. `normalizarDatosRegionales` en `reporteDiario.mjs` tenía `lluvia_manana_24h_mm`, la copia en `api/reporte-ondemand.js` no).
+- **Propuesta de fix:** H6 extrae las 7 funciones a 5 módulos en `src/lib/compartido/`.
+- **Estado:** ✅ Se resuelve en H6.
+
 ### N18 — `consensusEngine.js` no lee visibilidad real
 
 - **Síntoma:** `const vis = (datosHorarios["visibility"]?.[i] ?? 10000) / 1000;` — le falta `visibility_gfs_seamless`. El runner sí lo tiene arreglado.
@@ -292,6 +307,7 @@
 | H-MOTOR-01 | H4 (parcial) | ✅ |
 | N18 | H5 | ✅ |
 | H-ENV-01 | H1 (documentación) | ✅ |
+| H-FUNC-01 (Funciones Duplicadas) | H6 | ✅ |
 
 ## Anexo B — Hallazgos diferidos a V3.0
 

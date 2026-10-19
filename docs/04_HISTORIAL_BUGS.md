@@ -1,6 +1,6 @@
 # SatRC V2.0 — Historial de Bugs Críticos y Soluciones
 
-Este documento registra los bugs estructurales resueltos en Octubre de 2026 (Fase C2c).
+Este documento registra los bugs estructurales resueltos en Octubre de 2026 (Fase C2c) y durante la Etapa 3 de desarrollo.
 
 ## N29 — Inconsistencia entre Sección 0 y Sección II del Reporte
 - **Síntoma:** El reporte on-demand mencionaba zonas distintas en la "Decisión Operativa" (Sec 0) y en "Zonas que Requieren Atención" (Sec II).
@@ -76,7 +76,7 @@ Este documento registra los bugs estructurales resueltos en Octubre de 2026 (Fas
   - **`riskEvaluator.js`** (frontend): se agregó `veracruz` al filtro `bajoAvisoFederalSierra` (solo PUE y HGO estaban contemplados). Se cambió el fallback de `|| 75` a `|| 0`.
   - **`ejecutar_sara_autonomo.mjs`** (runner): se agregó la constante `estadoAfectado` que verifica `HGO`, `PUE`, `VER` contra `loc.estado`. Solo si la localidad está en un estado afectado, se aplica el piso.
 - **Verificación:** corrida `39307266292` con `14/14 zonas OK`, `Aviso Severo del SMN (Lluvias Torrenciales) para VER`, y semáforo `N4=4, N3=24, N2=249, N1=128` (antes de H2c era N4=38, N3=96).
-- **Commit:** `<hash>` (pendiente de pushear).
+- **Commit:** `12375d0` (fix), `df3f7ad` (docs).
 - **Estado:** ✅ Cerrado en Etapa 3.
 
 
@@ -87,7 +87,7 @@ Este documento registra los bugs estructurales resueltos en Octubre de 2026 (Fas
 - **Impacto:** consumía una función serverless de Vercel (cuota, cold start, mantenimiento). Además, tenía fallbacks rotos (apuntaba a GOES-16, satélite viejo, y a un timestamp hardcodeado que no se actualizaba). Eso era H-API-08 y H-API-09.
 - **Fix (Etapa 3):** se eliminó `api/glm.js` del repositorio.
 - **Verificación:** `/api/glm` devuelve 404, `/api/sara`, `/api/smn`, `/api/latest-gif` siguen funcionando OK.
-- **Commit:** `<hash>` (pendiente de pushear).
+- **Commit:** `840c671` (eliminación), `107834b` (docs).
 - **Estado:** ✅ Cerrado en Etapa 3. H-API-08 y H-API-09 también quedan cerrados (eliminados con el archivo).
 
 
@@ -102,5 +102,50 @@ Este documento registra los bugs estructurales resueltos en Octubre de 2026 (Fas
   - Construye un objeto `seriesPorZona` con la serie de consenso de cada zona.
   - Evalúa cada localidad con la serie de su zona.
 - **Verificación funcional pendiente en H7a (Vitest con mock de `fetch`).** Verificación actual: `npm run build` OK, sin `nodoSierra` en el archivo.
-- **Commit:** `<hash>` (pendiente de pushear).
+- **Commit:** `9a05052` (fix), `b7c037f` (docs).
 - **Estado:** ✅ Cerrado en Etapa 3.
+
+
+## H-FUNC-01 — Funciones duplicadas (Resuelto en Etapa 3, sub-hito H6)
+
+- **Síntoma:** durante la auditoría de Etapa 3, se detectaron 14 copias de 7 funciones utilitarias esparcidas en múltiples archivos:
+  - `formatearTimestamp`: 2 copias (`MonitorPublico.jsx`, `SatRCOperativo.jsx`).
+  - `TextoEnriquecido`: 1 copia interna en `ReporteCuerpo.jsx` (no exportada).
+  - `seleccionarNodosRegionales`: 2 copias (`reportesRegionales.js`, `ejecutar_sara_autonomo.mjs`).
+  - `repararMojibake`: 4 copias (`api/sara.js`, `api/reporte-ondemand.js`, `scripts/reportes/reporteDiario.mjs`, `scripts/ejecutar_sara_autonomo.mjs`).
+  - `repararObjeto`: 1 copia en `api/sara.js` (no exportada).
+  - `normalizarDatosRegionales`: 2 copias (`api/reporte-ondemand.js`, `scripts/reportes/reporteDiario.mjs`).
+  - `construirBloqueRegional`: 2 copias (mismos 2 archivos).
+
+- **Causa:** evolución incremental del proyecto. Cada feature nueva agregaba funciones utilitarias copiadas de otro archivo, en vez de importarlas.
+
+- **Impacto:**
+  - Un cambio en una de las copias no se reflejaba en las demás (divergencia).
+  - Ejemplo detectado: `normalizarDatosRegionales` en `reporteDiario.mjs` tenía el campo `lluvia_manana_24h_mm` (ventana 72h), pero la copia en `api/reporte-ondemand.js` no (ventana 48h). Las 2 versiones se habían separado sin que nadie lo documentara.
+  - Riesgo de bugs sutiles: arreglar una función en un archivo y olvidar las otras.
+
+- **Fix (Etapa 3, sub-hito H6):** se crearon 5 módulos compartidos en `src/lib/compartido/`:
+  - **`fechas.js`** → `formatearTimestamp`.
+  - **`markdown.jsx`** → `TextoEnriquecido`.
+  - **`nodos.js`** → `seleccionarNodosRegionales`.
+  - **`mojibake.js`** → `repararMojibake`, `repararObjeto`.
+  - **`regionales.js`** → `normalizarDatosRegionales`, `construirBloqueRegional`.
+
+  **14 copias eliminadas. 7 funciones ahora viven en 5 módulos compartidos.**
+
+  **Nota sobre `normalizarDatosRegionales`:** se unificó agregando el campo `lluvia_manana_24h_mm` (que antes solo existía en `reporteDiario.mjs`). En `api/reporte-ondemand.js`, el campo llega como `null` (ventana 48h), lo cual es inocuo porque el prompt de Groq no menciona ese campo.
+
+- **Verificación:** `npm run build` OK, `/api/sara` sigue respondiendo 200, `/api/reporte-ondemand` sigue respondiendo 405 al GET, el runner de GitHub Actions corre con `14/14 zonas OK`, la bitácora conserva sus 181 entradas, el título del dictamen sigue sin mojibake.
+
+- **Commits:**
+  - H6.1: `742ead5` — `formatearTimestamp` → `fechas.js`.
+  - H6.2: `<hash>` — `TextoEnriquecido` → `markdown.jsx`.
+  - H6.3: `e81da8d` — `seleccionarNodosRegionales` → `nodos.js`.
+  - H6.4.1: `39049be` — Crea `mojibake.js`.
+  - H6.4.2: `9d9dd40` — `reporteDiario.mjs` migrado.
+  - H6.4.3: `<hash>` — `ejecutar_sara_autonomo.mjs` migrado.
+  - H6.4.4a: `<hash>` — `api/reporte-ondemand.js` migrado.
+  - H6.4.4b: `<hash>` — `api/sara.js` migrado.
+  - H6.5: `<hash>` — `normalizarDatosRegionales` + `construirBloqueRegional` → `regionales.js`.
+
+- **Estado:** ✅ Cerrado en Etapa 3 (sub-hito H6).
