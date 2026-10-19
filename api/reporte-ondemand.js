@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { put, list } from '@vercel/blob';
 import { repararMojibake } from '../src/lib/compartido/mojibake.js';
+import { normalizarDatosRegionales, construirBloqueRegional } from '../src/lib/compartido/regionales.js';
 
 const BLOQUE_GENESIS = "0000000000000000000000000000000000000000000000000000000000000000";
 const MAX_REGISTROS_BITACORA = 500;
@@ -67,62 +68,6 @@ function normalizarAlertaSMN(alertaRaw) {
     rango_lluvia_max_mm: typeof alertaRaw.rango_lluvia_max_mm === 'number' ? alertaRaw.rango_lluvia_max_mm : null,
     fecha_sincronizacion: String(alertaRaw.fecha_sincronizacion || '').slice(0, 50)
   };
-}
-
-function normalizarDatosRegionales(raw) {
-  if (!raw || typeof raw !== 'object') return null;
-  if (!Array.isArray(raw.resumenes)) return null;
-
-  const num = (v) => (typeof v === 'number' && Number.isFinite(v)) ? v : null;
-
-  const resumenes = raw.resumenes.map(r => ({
-    zona_id: String(r.zona_id || '').slice(0, 5),
-    zona_nombre: String(r.zona_nombre || '').slice(0, 100),
-    nodo_referencia: String(r.nodo_referencia || '').slice(0, 150),
-    poblacion: num(r.poblacion) || 0,
-    lluvia_ayer_24h_mm: num(r.lluvia_ayer_24h_mm),
-    lluvia_hoy_24h_mm: num(r.lluvia_hoy_24h_mm),
-    temperatura_min_c: num(r.temperatura_min_c),
-    temperatura_max_c: num(r.temperatura_max_c),
-    temperatura_actual_c: num(r.temperatura_actual_c),
-    viento_max_kmh: num(r.viento_max_kmh),
-    rafaga_max_kmh: num(r.rafaga_max_kmh),
-    humedad_min_pct: num(r.humedad_min_pct),
-    humedad_max_pct: num(r.humedad_max_pct),
-    visibilidad_min_km: num(r.visibilidad_min_km),
-    confiabilidad_dominante: String(r.confiabilidad_dominante || 'DESCONOCIDA').slice(0, 20)
-  }));
-
-  return {
-    zonas_totales: parseInt(raw.zonas_totales) || 14,
-    zonas_ok: parseInt(raw.zonas_ok) || 0,
-    zonas_fallidas: Array.isArray(raw.zonas_fallidas) ? raw.zonas_fallidas.slice(0, 14).map(z => String(z).slice(0, 5)) : [],
-    resumenes
-  };
-}
-
-function construirBloqueRegional(datosRegionales) {
-  if (!datosRegionales || datosRegionales.resumenes.length === 0) {
-    return 'DATOS REGIONALES: no disponibles en esta emisión.';
-  }
-
-  const lineas = datosRegionales.resumenes.map(r => {
-    const fmt = (v) => v === null || v === undefined ? 's/d' : v;
-    return `${r.zona_nombre} (nodo: ${r.nodo_referencia})
-  AYER: Lluvia ${fmt(r.lluvia_ayer_24h_mm)} mm
-  HOY: Lluvia ${fmt(r.lluvia_hoy_24h_mm)} mm | Temp ${fmt(r.temperatura_min_c)}/${fmt(r.temperatura_max_c)} °C | Viento máx ${fmt(r.viento_max_kmh)} km/h | Ráfaga máx ${fmt(r.rafaga_max_kmh)} km/h
-  Humedad ${fmt(r.humedad_min_pct)}%-${fmt(r.humedad_max_pct)}% | Visibilidad mín ${fmt(r.visibilidad_min_km)} km | Confiabilidad: ${r.confiabilidad_dominante}`;
-  });
-
-  const encabezado = `DATOS REGIONALES (${datosRegionales.zonas_ok}/${datosRegionales.zonas_totales} zonas disponibles, consenso GFS + ICON + GEM):`;
-
-  let bloque = encabezado + '\n\n' + lineas.join('\n\n');
-
-  if (datosRegionales.zonas_fallidas.length > 0) {
-    bloque += `\n\nZONAS SIN DATOS EN ESTA EMISIÓN: ${datosRegionales.zonas_fallidas.join(', ')}.`;
-  }
-
-  return bloque;
 }
 
 function tokenConsolaValido(req) {
