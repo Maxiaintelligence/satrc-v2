@@ -89,3 +89,18 @@ Este documento registra los bugs estructurales resueltos en Octubre de 2026 (Fas
 - **Verificación:** `/api/glm` devuelve 404, `/api/sara`, `/api/smn`, `/api/latest-gif` siguen funcionando OK.
 - **Commit:** `<hash>` (pendiente de pushear).
 - **Estado:** ✅ Cerrado en Etapa 3. H-API-08 y H-API-09 también quedan cerrados (eliminados con el archivo).
+
+
+## H-MOTOR-04 — Fallback del frontend con 1 solo nodo (Resuelto en Etapa 3)
+
+- **Síntoma:** cuando el Blob fallaba, `SatRCOperativo.jsx` → `ejecutarEvaluacionRealEnVivo()` usaba solo el nodo Huauchinango para las 405 localidades. Eso es el bug ADR-001 reintroducido en el fallback (el runner ya usaba 14 nodos, pero el frontend no).
+- **Causa:** el fallback se escribió antes de ADR-001 y nunca se actualizó.
+- **Impacto:** si el Blob falla, el frontend vuelve a sobreclasificar N2 en zonas secas (44% de falsos positivos, el mismo síntoma que motivó ADR-001).
+- **Fix (Etapa 3):** se reescribió `ejecutarEvaluacionRealEnVivo()` con la lógica del runner:
+  - Usa `seleccionarNodosRegionales()` (importado de `reportesRegionales.js`).
+  - Hace 14 fetches en lotes de 4 (mismo patrón que `reportesRegionales.js`).
+  - Construye un objeto `seriesPorZona` con la serie de consenso de cada zona.
+  - Evalúa cada localidad con la serie de su zona.
+- **Verificación funcional pendiente en H7a (Vitest con mock de `fetch`).** Verificación actual: `npm run build` OK, sin `nodoSierra` en el archivo.
+- **Commit:** `<hash>` (pendiente de pushear).
+- **Estado:** ✅ Cerrado en Etapa 3.
