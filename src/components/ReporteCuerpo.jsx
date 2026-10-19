@@ -1,5 +1,6 @@
 import React from 'react';
 import { AlertTriangle } from 'lucide-react';
+import { TextoEnriquecido } from '../lib/compartido/markdown.jsx';
 
 /**
  * SatRC V2.0 — Cuerpo del Reporte Diocesano
@@ -12,49 +13,6 @@ import { AlertTriangle } from 'lucide-react';
  * Las acciones (WhatsApp, Descargar, Imprimir) son responsabilidad
  * del modal que lo contiene.
  */
-
-/**
- * Componente para renderizar texto con viñetas y negritas desde Groq.
- */
-function TextoEnriquecido({ texto, className = "" }) {
-  if (!texto || typeof texto !== 'string') return null;
-
-  const lineas = texto.split('\n').filter(l => l.trim().length > 0);
-
-  const renderizarNegritas = (linea) => {
-    const partes = linea.split(/(\*\*[^*]+\*\*)/g);
-    return partes.map((parte, i) => {
-      if (parte.startsWith('**') && parte.endsWith('**')) {
-        return <strong key={i} className="font-bold text-white">{parte.slice(2, -2)}</strong>;
-      }
-      return <span key={i}>{parte}</span>;
-    });
-  };
-
-  const esVineta = (linea) => /^\s*[-•*]\s+/.test(linea);
-
-  const parrafos = [];
-  let listaActual = [];
-
-  lineas.forEach((linea, idx) => {
-    if (esVineta(linea)) {
-      const contenido = linea.replace(/^\s*[-•*]\s+/, '');
-      listaActual.push(<li key={idx} className="ml-4 list-disc">{renderizarNegritas(contenido)}</li>);
-    } else {
-      if (listaActual.length > 0) {
-        parrafos.push(<ul key={`ul-${idx}`} className="space-y-1 my-1">{listaActual}</ul>);
-        listaActual = [];
-      }
-      parrafos.push(<p key={`p-${idx}`} className="my-1">{renderizarNegritas(linea)}</p>);
-    }
-  });
-
-  if (listaActual.length > 0) {
-    parrafos.push(<ul key="ul-final" className="space-y-1 my-1">{listaActual}</ul>);
-  }
-
-  return <div className={className}>{parrafos}</div>;
-}
 
 export default function ReporteCuerpo({
   reporteVigente,
