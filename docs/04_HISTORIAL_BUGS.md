@@ -54,3 +54,23 @@ Este documento registra los bugs estructurales resueltos en Octubre de 2026 (Fas
 - **Verificación:** corrida de GitHub Actions (run `39067735652`) con `zonas_ok = 14/14` en 2.7s.
 - **Commit:** `3ee8253` (fix), `da696cc` (restauración de `repararMojibake` eliminada por error en `3ee8253`).
 - **Estado:** ✅ Cerrado en Etapa 3.
+
+## H-MOTOR-02 — Parser SMN del runner (Resuelto en Etapa 3)
+
+- **Síntoma:** el runner consultaba `smn.conagua.gob.mx/tools/GUI/webservices/index.php?method=1`, que devuelve solo el pronóstico general, **no los avisos**. La `alertaSMN` que se pasaba a Groq y al motor quedaba casi siempre en `null`.
+- **Causa:** N33 se arregló en `api/smn.js` (scraping de la página principal) pero **nunca se replicó en el runner**.
+- **Fix (Etapa 3):** se reescribió la sección `// --- 1. Aviso SMN ---` del runner con la misma lógica de scraping de `api/smn.js`:
+  - Consulta `https://smn.conagua.gob.mx/es/` con `AbortSignal.timeout(10000)`.
+  - Detecta 6 patrones: torrenciales, intensas, fuertes, chubascos, frente frío, ciclón.
+  - Detecta 3 estados: HGO, PUE, VER.
+  - Genera `alertaSMN` con `activo`, `nivel`, `severidad` (antes no tenía estos campos).
+- **Verificación:** corrida `39305464029` detectó `Aviso Severo del SMN (Lluvias Torrenciales) para VER.` con `14/14 zonas OK`. El semáforo cambió de N4=19 a N4=38 (ver H-MOTOR-06).
+- **Commit:** `2cb3231`.
+- **Estado:** ✅ Cerrado en Etapa 3.
+
+## H-MOTOR-06 — Aplicación indiscriminada del aviso SMN (Detectado, pendiente de fix)
+
+- **Síntoma:** después de H-MOTOR-02, el semáforo cambió de N4=19/N3=51 a N4=38/N3=96. El aviso era **solo para VER** (Veracruz), pero **todas las zonas de Sierra subieron**.
+- **Causa:** en `riskEvaluator.js` y en el runner, `lluviaEfectiva24h` aplica el piso de `alertaSMN.rango_lluvia_min_mm` a **todas las localidades en zonas de Sierra**, sin verificar si la localidad está en un estado afectado por el aviso.
+  ```js
+  const lluviaEfectiva24h = (esSierra && alertaSMN) ? Math.max(lluviaEventoHoy, alertaSMN.rango_lluvia_min_mm) : lluviaEventoHoy;
