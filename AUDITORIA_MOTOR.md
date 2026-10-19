@@ -419,4 +419,73 @@ Durante el diseño de C2c.1 se identificaron y corrigieron 3 problemas estratég
 
 ---
 
+Anexo F — Cierre de H6 (DRY) en Etapa 3
+Fecha: Octubre 2026
+Auditor: Cierre técnico del hito H6 (DRY - Extracción de funciones duplicadas)
+Estado: Cerrado y en producción.
+
+F.1 Contexto
+Durante la auditoría de la Etapa 3, se detectaron 14 copias de 7 funciones utilitarias esparcidas en api/, scripts/ y src/. La evolución incremental del proyecto hizo que cada feature nueva copiara funciones en lugar de importarlas.
+
+F.2 Cambios técnicos (Módulos Compartidos)
+Se crearon 5 módulos en src/lib/compartido/:
+
+fechas.js: formatearTimestamp (eliminadas 2 copias).
+
+markdown.jsx: TextoEnriquecido (eliminada 1 copia interna).
+
+nodos.js: seleccionarNodosRegionales (eliminadas 2 copias).
+
+mojibake.js: repararMojibake + repararObjeto (eliminadas 4 copias).
+
+regionales.js: normalizarDatosRegionales + construirBloqueRegional (eliminadas 4 copias).
+
+Total: 14 copias eliminadas. 7 funciones ahora viven en 5 módulos compartidos.
+
+F.3 El caso de normalizarDatosRegionales
+Las 2 copias originales no eran idénticas:
+
+reporteDiario.mjs incluía el campo lluvia_manana_24h_mm (ventana 72h).
+
+api/reporte-ondemand.js NO lo incluía (ventana 48h).
+
+Se unificó agregando el campo lluvia_manana_24h_mm. En el flujo de api/reporte-ondemand.js, el campo llega como null, lo cual es inocuo porque el prompt de Groq no lo menciona.
+
+F.4 Verificación
+npm run build OK en cada commit.
+
+/api/sara responde 200 (bitácora 181 entradas intacta, título sin mojibake).
+
+/api/reporte-ondemand responde 405 al GET (sigue vivo).
+
+El runner de GitHub Actions corre con 14/14 zonas OK.
+
+Los 3 tests de runtime (regionales.js, reporte-ondemand.js, reporteDiario.mjs) cargan OK.
+
+F.5 Commits
+H6.1: 742ead5 — formatearTimestamp → fechas.js.
+
+H6.2: <hash> — TextoEnriquecido → markdown.jsx.
+
+H6.3: e81da8d — seleccionarNodosRegionales → nodos.js.
+
+H6.4.1: 39049be — Crea mojibake.js.
+
+H6.4.2: 9d9dd40 — reporteDiario.mjs migrado.
+
+H6.4.3: <hash> — ejecutar_sara_autonomo.mjs migrado.
+
+H6.4.4a: <hash> — api/reporte-ondemand.js migrado.
+
+H6.4.4b: <hash> — api/sara.js migrado.
+
+H6.5: <hash> — normalizarDatosRegionales + construirBloqueRegional → regionales.js.
+
+Documentación de cierre: b966e4e, 997f005.
+
+F.6 Estado
+H6 cerrado. Deuda técnica de duplicación eliminada.
+
+El documento 04_HISTORIAL_BUGS.md registra el cierre bajo el ID H-FUNC-01.
+
 *Fin del Anexo E.*
