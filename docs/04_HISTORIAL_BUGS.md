@@ -78,3 +78,14 @@ Este documento registra los bugs estructurales resueltos en Octubre de 2026 (Fas
 - **Verificación:** corrida `39307266292` con `14/14 zonas OK`, `Aviso Severo del SMN (Lluvias Torrenciales) para VER`, y semáforo `N4=4, N3=24, N2=249, N1=128` (antes de H2c era N4=38, N3=96).
 - **Commit:** `<hash>` (pendiente de pushear).
 - **Estado:** ✅ Cerrado en Etapa 3.
+
+
+## H-API-07 — `api/glm.js` era código muerto (Resuelto en Etapa 3)
+
+- **Síntoma:** el endpoint `api/glm.js` existía pero **ningún `.jsx` lo consumía**. `SatelliteViewer.jsx` usa `/api/latest-gif` para todos los productos (incluido GLM).
+- **Causa:** el endpoint se creó para GLM, pero al generalizar `latest-gif.js` para los 5 productos NOAA (geocolor, glmFed, fireTemperature, sandwich, airMass), `glm.js` quedó huérfano.
+- **Impacto:** consumía una función serverless de Vercel (cuota, cold start, mantenimiento). Además, tenía fallbacks rotos (apuntaba a GOES-16, satélite viejo, y a un timestamp hardcodeado que no se actualizaba). Eso era H-API-08 y H-API-09.
+- **Fix (Etapa 3):** se eliminó `api/glm.js` del repositorio.
+- **Verificación:** `/api/glm` devuelve 404, `/api/sara`, `/api/smn`, `/api/latest-gif` siguen funcionando OK.
+- **Commit:** `<hash>` (pendiente de pushear).
+- **Estado:** ✅ Cerrado en Etapa 3. H-API-08 y H-API-09 también quedan cerrados (eliminados con el archivo).
