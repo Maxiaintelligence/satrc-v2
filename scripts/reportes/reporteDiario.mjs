@@ -11,16 +11,17 @@
  * - Solo se genera si es la primera corrida >= 6:00 AM del día.
  * - Marca es_parcial: true si la cobertura es < 14/14 zonas.
  * 
- * ⚠️ DEUDA TÉCNICA (a resolver en V3.0):
- * Las funciones repararMojibake(), normalizarDatosRegionales() y 
- * construirBloqueRegional() están duplicadas desde api/reporte-ondemand.js.
- * Extraer a un módulo compartido en V3.0.
+ * ⚠️ DEUDA TÉCNICA:
+ * - repararMojibake: EXTRAÍDA a src/lib/compartido/mojibake.js (H6.4.2).
+ * - normalizarDatosRegionales y construirBloqueRegional: todavía duplicadas
+ *   en este archivo y en api/reporte-ondemand.js. Extraer en H6.5.
  * 
  * @module reporteDiario
  */
 
 import { put, list } from '@vercel/blob';
 import crypto from 'crypto';
+import { repararMojibake } from '../../src/lib/compartido/mojibake.js';
 
 const BLOQUE_GENESIS = "0000000000000000000000000000000000000000000000000000000000000000";
 const MAX_REGISTROS_BITACORA = 500;
@@ -29,22 +30,6 @@ const TIMEOUT_GROQ_MS = 45000; // 45s (el reporte es más largo que el on-demand
 // ============================================================
 // HELPERS (duplicados desde api/reporte-ondemand.js)
 // ============================================================
-
-function repararMojibake(texto) {
-  if (typeof texto !== 'string' || !texto) return texto;
-  const tieneMojibake = /[ÃÂ][\u0080-\u00BF]/.test(texto);
-  if (!tieneMojibake) return texto;
-  try {
-    const bytes = Buffer.from(texto, 'latin1');
-    const reparado = bytes.toString('utf8');
-    if (reparado.length < texto.length && !/[ÃÂ][\u0080-\u00BF]/.test(reparado)) {
-      return reparado;
-    }
-    return texto;
-  } catch (e) {
-    return texto;
-  }
-}
 
 function generarHashSHA256(prevHash, timestamp, datos) {
   return crypto.createHash('sha256')
