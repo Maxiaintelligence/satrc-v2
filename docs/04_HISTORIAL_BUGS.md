@@ -68,9 +68,13 @@ Este documento registra los bugs estructurales resueltos en Octubre de 2026 (Fas
 - **Commit:** `2cb3231`.
 - **Estado:** ✅ Cerrado en Etapa 3.
 
-## H-MOTOR-06 — Aplicación indiscriminada del aviso SMN (Detectado, pendiente de fix)
+## H-MOTOR-06 — Aplicación indiscriminada del aviso SMN (Resuelto en Etapa 3)
 
 - **Síntoma:** después de H-MOTOR-02, el semáforo cambió de N4=19/N3=51 a N4=38/N3=96. El aviso era **solo para VER** (Veracruz), pero **todas las zonas de Sierra subieron**.
-- **Causa:** en `riskEvaluator.js` y en el runner, `lluviaEfectiva24h` aplica el piso de `alertaSMN.rango_lluvia_min_mm` a **todas las localidades en zonas de Sierra**, sin verificar si la localidad está en un estado afectado por el aviso.
-  ```js
-  const lluviaEfectiva24h = (esSierra && alertaSMN) ? Math.max(lluviaEventoHoy, alertaSMN.rango_lluvia_min_mm) : lluviaEventoHoy;
+- **Causa:** en `riskEvaluator.js` y en el runner, `lluviaEfectiva24h` aplicaba el piso de `alertaSMN.rango_lluvia_min_mm` a **todas las localidades en zonas de Sierra**, sin verificar si la localidad estaba en un estado afectado por el aviso.
+- **Fix (Etapa 3):** se agregó verificación de `estados_afectados` antes de aplicar el piso:
+  - **`riskEvaluator.js`** (frontend): se agregó `veracruz` al filtro `bajoAvisoFederalSierra` (solo PUE y HGO estaban contemplados). Se cambió el fallback de `|| 75` a `|| 0`.
+  - **`ejecutar_sara_autonomo.mjs`** (runner): se agregó la constante `estadoAfectado` que verifica `HGO`, `PUE`, `VER` contra `loc.estado`. Solo si la localidad está en un estado afectado, se aplica el piso.
+- **Verificación:** corrida `39307266292` con `14/14 zonas OK`, `Aviso Severo del SMN (Lluvias Torrenciales) para VER`, y semáforo `N4=4, N3=24, N2=249, N1=128` (antes de H2c era N4=38, N3=96).
+- **Commit:** `<hash>` (pendiente de pushear).
+- **Estado:** ✅ Cerrado en Etapa 3.
