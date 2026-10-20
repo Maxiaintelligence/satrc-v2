@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { put, list } from '@vercel/blob';
 import { repararMojibake, repararObjeto } from '../src/lib/compartido/mojibake.js';
+import { EstadoDiocesanoResponseSchema } from '../src/schemas/estadoDiocesanoSchema.js';
 
 const BLOQUE_GENESIS = "0000000000000000000000000000000000000000000000000000000000000000";
 const MAX_REGISTROS_BITACORA = 500;
@@ -146,7 +147,7 @@ export default async function handler(req, res) {
 
   if (estadoMaestro && estadoMaestro.evaluaciones && estadoMaestro.evaluaciones.length > 0 && !forzar) {
     // N27 — Reparar mojibake en todos los textos antes de servir al frontend
-    return res.json({
+    const respuestaBlob = {
       ultimo_reporte_ondemand: repararObjeto(ultimoReporteGuardado),
       exito: true,
       origen: "VERCEL_BLOB_ACTUALIZADO",
@@ -155,7 +156,17 @@ export default async function handler(req, res) {
       semaforo: estadoMaestro.semaforo,
       evaluaciones: repararObjeto(estadoMaestro.evaluaciones),
       bitacora: repararObjeto(historialBitacora)
-    });
+    };
+
+    const validacion = EstadoDiocesanoResponseSchema.safeParse(respuestaBlob);
+
+    if (validacion.success) {
+      return res.json(validacion.data);
+    } else {
+      // H8 — Si el Blob no cumple el contrato, logueamos y caemos al fallback en vivo.
+      // No devolvemos 500 para no dejar al operador sin datos.
+      console.error("❌ [ZOD] El estado del Blob no cumple el schema:", validacion.error.errors);
+    }
   }
 
   const contexto = req.body || {};
