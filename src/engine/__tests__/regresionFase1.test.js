@@ -12,7 +12,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { evaluarLocalidad } from '../riskEvaluator.js';
-import { EstadoDiocesanoSchema } from '../../schemas/estadoDiocesanoSchema.js';
+import { EstadoDiocesanoBlobSchema } from '../../schemas/estadoDiocesanoSchema.js';
 
 /**
  * Helper: construye un mock de localidad con los campos mínimos que
@@ -207,7 +207,7 @@ describe('Regresión Fase 1 — riskEvaluator', () => {
         evaluaciones: []
       };
 
-      const validacion = EstadoDiocesanoSchema.safeParse(payloadInvalido);
+      const validacion = EstadoDiocesanoBlobSchema.safeParse(payloadInvalido);
       expect(validacion.success).toBe(false);
     });
 
@@ -224,7 +224,7 @@ describe('Regresión Fase 1 — riskEvaluator', () => {
         evaluaciones: [] // inválido: min(1)
       };
 
-      const validacion = EstadoDiocesanoSchema.safeParse(payloadInvalido);
+      const validacion = EstadoDiocesanoBlobSchema.safeParse(payloadInvalido);
       expect(validacion.success).toBe(false);
     });
 
@@ -248,8 +248,21 @@ describe('Regresión Fase 1 — riskEvaluator', () => {
             nivel_alerta: 2,
             color_alerta: '#F59E0B',
             estado_alerta: 'VIGILANCIA',
+            vector_dominante: 'VIGILANCIA_NORMAL',
+            sin_datos_regionales: false,
             diagnostico: { titulo: 'Vigilancia', causa: 'Lluvia activa' },
             donde: { coordenadas: { lat: 20.27, lon: -98.94 } },
+            geografia: {
+              relieve: 'MESETA',
+              pendienteMax: 5.0,
+              distanciaRioKm: 10.0,
+              twi: 8.0
+            },
+            tiempos: {
+              inicio: 'En curso',
+              picoMaximo: 'Periodo activo',
+              ventanaAccionHoras: 6
+            },
             impactoSistemico: {
               poblacionDirecta: 32276,
               accesoVial: 'CARRETERA_FEDERAL',
@@ -261,7 +274,7 @@ describe('Regresión Fase 1 — riskEvaluator', () => {
         ]
       };
 
-      const validacion = EstadoDiocesanoSchema.safeParse(payloadValido);
+      const validacion = EstadoDiocesanoBlobSchema.safeParse(payloadValido);
       expect(validacion.success).toBe(true);
     });
   });
