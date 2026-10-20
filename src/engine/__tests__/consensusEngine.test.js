@@ -173,6 +173,19 @@ describe('generarConsensoDeterminista', () => {
     });
   });
 
+  it('usa visibility genérica si visibility_gfs_seamless no está (fallback intermedio)', () => {
+    const datos = construirDatosSinteticos();
+    // Eliminamos el sufijo _gfs_seamless, pero dejamos visibility
+    delete datos.visibility_gfs_seamless;
+    datos.visibility = [2000, 2000, 2000]; // 2000 metros = 2 km
+
+    const serie = generarConsensoDeterminista(datos);
+    serie.forEach(h => {
+      // El motor debe usar visibility (2km), no el fallback de 10km
+      expect(h.visibility_km).toBe(2);
+    });
+  });
+
   it('usa 10km como fallback si visibility_gfs_seamless no está', () => {
     const datos = construirDatosSinteticos();
     delete datos.visibility_gfs_seamless;
