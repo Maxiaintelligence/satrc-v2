@@ -261,7 +261,7 @@
 ### H-UI-19 — `parseNoaaStamp` no valida rangos
 - **Síntoma:** no valida `diaJuliano 1-366`, `horas 0-23`, `minutos 0-59`.
 - **Propuesta:** H7b. Tests + validación.
-- **Estado:** ✅ Se resuelve parcialmente en H7b (tests).
+- **Estado:** ✅ Resuelto en H7b (commits `4c23f52` + `54f00d0`). Se extrajo `parseNoaaStamp` a `src/lib/compartido/noaa.js` con validación de rangos completa (año 2000-2100, día juliano 1-366, hora 0-23, minuto 0-59). Se agregaron 12 tests en `noaa.test.js`. `api/latest-gif.js` refactorizado para usar la nueva función.
 
 ### H-UI-23 — `DisclaimerModal` código muerto
 - **Síntoma:** rama `else` con `abierto === undefined` nunca se ejecuta.

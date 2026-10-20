@@ -127,9 +127,12 @@
 - **Commits:** `6becdf9` (H5.1 test de blindaje), `de1801c` (H5.2 cierre documental).
 - **Verificación:** `npm test` 40/40 passing (39 + 1 nuevo test de fallback).
 
-### H7b — Vitest resto — ⏳ PENDIENTE
-- Tests de `repararMojibake`, `normalizarDatosRegionales`, `formatearTimestamp`, `parseNoaaStamp`.
-- **Commits:** 2.
+### H7b — Vitest resto — ✅ COMPLETO
+- Tests de `repararMojibake`, `normalizarDatosRegionales`, `formatearTimestamp`.
+- Extracción de `parseNoaaStamp` a `src/lib/compartido/noaa.js` + tests (H-UI-19).
+- Refactorización de `api/latest-gif.js` para usar `parseNoaaStamp` (validación de rangos).
+- **Commits:** `4c23f52` (H7b.1 tests compartidos), `54f00d0` (H7b.2 extracción NOAA + docs).
+- **Verificación:** `npm test` 72/72 passing (60 + 12 nuevos).
 
 ### H8 — Zod activo — ⏳ PENDIENTE
 - Actualizar `estadoDiocesanoSchema.js` con `origen`, `ultimo_reporte_ondemand`, `bitacora`.

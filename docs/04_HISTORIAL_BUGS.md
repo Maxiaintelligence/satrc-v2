@@ -255,3 +255,27 @@ Este documento registra los bugs estructurales resueltos en Octubre de 2026 (Fas
   - **No es un fix de 1 línea. Es un rediseño de contrato.**
 - **Fix futuro (V3.0):** ver `06_PENDIENTES.md` §2.
 - **Estado:** ⏸️ Aceptado como deuda V3.0. Documentado en H5.2.
+
+
+
+## H7b — Vitest resto + extracción de parseNoaaStamp (Resuelto en Etapa 3)
+
+- **Síntoma:** durante la auditoría de Etapa 3, se detectó que la lógica de parseo de marcas NOAA en `api/latest-gif.js` estaba inline, sin validación de rangos (H-UI-19) y sin tests. Además, los módulos compartidos en `src/lib/compartido/` no tenían cobertura de tests.
+- **Causa:** el parseo NOAA se escribió como un sort inline con `.slice()` y `.localeCompare()`, sin extraer a un módulo testeable.
+- **Impacto:**
+  - `parseNoaaStamp` no validaba rangos: un stamp inválido (ej. día juliano 367) pasaba el regex y se colaba en el sort.
+  - Los módulos compartidos (mojibake, regionales, fechas) no tenían red de seguridad.
+- **Fix (Etapa 3, hito H7b):**
+  - **H7b.1:** se crearon 3 archivos de tests en `src/lib/compartido/__tests__/`:
+    - `mojibake.test.js` (6 tests): `repararMojibake`, `repararObjeto`.
+    - `regionales.test.js` (7 tests): `normalizarDatosRegionales`, `construirBloqueRegional`.
+    - `fechas.test.js` (7 tests): `formatearTimestamp`.
+  - **H7b.2:** se extrajo `parseNoaaStamp` y `compararNoaaStamps` a `src/lib/compartido/noaa.js`:
+    - Validación de rangos completa (año 2000-2100, día juliano 1-366, hora 0-23, minuto 0-59).
+    - 12 tests en `noaa.test.js`.
+    - `api/latest-gif.js` refactorizado para usar la nueva función (resuelve H-UI-19).
+- **Verificación:** `npm test` 72/72 passing (60 originales + 12 nuevos). Nota: durante la verificación en vivo, NOAA estaba caído (aviso oficial en su web), lo cual no afectó los tests unitarios.
+- **Commits:**
+  - H7b.1: `4c23f52` — Tests de mojibake, regionales y fechas.
+  - H7b.2: `54f00d0` — Extracción NOAA + tests + docs.
+- **Estado:** ✅ Cerrado en Etapa 3 (H7b).

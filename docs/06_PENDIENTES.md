@@ -30,10 +30,14 @@
 
 ### H7b — Vitest resto
 
-- **Estado:** ⏳ Pendiente (después de H5).
-- **Alcance:**
-  - Tests de `repararMojibake`, `normalizarDatosRegionales`, `formatearTimestamp`, `parseNoaaStamp`.
-  - Tests de los 5 módulos compartidos en `src/lib/compartido/`.
+- **Estado:** ✅ Cerrado en Etapa 3 (commits `4c23f52` + `54f00d0`).
+- **Alcance completado:**
+  - Tests de `repararMojibake`, `repararObjeto` (`mojibake.test.js`).
+  - Tests de `normalizarDatosRegionales`, `construirBloqueRegional` (`regionales.test.js`).
+  - Tests de `formatearTimestamp` (`fechas.test.js`).
+  - Extracción de `parseNoaaStamp` a `src/lib/compartido/noaa.js` + tests (`noaa.test.js`).
+  - Refactorización de `api/latest-gif.js` para usar `parseNoaaStamp` (resuelve H-UI-19).
+- **Verificación:** `npm test` 72/72 passing.
 
 ### H8 — Zod activo
 
