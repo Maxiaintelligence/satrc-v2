@@ -33,7 +33,7 @@
 - **Impacto:** el frontend y el runner pueden clasificar distinto las mismas localidades.
 - **Archivos afectados:** `scripts/ejecutar_sara_autonomo.mjs`, `src/engine/riskEvaluator.js`.
 - **Propuesta de fix:** H4 (Opción A) extrae `scripts/engine/riskEvaluatorRunner.mjs` como gemelo documentado. **No unificar todavía** (V3.0).
-- **Estado:** ⏸️ Se resuelve parcialmente en H4. Unificación completa en V3.0.
+- **Estado:** ✅ Resuelto parcialmente en H4 (commits `a94324c` + `3e702f4`). El gemelo `scripts/engine/riskEvaluatorRunner.mjs` existe y está testeado. La unificación completa (runner + frontend con un solo archivo) va a V3.0.
 
 ### H-MOTOR-02 — Parser SMN del runner está ciego
 

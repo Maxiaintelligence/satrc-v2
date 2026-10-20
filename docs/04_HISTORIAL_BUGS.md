@@ -185,3 +185,43 @@ Este documento registra los bugs estructurales resueltos en Octubre de 2026 (Fas
   - H7a.7: `4339cd5` — Elimina 4 tests `.mjs` viejos.
 
 - **Estado:** ✅ Cerrado en Etapa 3 (sub-hito H7a). **H7a completo.**
+
+## H-MOTOR-01 — Runner duplica el motor inline (Resuelto parcialmente en Etapa 3, hito H4)
+
+- **Síntoma:** durante la auditoría de Etapa 3, se detectó que `scripts/ejecutar_sara_autonomo.mjs` tenía una **copia inline** de las 6 reglas del motor (`riskEvaluator.js` del frontend). La copia tenía divergencias sutiles con el frontend, no estaba testeada, y era invisible para los tests de H7a (que solo cubrían el frontend).
+
+- **Causa:** replicación manual durante la migración a 14 nodos (ADR-001). Se copió para evitar problemas de `import` en GitHub Actions, pero nunca se sincronizó con el frontend.
+
+- **Divergencias detectadas (runner vs frontend):**
+  1. `api7DiasPrevios`: runner retorna 0 si serie < 168h; frontend retorna 15.0.
+  2. `eventoActual`: runner retorna [] si serie < 192h; frontend retorna `serie.slice(0, 24)`.
+  3. `calcularUmbralDeslave`: frontend lo calcula dinámicamente; runner NO lo calcula.
+  4. Regla 4 (inundación fluvial): frontend gradúa N3/N4 según `poblacionAguasArriba`; runner SIEMPRE asigna N4.
+  5. `tiempos`: runner hardcodea `{ inicio: "En curso", picoMaximo: "Periodo activo" }`; frontend calcula `{ inicio, picoMaximo, crestaImpacto }`.
+  6. Shape de retorno: runner expone `vector_dominante`, `sin_datos_regionales`, `impactoSistemico.tempMinimaC`; frontend expone `diagnostico.tipoAmenaza`, `geografia.posicionHidro`, `impactoSistemico.umbralFisicoDeslaveMm`.
+  7. `zonaSinDatos`: el runner lo recibe como flag explícito (de `series[zonaId].ok === false`); no es equivalente a `serieZona.length === 0`.
+
+- **Impacto:** el frontend y el runner podían clasificar distinto las mismas localidades. La copia inline no estaba testeada. Si un dev tocaba el motor del frontend, el runner quedaba silenciosamente desactualizado.
+
+- **Fix (Etapa 3, hito H4):**
+  - Se creó `scripts/engine/riskEvaluatorRunner.mjs` (~185 líneas) con la lógica extraída **byte-a-byte** del runner original (líneas 528-676).
+  - Se crearon **3 tests** en `scripts/engine/__tests__/riskEvaluatorRunner.test.js`:
+    - Test 1: shape del runner (verifica `vector_dominante`, `sin_datos_regionales`, `tempMinimaC`, y ausencia de `tipoAmenaza`, `posicionHidro`, `umbralFisicoDeslaveMm`, `crestaImpacto`).
+    - Test 2: `zonaSinDatos=true` fuerza `SIN_DATOS_REGIONALES` y N1.
+    - Test 3: paridad funcional con `riskEvaluator.js` del frontend en 3 casos simples (Altiplano N1, Ladera N4, Corte vial N3).
+  - Se refactorizó `scripts/ejecutar_sara_autonomo.mjs`:
+    - Import agregado: `import { evaluarLocalidadRunner } from './engine/riskEvaluatorRunner.mjs';`.
+    - Bloque inline (149 líneas, 528-676) reemplazado por 6 líneas que llaman al gemelo.
+  - Se actualizaron 5 docs: `08_ETAPA3_PLAN.md`, `06_PENDIENTES.md`, `09_HALLAZGOS_ETAPA3.md`, `10_HANDOVER.md`, este archivo.
+
+- **Verificación:**
+  - `npm test`: 39/39 passing (36 originales de H7a + 3 nuevos del gemelo).
+  - `node --check`: OK en runner y gemelo.
+  - Workflow `sara_cron.yml` con 14/14 zonas OK.
+  - `/api/sara` responde 200 con shape del gemelo (verificado con `vector_dominante` en `evaluaciones[0]`).
+
+- **Commits:**
+  - H4.1: `a94324c` — Extrae `riskEvaluatorRunner.mjs` + tests.
+  - H4.2: `3e702f4` — Integra el gemelo en el runner + actualiza 5 docs.
+
+- **Estado:** ✅ Resuelto parcialmente en H4. **La unificación total (runner + frontend con un solo archivo) va a V3.0**, según `06_PENDIENTES.md` §2. En H4 se resuelve el "gemelo separado y documentado"; no se unifica con el frontend todavía.

@@ -114,10 +114,12 @@
 - **Descubrimiento:** el test de prioridad documentó que **Regla 4 (inundación) sobreescribe el diagnóstico de Regla 2 (deslave)** cuando ambas dan N4 (por el `>=`). Ahora está en `03_MOTOR_RIESGO.md` sección 3.
 - **Documentación:** H-TEST-04 cerrado en `04_HISTORIAL_BUGS.md`.
 
-### H4 — Motor unificado (Opción A: gemelo separado) — ⏳ PENDIENTE
-- Extraer `scripts/engine/riskEvaluatorRunner.mjs` como gemelo documentado del frontend (H-MOTOR-01).
-- **NO unificar con `src/engine/riskEvaluator.js`.** Esa unificación va a V3.0.
-- **Commits:** 2.
+### H4 — Motor unificado (Opción A: gemelo separado) — ✅ COMPLETO
+- Extraído `scripts/engine/riskEvaluatorRunner.mjs` como gemelo documentado del runner (H-MOTOR-01 parcial).
+- **NO unificado** con `src/engine/riskEvaluator.js`. Esa unificación va a V3.0.
+- 3 tests nuevos del gemelo (shape, zonaSinDatos, paridad funcional con frontend).
+- **Commits:** `a94324c` (H4.1 gemelo + tests), `3e702f4` (H4.2 integración + docs).
+- **Verificación:** `npm test` 39/39 passing, workflow `sara_cron.yml` con 14/14 zonas OK, `/api/sara` responde 200 con shape del gemelo.
 
 ### H5 — N18 + H-SEG-01 — ⏳ PENDIENTE
 - **N18:** fix de 1 línea en `consensusEngine.js` (`visibility` → `visibility_gfs_seamless`).

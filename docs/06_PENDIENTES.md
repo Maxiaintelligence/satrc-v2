@@ -13,12 +13,12 @@
 
 ### H4 — Motor unificado (Opción A: gemelo separado)
 
-- **Estado:** ⏳ Pendiente (siguiente; H7a ya cerrado).
-- **Alcance:**
-  - Extraer `scripts/engine/riskEvaluatorRunner.mjs` como gemelo documentado del frontend (H-MOTOR-01).
-  - **NO unificar con `src/engine/riskEvaluator.js`.** Esa unificación va a V3.0.
-- **Riesgo:** alto (toca el motor).
-- **Red de seguridad:** los 36 tests de H7a. Si el gemelo se comporta distinto, los tests fallan.
+- **Estado:** ✅ Cerrado en Etapa 3 (commits `a94324c` + `3e702f4`).
+- **Alcance completado:**
+  - Extraído `scripts/engine/riskEvaluatorRunner.mjs` como gemelo documentado del runner (H-MOTOR-01 parcial).
+  - **NO unificado** con `src/engine/riskEvaluator.js`. Esa unificación va a V3.0.
+- **Red de seguridad:** 3 tests nuevos (shape, zonaSinDatos, paridad funcional) + 36 tests de H7a = 39/39 passing.
+- **Verificación en producción:** workflow `sara_cron.yml` con 14/14 zonas OK, `/api/sara` responde 200.
 
 ### H5 — N18 + H-SEG-01
 

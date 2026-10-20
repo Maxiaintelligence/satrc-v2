@@ -6,6 +6,7 @@ import { put, list } from '@vercel/blob';
 import { generarReporteDiario } from './reportes/reporteDiario.mjs';
 import { seleccionarNodosRegionales as seleccionarNodosRegionalesShared } from '../src/lib/compartido/nodos.js';
 import { repararMojibake } from '../src/lib/compartido/mojibake.js';
+import { evaluarLocalidadRunner } from './engine/riskEvaluatorRunner.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rutaJSON = path.join(__dirname, '../src/data/localidades.json');
@@ -524,155 +525,12 @@ async function ejecutarSARA() {
     seriesPorZona[zonaId] = series[zonaId]?.ok ? series[zonaId].serie : [];
   });
 
-  // --- 5. Evaluación por localidad ---
+  // --- 5. Evaluación por localidad (delegada a scripts/engine/riskEvaluatorRunner.mjs en H4) ---
   const evaluaciones = todasLocalidades.map(loc => {
     const zonaId = loc.zona_id;
     const serieZona = seriesPorZona[zonaId] || [];
     const zonaSinDatos = series[zonaId]?.ok === false;
-
-    const esAltiplano = ['ACT', 'APN', 'PMN', 'PMS', 'TIZ'].includes(zonaId);
-    const esSierra = ['ATG', 'CHG', 'HUA', 'HYC', 'SPP', 'TUL', 'XIC', 'ZAC', 'ZAH'].includes(zonaId);
-
-    // Cálculos previos sobre la serie consenso de la zona
-    let api7DiasPrevios = 0;
-    if (serieZona.length >= 168) {
-      for (let d = 1; d <= 7; d++) {
-        const idxInicio = (d - 1) * 24;
-        const idxFin = d * 24;
-        const lluviaDia = serieZona.slice(idxInicio, idxFin).reduce((acc, h) => acc + h.lluvia_mm, 0);
-        api7DiasPrevios += lluviaDia * Math.pow(0.85, 8 - d);
-      }
-    }
-    api7DiasPrevios = parseFloat(api7DiasPrevios.toFixed(1));
-
-    const eventoActual = serieZona.length >= 192 ? serieZona.slice(168, 192) : [];
-    const lluviaEventoHoy = parseFloat(eventoActual.reduce((acc, h) => acc + h.lluvia_mm, 0).toFixed(1));
-    const tempMinHoy = eventoActual.length ? Math.min(...eventoActual.map(h => h.temperatura_c), 20) : 20;
-    const vientoMaxHoy = eventoActual.length ? Math.max(...eventoActual.map(h => h.viento_kmh), 10) : 10;
-    const rafagaMaxHoy = eventoActual.length ? Math.max(...eventoActual.map(h => h.rafagas_kmh), 15) : 15;
-    const visMinHoy = eventoActual.length ? Math.min(...eventoActual.map(h => h.visibility_km)) : 999;
-
-    const pendiente = loc.topografia.pendiente_max_deg || 0;
-    const relieve = loc.topografia.relieve || 'MESETA';
-    const esLadera = relieve === 'LADERA' || pendiente >= 25;
-    const distRio = loc.hidrologia.distancia_cauce_km || 99;
-    const twi = loc.topografia.twi || 0;
-    const esTerraceria = loc.vulnerabilidad.acceso_vial === 'CAMINO_TERRACERIA' || loc.vulnerabilidad.acceso_vial === 'BRECHA';
-
-    // H-MOTOR-06 — Solo aplicar el piso del aviso SMN si la localidad está en un estado afectado.
-    // El parser SMN detecta 3 estados (HGO, PUE, VER). Antes se aplicaba el piso a TODAS las zonas de Sierra, sobre-alertando.
-    const estadoAfectado = !!(alertaSMN?.estados_afectados?.some(e =>
-      (e === 'HGO' && loc.estado?.toLowerCase().includes('hidalgo')) ||
-      (e === 'PUE' && loc.estado?.toLowerCase().includes('puebla')) ||
-      (e === 'VER' && loc.estado?.toLowerCase().includes('veracruz'))
-    ));
-    const lluviaEfectiva24h = (esSierra && alertaSMN && estadoAfectado)
-      ? Math.max(lluviaEventoHoy, alertaSMN.rango_lluvia_min_mm || 0)
-      : lluviaEventoHoy;
-    const saturacionSuelo = parseFloat((api7DiasPrevios + lluviaEfectiva24h).toFixed(1));
-
-    let nivel = 1;
-    let vectorDominante = zonaSinDatos ? "SIN_DATOS_REGIONALES" : "ATMOSFERA_ESTABLE";
-    let tituloDiagnostico = zonaSinDatos ? "Sin datos meteorológicos regionales" : "Condiciones de Estabilidad y Calma";
-    let causa = zonaSinDatos
-      ? `La zona ${zonaId} no reportó datos meteorológicos en esta corrida.`
-      : "Sin perturbaciones climáticas significativas previstas.";
-
-    if (!zonaSinDatos) {
-      if (esAltiplano && pendiente < 15 && lluviaEventoHoy < 20.0 && tempMinHoy > 2.0 && vientoMaxHoy < 40) {
-        nivel = 1;
-        vectorDominante = "ATMOSFERA_ESTABLE";
-        tituloDiagnostico = "Condiciones de Estabilidad y Calma";
-        causa = `Zona del Altiplano bajo sombra orográfica. Lluvia de ${lluviaEventoHoy} mm sin riesgo geofísico.`;
-      } else {
-        if (esSierra && esLadera && saturacionSuelo >= 65.0) {
-          if (pendiente >= 45.0) {
-            nivel = 4;
-            vectorDominante = "DESLAVE_CRITICO";
-            tituloDiagnostico = "Peligro Crítico de Deslave en Ladera Escarpada";
-            causa = `Suelo saturado (${saturacionSuelo} mm) sobre talud crítico de ${pendiente}°. Falla inminente.`;
-          } else {
-            nivel = Math.max(nivel, 3);
-            vectorDominante = "DESLAVE_MODERADO";
-            tituloDiagnostico = "Saturación Crítica de Terreno";
-            causa = `Reblandecimiento de estratos en ladera de ${pendiente}° con desprendimientos menores.`;
-          }
-        }
-
-        if (distRio <= 0.8 && twi >= 12.0 && lluviaEfectiva24h >= 35.0 && !esAltiplano) {
-          nivel = Math.max(nivel, 4);
-          vectorDominante = "INUNDACION_FLUVIAL";
-          tituloDiagnostico = "Desbordamiento e Inundación Ribereña";
-          causa = `Comunidad ribereña a ${distRio} km del cauce en punto de convergencia de flujo.`;
-        }
-
-        if (esTerraceria && (lluviaEfectiva24h >= 20.0 || saturacionSuelo >= 50.0) && nivel < 3) {
-          nivel = 3;
-          vectorDominante = "CORTE_VIAL";
-          tituloDiagnostico = "Amenaza de Incomunicación y Corte de Acceso";
-          causa = `Vía única de terracería/brecha vulnerable a corte total por lodo.`;
-        }
-
-        if (nivel === 1 && (lluviaEfectiva24h >= 8.0 || saturacionSuelo >= 30.0 || visMinHoy <= 2.0)) {
-          nivel = 2;
-          vectorDominante = "VIGILANCIA_NORMAL";
-
-          // N20: identificar el disparador real de la vigilancia
-          if (lluviaEfectiva24h >= 8.0) {
-            tituloDiagnostico = "Vigilancia por Precipitación Activa";
-            causa = `Precipitación activa en las últimas 24h (${lluviaEfectiva24h} mm). Suelo húmedo en valles y lomas de transición.`;
-          } else if (saturacionSuelo >= 30.0) {
-            tituloDiagnostico = "Vigilancia por Suelo Saturado";
-            causa = `Suelo con humedad acumulada (${saturacionSuelo} mm de saturación). Sin lluvia activa, pero terreno sensible a nuevos eventos.`;
-          } else if (visMinHoy <= 2.0) {
-            tituloDiagnostico = "Vigilancia por Niebla Densa";
-            causa = `Visibilidad reducida a ${visMinHoy} km. Niebla densa en valles y lomas de transición.`;
-          } else {
-            tituloDiagnostico = "Vigilancia Preventiva";
-            causa = "Condiciones de vigilancia activa en la zona.";
-          }
-        }
-      }
-    }
-
-    return {
-      localidad_id: loc.id,
-      nombre: loc.nombre,
-      municipio: loc.municipio,
-      estado: loc.estado,
-      zona_id: zonaId,
-      zona_nombre: loc.zona_nombre,
-      nivel_alerta: nivel,
-      color_alerta: ['#10B981', '#F59E0B', '#F97316', '#EF4444'][nivel - 1],
-      estado_alerta: ['NORMAL', 'VIGILANCIA', 'ALERTA_TEMPRANA', 'EMERGENCIA'][nivel - 1],
-      vector_dominante: vectorDominante,
-      sin_datos_regionales: zonaSinDatos,
-      diagnostico: { titulo: tituloDiagnostico, causa: causa },
-      donde: {
-        subcuenca_cve: loc.hidrologia.subcuenca_cve,
-        subcuenca_nom: loc.hidrologia.subcuenca_nom,
-        posicion_hidrologica: loc.hidrologia.posicion,
-        tipo_relieve: relieve,
-        pendiente_max_grados: pendiente,
-        distancia_cauce_km: distRio,
-        coordenadas: loc.coords
-      },
-      geografia: { relieve, pendienteMax: pendiente, distanciaRioKm: distRio, twi, cuenca: loc.hidrologia.subcuenca_nom, coordenadas: loc.coords },
-      tiempos: { inicio: "En curso", picoMaximo: "Periodo activo", ventanaAccionHoras: loc.hidrologia.tc_horas || 6 },
-      impactoSistemico: {
-        poblacionDirecta: loc.vulnerabilidad.poblacion,
-        accesoVial: loc.vulnerabilidad.acceso_vial,
-        distanciaHospitalKm: loc.vulnerabilidad.dist_hospital_km,
-        marginacion: loc.vulnerabilidad.marginacion,
-        apiPrevio7DiasMm: api7DiasPrevios,
-        saturacionTotalSueloMm: saturacionSuelo,
-        lluviaEvento24hMm: parseFloat(lluviaEfectiva24h.toFixed(1)),
-        tempMinimaC: tempMinHoy,
-        rafagaMaximaKmh: rafagaMaxHoy,
-        visibilidadMinKm: visMinHoy
-      },
-      protocolo: "Consulte al coordinador de Cáritas"
-    };
+    return evaluarLocalidadRunner(loc, serieZona, { alertaSMN, zonaSinDatos });
   });
 
   evaluaciones.sort((a, b) => b.nivel_alerta - a.nivel_alerta);
