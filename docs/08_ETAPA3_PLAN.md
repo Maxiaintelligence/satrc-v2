@@ -121,10 +121,11 @@
 - **Commits:** `a94324c` (H4.1 gemelo + tests), `3e702f4` (H4.2 integración + docs).
 - **Verificación:** `npm test` 39/39 passing, workflow `sara_cron.yml` con 14/14 zonas OK, `/api/sara` responde 200 con shape del gemelo.
 
-### H5 — N18 + H-SEG-01 — ⏳ PENDIENTE
-- **N18:** fix de 1 línea en `consensusEngine.js` (`visibility` → `visibility_gfs_seamless`).
-- **H-SEG-01:** documentar en docs (no tocar código).
-- **Commits:** 2.
+### H5 — N18 + H-SEG-01 — ✅ COMPLETO
+- **N18:** ✅ Resuelto en H7a.2 (el código ya leía `visibility_gfs_seamless` desde H7a.2, pero nadie lo documentó). Se agregó un test de blindaje del fallback triple (`_gfs_seamless` → `visibility` → 10000m) en H5.1.
+- **H-SEG-01:** ⏸️ Diferido a V3.0. Documentado como deuda aceptada.
+- **Commits:** `6becdf9` (H5.1 test de blindaje), `de1801c` (H5.2 cierre documental).
+- **Verificación:** `npm test` 40/40 passing (39 + 1 nuevo test de fallback).
 
 ### H7b — Vitest resto — ⏳ PENDIENTE
 - Tests de `repararMojibake`, `normalizarDatosRegionales`, `formatearTimestamp`, `parseNoaaStamp`.

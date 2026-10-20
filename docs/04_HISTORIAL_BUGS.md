@@ -225,3 +225,33 @@ Este documento registra los bugs estructurales resueltos en Octubre de 2026 (Fas
   - H4.2: `3e702f4` — Integra el gemelo en el runner + actualiza 5 docs.
 
 - **Estado:** ✅ Resuelto parcialmente en H4. **La unificación total (runner + frontend con un solo archivo) va a V3.0**, según `06_PENDIENTES.md` §2. En H4 se resuelve el "gemelo separado y documentado"; no se unifica con el frontend todavía.
+
+
+
+## N18 — `consensusEngine.js` no leía visibilidad real (Resuelto en Etapa 3, hito H5)
+
+- **Síntoma:** durante la auditoría de Etapa 3, se detectó que `consensusEngine.js` leía `visibility` genérico de Open-Meteo, en lugar de `visibility_gfs_seamless` (el sufijo que provee GFS cuando se piden múltiples modelos). El runner ya lo tenía arreglado.
+- **Causa:** el sufijo `_gfs_seamless` se agregó en la migración a la tríada GFS+ICON+GEM, pero la lectura de visibilidad quedó con el nombre original (`visibility`). El runner lo corrigió, el frontend no.
+- **Impacto:** el frontend nunca detectaba niebla densa (Regla 6: N2 por `visibilidad <= 2km`). El fallback silencioso a `10000` m hacía que la visibilidad fuera siempre 10km, sin importar las condiciones reales.
+- **Fix (Etapa 3):** 
+  - En **H7a.2** (durante la migración de tests a Vitest) se descubrió que el código ya leía `visibility_gfs_seamless` (la corrección se aplicó silenciosamente en algún momento entre H2c y H7a). El test `'lee visibilidad de visibility_gfs_seamless (N18)'` lo validó.
+  - En **H5.1** se agregó un test de blindaje adicional: `'usa visibility genérica si visibility_gfs_seamless no está (fallback intermedio)'`. Verifica que el fallback triple (`_gfs_seamless` → `visibility` → 10000) funcione correctamente.
+- **Verificación:** `npm test` 40/40 passing (39 originales + 1 nuevo test de fallback).
+- **Commits:** 
+  - `6becdf9` — Test de blindaje del fallback.
+  - `de1801c` — Cierre documental.
+- **Estado:** ✅ Resuelto en Etapa 3 (H5). Documentación actualizada en H5.2.
+
+## H-SEG-01 — `/api/sara` sin token expone bitácora y evaluaciones (Aceptado como deuda V3.0)
+
+- **Síntoma:** durante la auditoría de Etapa 3, se detectó que `GET /api/sara` sin `?forzar=true` devuelve la bitácora completa (`bitacora`) y las evaluaciones (`evaluaciones`) de las 405 localidades. Cualquier consumidor puede leer estos datos sin autenticación.
+- **Causa:** el endpoint se diseñó para ser público (para que el Monitor Público consuma el estado diocesano sin token). Pero devuelve más información de la necesaria (bitácora histórica completa, evaluaciones con datos de vulnerabilidad por localidad).
+- **Impacto:** enumeración de comunidades, bitácora histórica pública, datos de vulnerabilidad expuestos. No es una brecha crítica (los datos son de interés público humanitario), pero es una **decisión de diseño que hay que revisar**.
+- **Decisión (Etapa 3):** se difiere a V3.0. La corrección requiere rediseño de contrato:
+  - Tocar `api/sara.js` (filtrar campos por rol).
+  - Tocar `SatRCOperativo.jsx` (usar un endpoint separado con auth para bitácora completa).
+  - Tocar `MonitorPublico.jsx` (solo consumir el resumen público).
+  - Agregar autenticación real (JWT/sesiones) o token por operador.
+  - **No es un fix de 1 línea. Es un rediseño de contrato.**
+- **Fix futuro (V3.0):** ver `06_PENDIENTES.md` §2.
+- **Estado:** ⏸️ Aceptado como deuda V3.0. Documentado en H5.2.

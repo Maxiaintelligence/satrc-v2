@@ -22,10 +22,11 @@
 
 ### H5 — N18 + H-SEG-01
 
-- **Estado:** ⏳ Pendiente (después de H4).
-- **Alcance:**
-  - **N18:** fix de 1 línea en `consensusEngine.js` (`visibility` → `visibility_gfs_seamless`).
-  - **H-SEG-01:** documentar en docs (no tocar código).
+- **Estado:** ✅ Cerrado en Etapa 3 (commits `6becdf9` + `de1801c`).
+- **Alcance completado:**
+  - **N18:** ✅ Resuelto en H7a.2 (el código ya leía `visibility_gfs_seamless`). En H5 se agregó un test de blindaje del fallback triple para evitar regresiones.
+  - **H-SEG-01:** ⏸️ Diferido a V3.0. Documentado en §2.
+- **Verificación:** `npm test` 40/40 passing.
 
 ### H7b — Vitest resto
 

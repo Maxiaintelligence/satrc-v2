@@ -207,7 +207,7 @@
 - **Síntoma:** `const vis = (datosHorarios["visibility"]?.[i] ?? 10000) / 1000;` — le falta `visibility_gfs_seamless`. El runner sí lo tiene arreglado.
 - **Impacto:** el frontend nunca detecta niebla densa (regla N2 por visibilidad <= 2km).
 - **Propuesta de fix:** H5. Fix de 1 línea.
-- **Estado:** ✅ Se resuelve en H5.
+- **Estado:** ✅ Resuelto (H7a.2). El código ya leía `visibility_gfs_seamless` desde H7a.2, pero nadie lo documentó. En H5.1 se agregó un test de blindaje del fallback triple (`_gfs_seamless` → `visibility` → 10000m) para evitar regresiones. Commit `6becdf9`.
 
 ---
 
