@@ -1,7 +1,7 @@
 # SatRC V2.0 — Plan de Etapa 3 (Deuda Técnica)
 
 **Fecha de inicio:** Octubre 2026
-**Estado:** En curso (H0–H3, H6 cerrados; H4, H5, H7a, H7b, H8, H9 pendientes)
+**Estado:** En curso (H0–H3, H6, H7a cerrados; H4, H5, H7b, H8, H9 pendientes)
 **Objetivo rector:** Cerrar deuda técnica, establecimiento de tests y documentación. **NO agregar features nuevas.**
 
 > ⚠️ **Etapa 3 ≠ Versión 3.0.** La Etapa 3 es el trabajo actual de deuda técnica.
@@ -101,14 +101,18 @@
 - **14 copias eliminadas. 7 funciones en 5 módulos.**
 - **Documentación:** H-FUNC-01 cerrado en `04_HISTORIAL_BUGS.md`.
 
-### H7a — Vitest bloqueante (antes de H4) — ⏳ PENDIENTE (siguiente)
-- Instalar Vitest.
-- Agregar `"test": "vitest run"` en `package.json` (H-TEST-03).
-- Migrar los 4 `.mjs` rotos a Vitest (H-TEST-01).
-- Reescribir `test_regresion_fase1.mjs` con schema Zod real (H-TEST-02).
-- Tests reales de `riskEvaluator` (6 reglas + N18).
-- Tests reales de `consensusEngine` (incluye N18).
-- **Commits estimados:** 4-6.
+### H7a — Vitest bloqueante (antes de H4) — ✅ COMPLETO
+
+- **H7a.1:** Vitest instalado + `"test": "vitest run"` en `package.json`. Commit `338cc4d`.
+- **H7a.2:** `consensusEngine.test.js` (12 tests, fetch mockeado). Commit `d8b59bf`.
+- **H7a.3:** `regresionFase1.test.js` (8 tests, Zod real). Commit `734a77b`.
+- **H7a.4:** `riskEvaluator.test.js` (16 tests: 6 reglas + N18 + H-MOTOR-06 + prioridad entre reglas). Commit `ac5c9ef`.
+- **H7a.6:** CI en `.github/workflows/tests.yml`. Commit `4bfd241`.
+- **H7a.7:** Eliminados los 4 `.mjs` viejos. Commit `4339cd5`.
+- **H7a.8:** Documentación de cierre (en curso).
+- **Verificación:** 36 tests pasan en local. CI pasa en GitHub Actions (run `39467968964`).
+- **Descubrimiento:** el test de prioridad documentó que **Regla 4 (inundación) sobreescribe el diagnóstico de Regla 2 (deslave)** cuando ambas dan N4 (por el `>=`). Ahora está en `03_MOTOR_RIESGO.md` sección 3.
+- **Documentación:** H-TEST-04 cerrado en `04_HISTORIAL_BUGS.md`.
 
 ### H4 — Motor unificado (Opción A: gemelo separado) — ⏳ PENDIENTE
 - Extraer `scripts/engine/riskEvaluatorRunner.mjs` como gemelo documentado del frontend (H-MOTOR-01).
@@ -176,7 +180,7 @@ La Etapa 3 se considera cerrada cuando:
 - [x] Parser SMN del runner sincronizado con `api/smn.js`.
 - [x] Fallback del frontend usa 14 nodos.
 - [x] Funciones duplicadas extraídas a `src/lib/compartido/`.
-- [ ] Vitest instalado, `npm test` funciona, CI corre en push. (H7a)
+- [x] Vitest instalado, `npm test` funciona, CI corre en push. (H7a — 36 tests pasan)
 - [ ] `riskEvaluatorRunner.mjs` extraído. (H4)
 - [ ] N18 fixeado en `consensusEngine.js`. (H5)
 - [ ] Zod activo en `/api/sara` y en el runner. (H8)

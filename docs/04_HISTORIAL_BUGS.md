@@ -149,3 +149,39 @@ Este documento registra los bugs estructurales resueltos en Octubre de 2026 (Fas
   - H6.5: `<hash>` — `normalizarDatosRegionales` + `construirBloqueRegional` → `regionales.js`.
 
 - **Estado:** ✅ Cerrado en Etapa 3 (sub-hito H6).
+
+
+## H-TEST-04 — Suite de tests formal con Vitest (Resuelto en Etapa 3, sub-hito H7a)
+
+- **Síntoma:** durante la auditoría de Etapa 3, se detectó que los 4 tests existentes (`test_consenso.mjs`, `test_riesgos.mjs`, `test_sistemico.mjs`, `test_regresion_fase1.mjs`) eran **dead code o estaban rotos**:
+  - 2 tests usaban campos que `riskEvaluator.js` no devuelve (`que.evento`, `cuando.inicio_amenaza`, `tamano_impacto.*`). Imprimían `undefined` sin fallar.
+  - 1 test contradice al motor (esperaba N1 para Apan con terracería, cuando por Regla 5 debe ser N3).
+  - 1 test esperaba `detalle_modelos.temp.ecmwf` (que el motor no genera).
+  - No había script `"test"` en `package.json`.
+  - No había CI que corra tests en GitHub Actions.
+
+- **Causa:** los tests se escribieron para una versión anterior del motor. Nunca se actualizaron. No estaban integrados a ningún flujo automatizado.
+
+- **Fix (Etapa 3, sub-hito H7a):**
+  - **H7a.1:** se instaló Vitest (`^5.0.5`) y se agregó `"test": "vitest run"` + `"test:watch": "vitest"` en `package.json`.
+  - **H7a.2:** se migró `test_consenso.mjs` a `src/engine/__tests__/consensusEngine.test.js` (12 tests con `fetch` mockeado). Incluye el caso N18 (visibilidad real).
+  - **H7a.3:** se reescribió `test_regresion_fase1.mjs` como `src/engine/__tests__/regresionFase1.test.js` (8 tests). Importa el `EstadoDiocesanoSchema` real de `src/schemas/`, corrige el test de Apan, y usa `expect()` real.
+  - **H7a.4:** se creó `src/engine/__tests__/riskEvaluator.test.js` (16 tests) que cubren las 6 reglas, la prioridad entre reglas, N18 y H-MOTOR-06.
+  - **H7a.6:** se creó `.github/workflows/tests.yml` que corre `npm test` en cada push/PR a `main`.
+  - **H7a.7:** se eliminaron los 4 tests `.mjs` viejos de la raíz (reemplazados por Vitest).
+
+- **Verificación:**
+  - **36 tests pasan** en local (`npm test`).
+  - **CI pasa** en GitHub Actions en cada push (run `39467968964` con `✓ tests in 20s`).
+  - Cobertura: `consensusEngine` (12), `riskEvaluator` (16), `regresionFase1` (8).
+  - El test de prioridad descubrió un comportamiento no documentado del motor: **Regla 4 (inundación) sobreescribe el diagnóstico de Regla 2 (deslave) cuando ambas dan N4**, por el `>=` en la comparación de severidad. Esto está documentado en `03_MOTOR_RIESGO.md` sección 3.
+
+- **Commits:**
+  - H7a.1: `338cc4d` — Instala Vitest y configura script test.
+  - H7a.2: `d8b59bf` — Migra consensusEngine a Vitest (12 tests).
+  - H7a.3: `734a77b` — Reescribe regresionFase1 con Zod real (8 tests).
+  - H7a.4: `ac5c9ef` — Agrega tests de riskEvaluator (16 tests).
+  - H7a.6: `4bfd241` — CI en GitHub Actions.
+  - H7a.7: `4339cd5` — Elimina 4 tests `.mjs` viejos.
+
+- **Estado:** ✅ Cerrado en Etapa 3 (sub-hito H7a). **H7a completo.**

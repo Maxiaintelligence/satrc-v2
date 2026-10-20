@@ -72,7 +72,7 @@
 - **Impacto:** el "CI Gate" del proyecto es falso. No detecta regresiones.
 - **Archivos afectados:** `test_*.mjs` (4), `src/engine/riskEvaluator.js`.
 - **Propuesta de fix:** H7a reescribe los tests con Vitest y fixtures reales. H7b migra el resto.
-- **Estado:** ✅ Se resuelve en H7a + H7b.
+- **Estado:** ✅ Resuelto en H7a (36 tests con Vitest, CI en GitHub Actions).
 
 ---
 
@@ -156,7 +156,7 @@
 - **Síntoma:** el script solo calcula `%días en N2` y `%días en N3` por saturación (`saturacion >= 30` o `>= 65`). **NO simula las 6 reglas del motor.**
 - **Impacto:** no sirve para validar regresiones si se toca `riskEvaluator.js`.
 - **Propuesta de fix:** H7a cubre esto con Vitest. El script queda como herramienta auxiliar.
-- **Estado:** ✅ Se cubre funcionalmente en H7a.
+- **Estado:** ✅ Resuelto en H7a (Vitest cubre las 6 reglas con 16 tests en `riskEvaluator.test.js`).
 
 ### H-DIAG-04 — Motor no calibrado para XIC/HUA/ZAC
 
@@ -171,14 +171,14 @@
 - **Síntoma:** el test declara un `EstadoDiocesanoSchema` local en el archivo. Existe `src/schemas/estadoDiocesanoSchema.js` que no se usa.
 - **Impacto:** duplicación y divergencia. El schema del test no refleja el real.
 - **Propuesta de fix:** H7a importa el schema real.
-- **Estado:** ✅ Se resuelve en H7a.
+- **Estado:** ✅ Resuelto en H7a.3 (`regresionFase1.test.js` importa el schema real de `src/schemas/estadoDiocesanoSchema.js`).
 
 ### H-TEST-03 — No hay script `"test"` en `package.json`
 
 - **Síntoma:** `package.json` tiene `dev`, `build`, `lint`, `preview`. **No hay `"test"`.**
 - **Impacto:** los tests existen pero no se ejecutan. Un dev nuevo no los va a correr.
 - **Propuesta de fix:** H7a agrega `"test": "vitest run"`.
-- **Estado:** ✅ Se resuelve en H7a.
+- **Estado:** ✅ Resuelto en H7a.1 (`package.json` tiene `"test": "vitest run"` y `"test:watch": "vitest"`).
 
 ### H-ENV-01 — Credenciales locales no documentadas
 

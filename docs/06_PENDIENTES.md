@@ -1,7 +1,7 @@
 # SatRC V2.0 — Backlog de Pendientes (Post-Etapa 3)
 
-**Última actualización:** Octubre 2026 (Etapa 3 en curso, H0–H6 cerrados).
-**Estado:** H0, H1, H2a, H2b, H2c, H3, H6 cerrados. H7a, H4, H5, H7b, H8, H9 pendientes.
+**Última actualización:** Octubre 2026 (Etapa 3 en curso, H0–H7a cerrados).
+**Estado:** H0, H1, H2a, H2b, H2c, H3, H6, H7a cerrados. H4, H5, H7b, H8, H9 pendientes.
 
 > Este documento lista lo que queda pendiente DESPUÉS de la Etapa 3.
 > Lo que ya se cerró se documenta en `04_HISTORIAL_BUGS.md`.
@@ -11,27 +11,14 @@
 
 ## 1. Etapa 3 — Pendiente inmediato
 
-### H7a — Vitest bloqueante (antes de H4)
-
-- **Estado:** ⏳ Pendiente (siguiente).
-- **Alcance:**
-  - Instalar Vitest (`npm install -D vitest`).
-  - Agregar `"test": "vitest run"` en `package.json` (H-TEST-03).
-  - Migrar los 4 `.mjs` rotos a Vitest (H-TEST-01).
-  - Reescribir `test_regresion_fase1.mjs` con schema Zod real (H-TEST-02).
-  - Tests reales de `riskEvaluator` (6 reglas + N18).
-  - Tests reales de `consensusEngine` (incluye N18).
-  - (Opcional) CI en GitHub Actions (workflow `tests.yml`).
-- **Bloquea:** H4 (motor unificado).
-
 ### H4 — Motor unificado (Opción A: gemelo separado)
 
-- **Estado:** ⏳ Pendiente (después de H7a).
+- **Estado:** ⏳ Pendiente (siguiente; H7a ya cerrado).
 - **Alcance:**
   - Extraer `scripts/engine/riskEvaluatorRunner.mjs` como gemelo documentado del frontend (H-MOTOR-01).
   - **NO unificar con `src/engine/riskEvaluator.js`.** Esa unificación va a V3.0.
 - **Riesgo:** alto (toca el motor).
-- **Bloqueante:** H7a.
+- **Red de seguridad:** los 36 tests de H7a. Si el gemelo se comporta distinto, los tests fallan.
 
 ### H5 — N18 + H-SEG-01
 
@@ -192,12 +179,12 @@
 | H2c | Fix lluvia efectiva solo a estados afectados |
 | H3 | Fallback frontend con 14 nodos |
 | H6 | DRY (5 módulos compartidos, 14 copias eliminadas) |
+| H7a | Vitest bloqueante (36 tests, CI en GitHub Actions) |
 
 ### Pendientes ⏳
 
 | Hito | Descripción |
 |---|---|
-| H7a | Vitest bloqueante |
 | H4 | Motor unificado (gemelo separado) |
 | H5 | N18 + H-SEG-01 |
 | H7b | Vitest resto |

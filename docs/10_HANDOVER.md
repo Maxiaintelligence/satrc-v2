@@ -7,7 +7,7 @@ Cáritas Pastoral Social • Arquidiócesis de Tulancingo (Hidalgo, Sierra Norte
 |---|---|
 | **Versión del documento** | 2.1.0 |
 | **Fecha de corte y actualización** | 20 de octubre de 2026 |
-| **Estado del sistema en producción** | Operativo y Estable (Etapa 3 de estabilización de deuda técnica; H0 a H6 cerrados) |
+| **Estado del sistema en producción** | Operativo y Estable (Etapa 3 de estabilización de deuda técnica; H0 a H7a cerrados) |
 | **Audiencia** | Ingenieros de software, administradores de sistemas, líderes técnicos y auditores que asuman la operación y evolución del proyecto |
 
 ---
@@ -109,13 +109,13 @@ Cubre **405 localidades** rurales y semiurbanas de alta marginación y relieve a
 │    • /api/disparar-workflow  ◄── Disparador autenticado vía webhook cron-job.org            │
 │                                                                                             │
 │  [Almacenamiento de Estado]                                                                 │
-│    • Vercel Blob (Producción en la nube) / In-Memory Mock Blob (Entorno local / AI Studio)  │
+│    • Vercel Blob (Producción en la nube). En local no hay almacenamiento disponible.        │
 │      - estado_diocesano.json (Evaluaciones de 405 localidades)                              │
 │      - bitacora_sara.json (Historial SHA-256 encadenado)                                    │
 │      - reporte_diocesano_vigente.json (Último informe oficial de SARA)                      │
 └───────────────────────────────────────────────┬─────────────────────────────────────────────┘
                                                 │
-                                                ▼ JSON HTTP / SSE
+                                                ▼ JSON HTTP (polling)
 ┌─────────────────────────────────────────────────────────────────────────────────────────────┐
 │                            CAPA FRONTEND — PWA (React 19 + Tailwind)                        │
 │                                                                                             │
@@ -140,8 +140,6 @@ Cubre **405 localidades** rurales y semiurbanas de alta marginación y relieve a
 | Validación de Schemas | Zod | ^4.6.5 | Validación en el borde de contratos de datos |
 | Linter / Análisis | Oxlint | ^1.81.0 | Linter de alto rendimiento en Rust |
 | Iconografía | Lucide React | ^1.50.0 | Iconografía táctica ligera |
-| Servidor Integrado | Express | ^5.3.0 | Servidor HTTP unificado que monta APIs y Vite |
-| Ejecución TypeScript | TSX | ^4.23.15 | Ejecutor en vivo sin paso de transpilación previa |
 | LLM Inference | Groq (`openai/gpt-oss-120b`) | API v1 | Redacción de reportes estructurados en < 3 seg |
 | Satélite | NOAA NESDIS STAR GOES-19 | CDN Público | Monitoreo de nubes, celdas convectivas y fuego |
 
@@ -206,9 +204,7 @@ satrc-v2/
 │   │   └── SatRCOperativo.jsx  # Sala de control con clave y funciones avanzadas
 │   ├── App.jsx                 # Controlador raíz de autenticación y navegación
 │   └── index.css, main.jsx     # Puntos de entrada de React y Tailwind
-├── server.ts                   # Servidor Express unificado (desarrollo y producción)
 ├── tailwind.config.js          # Configuración del motor de diseño Tailwind
-├── test_sistemico.mjs          # Prueba de regresión de casos reales de ladera
 └── vite.config.js              # Configuración de compilación Vite
 ```
 
@@ -250,7 +246,7 @@ satrc-v2/
 
 - **Sistema Operativo:** Linux (Ubuntu 22.04+ recomendado), macOS o Windows con WSL2.
 - **Node.js:** versión 22.x (LTS recomendada).
-- **NPM:** v10.x o superior (se utiliza estrictamente `npm`; no usar Yarn, PNPM ni Bun en AI Studio).
+- **NPM:** v10.x o superior (se utiliza estrictamente `npm`; no usar Yarn, PNPM ni Bun).
 - **Git:** instalado en el PATH.
 
 ### 3.2 Instalación Paso a Paso desde Cero
@@ -260,23 +256,22 @@ satrc-v2/
 git clone https://github.com/Maxiaintelligence/satrc-v2.git
 cd satrc-v2
 
-# 2. Copiar el archivo de variables de entorno
-cp .env.example .env
+# 2. Las variables de entorno se configuran en Vercel (ver Sección 5.1).
 
 # 3. Instalar las dependencias exactas
 npm install
 
-# 4. Iniciar el entorno unificado de desarrollo (puerto 3000)
+# 4. Iniciar el entorno de desarrollo (Vite, puerto 5173)
 npm run dev
 ```
 
-El servidor iniciará en `http://localhost:3000`. Al acceder, la aplicación carga inmediatamente tanto la interfaz gráfica (PWA) como los endpoints de API en `/api/*` y el mock de almacenamiento de blobs.
+El servidor iniciará en http://localhost:5173. Al acceder, la aplicación carga la interfaz gráfica (PWA) en el navegador. Los endpoints /api/* no están disponibles en el servidor de desarrollo local, ya que se ejecutan como Vercel Functions en la nube.
 
-### 3.3 Variables de Entorno (`.env.example`)
+### 3.3 Variables de Entorno (Configuradas en Vercel)
 
 | Variable | Tipo | Requerida en Prod | Descripción y Valor por Defecto |
 |---|---|---|---|
-| `PORT` | Numérica | No (default: 3000) | Puerto de enlace del servidor HTTP. |
+| `PORT` | Numérica | No (default: 5173) | Puerto de enlace del servidor HTTP. |
 | `NODE_ENV` | String | Sí | `development` en local / `production` en despliegue. |
 | `SARA_ADMIN_TOKEN` | String | Sí (Prod) | Token para forzar revaluaciones manuales en `/api/sara`. |
 | `SARA_ONDEMAND_TOKEN` | String | Sí (Prod) | Token del backend para autorizar la emisión de reportes. |
@@ -289,20 +284,20 @@ El servidor iniciará en `http://localhost:3000`. Al acceder, la aplicación car
 ### 3.4 Comandos de Ejecución, Pruebas y Construcción
 
 ```bash
-# Ejecutar entorno de desarrollo (Express + Vite middlewares)
+# Ejecutar entorno de desarrollo (Vite + HMR, puerto 5173)
 npm run dev
 
 # Ejecutar el linter estático ultrarrápido (Oxlint)
 npm run lint
 
-# Ejecutar las pruebas de regresión sistémica del motor de riesgo
-node test_sistemico.mjs
+# Ejecutar la suite completa de tests (Vitest, 36 tests)
+npm test
+
+# Ejecutar tests en modo watch (desarrollo local)
+npm run test:watch
 
 # Compilar para producción (genera bundle estático en dist/)
 npm run build
-
-# Arrancar el servidor en modo de producción
-NODE_ENV=production npm start
 ```
 
 ---
@@ -311,11 +306,10 @@ NODE_ENV=production npm start
 
 ### 4.1 Entornos y Diferencias
 
-| Aspecto | Local / Entorno AI Studio | Producción en la Nube (Vercel + GitHub Actions) |
+| Aspecto | Local (Vite dev server) | Producción en la Nube (Vercel + GitHub Actions) |
 |---|---|---|
-| Servidor Web | Express unificado en `server.ts` | Vercel Edge / Serverless Functions |
-| Almacenamiento | In-Memory Blob Store (`src/lib/mock-blob.js`) | Vercel Blob Storage persistente |
-| Generador SARA | Groq si hay key / Generador determinista | Groq LLM `openai/gpt-oss-120b` |
+| Almacenamiento | No disponible (requiere Vercel Blob) | Vercel Blob Storage persistente |
+| Generador SARA | No disponible (requiere Vercel Function) | Groq LLM `openai/gpt-oss-120b` (si falla, retorna error 504) |
 | Runner Automático | Ejecutable bajo demanda vía CLI | GitHub Actions Cronjob (cada 3 horas) |
 
 ### 4.2 Proceso de Despliegue y Rollback
@@ -363,7 +357,7 @@ git push origin main
 
 - **Síntoma:** el modal de la sala operativa permanece en "Generando reporte..." y concluye en error 504.
 - **Causa:** la API de Groq en la nube experimenta latencia superior a los 30 segundos (`TIMEOUT_GROQ_MS = 30000`).
-- **Solución automática implementada:** el código de `api/reporte-ondemand.js` y `server.ts` conmuta automáticamente al motor determinista basado en reglas, asegurando que el operador reciba su reporte estructurado en 7 secciones sin interrumpir el auxilio diocesano.
+- **Solución automática implementada:** el código de `api/reporte-ondemand.js` conmuta automáticamente al motor determinista basado en reglas, asegurando que el operador reciba su reporte estructurado en 7 secciones sin interrumpir el auxilio diocesano.
 
 #### Caso 3: Inconsistencia o textos con caracteres extraños (Mojibake UTF-8)
 
@@ -409,7 +403,6 @@ git push origin main
 - [x] Consola operativa protegida por clave con generación de reportes on-demand.
 - [x] Bitácora auditable con encadenamiento criptográfico SHA-256.
 - [x] Módulos DRY extraídos en `src/lib/compartido/`.
-- [x] Soporte multiplataforma e integración full-stack con servidor Express en `server.ts`.
 
 ### 6.2 Deuda Técnica Conocida y Roadmap Inmediato
 
@@ -422,7 +415,7 @@ git push origin main
 - [x] **H2c:** Aplicación de aviso SMN restringida a estados afectados
 - [x] **H3:** Fallback en vivo del frontend expandido a 14 nodos
 - [x] **H6:** Refactorización DRY en `src/lib/compartido/`
-- [ ] **H7a:** Configuración formal de Vitest y migración de pruebas
+- [x] **H7a:** Vitest instalado, 36 tests, CI en GitHub Actions (cerrado en Etapa 3)
 - [ ] **H4:** Creación del gemelo desacoplado del motor en runner
 - [ ] **H5:** Corrección de variable `visibility_gfs_seamless` (N18)
 - [ ] **H7b:** Pruebas unitarias de utilidades de cadenas y fechas
@@ -441,16 +434,24 @@ git push origin main
 
 ### 7.2 Estrategia de Pruebas
 
-#### Regresión Sistémica: `test_sistemico.mjs`
+#### Suite formal con Vitest (H7a)
 
-Evalúa los casos de estrés geográfico más extremos del territorio diocesano:
+El proyecto cuenta con **36 tests unitarios** ejecutados con Vitest. Se corren con `npm test` y también en cada push/PR a `main` vía GitHub Actions (`.github/workflows/tests.yml`).
 
-- **Caso 1 — Huehuetla:** cañada fluvial escarpada; saturación de suelo > 100 mm con talud de 54°. Debe clasificar estrictamente en **NIVEL 4 (EMERGENCIA)**.
-- **Caso 2 — La Unión / Zihuateutla:** comunidad de montaña con camino de terracería y talud de 42°. Debe clasificar estrictamente en **NIVEL 3 (ALERTA_TEMPRANA)**.
+**Archivos de test:**
+
+- **`src/engine/__tests__/consensusEngine.test.js`** (12 tests): mediana de precipitación, filtro de ceros espurios, ráfagas como máximo, clasificación de confiabilidad por dispersión, lectura de visibilidad real (N18).
+- **`src/engine/__tests__/riskEvaluator.test.js`** (16 tests): las 6 reglas del motor (N1–N4), prioridad entre reglas, niebla densa (N18), aplicación del aviso SMN solo a estados afectados (H-MOTOR-06).
+- **`src/engine/__tests__/regresionFase1.test.js`** (8 tests): firma incompleta de `alertaSMN`, principio precautorio (SMN vs Open-Meteo), discriminación territorial (Apan con terracería), aviso SMN vencido, validación con el schema Zod real.
+
+**Casos de estrés cubiertos por los tests:**
+
+- **Huehuetla:** cañada fluvial escarpada; saturación de suelo > 100 mm con talud de 54°. Debe clasificar en **NIVEL 4 (EMERGENCIA)** (cubierto por tests de la Regla 2).
+- **Apan / La Unión:** comunidad de montaña con camino de terracería. Debe clasificar en **NIVEL 3 (ALERTA_TEMPRANA)** por Regla 5 (corte vial) (cubierto por `regresionFase1.test.js`).
 
 #### Validación de Schemas
 
-Archivo `src/schemas/estadoDiocesanoSchema.js` mediante Zod para verificar que ningún objeto de datos viaje incompleto hacia el frontend.
+Archivo `src/schemas/estadoDiocesanoSchema.js` mediante Zod para verificar que ningún objeto de datos viaje incompleto hacia el frontend. Los tests de `regresionFase1.test.js` validan que el schema rechaza payloads corruptos (semáforo negativo, evaluaciones vacías) y acepta payloads válidos.
 
 ---
 
@@ -543,9 +544,9 @@ Cada registro se almacena en `bitacora_sara.json`:
 Para un nuevo ingeniero que asuma el mantenimiento del sistema:
 
 1. **Paso 1 — Fundamentos:** leer íntegramente `docs/01_CONTEXTO.md` y `docs/03_MOTOR_RIESGO.md` para comprender la formulación física de las 6 reglas geomecánicas.
-2. **Paso 2 — Arquitectura:** revisar `docs/02_ARQUITECTURA.md`, `server.ts` y la carpeta `src/lib/compartido/`.
-3. **Paso 3 — Pruebas y auditoría:** ejecutar localmente `npm run dev`, `npm run lint` y `node test_sistemico.mjs`. Simular un cambio de umbral y observar el comportamiento.
-4. **Paso 4 — Sala operativa:** entrar en `http://localhost:3000`, acceder a la sala operativa con la clave `emergencia` y generar un reporte on-demand usando la clave autorizada de operador `Antonio2026`.
+2. **Paso 2 — Arquitectura:** revisar `docs/02_ARQUITECTURA.md` y la carpeta `src/lib/compartido/`.
+3. **Paso 3 — Pruebas y auditoría:** ejecutar localmente `npm run dev`, `npm run lint` y `npm test` (36 tests con Vitest). Simular un cambio de umbral y verificar que los tests fallan (red de seguridad).
+4. **Paso 4 — Sala operativa:** entrar en `http://localhost:5173`, acceder a la sala operativa con la clave `emergencia` y generar un reporte on-demand usando la clave autorizada de operador `Antonio2026`.
 5. **Paso 5 — Integraciones cloud:** revisar el workflow `.github/workflows/sara_cron.yml` y comprobar el endpoint `/api/sara`.
 
 ### 10.2 Checklist Formal de Aceptación y Entrega
@@ -553,9 +554,9 @@ Para un nuevo ingeniero que asuma el mantenimiento del sistema:
 | # | Criterio de Verificación | Estado | Verificado por |
 |---|---|---|---|
 | 1 | El repositorio clona limpiamente y ejecuta `npm install` sin conflictos. | [x] Conforme | Ing. Entrante |
-| 2 | El servidor inicia en el puerto 3000 con `npm run dev` y sirve la aplicación. | [x] Conforme | Ing. Entrante |
+| 2 | El servidor inicia en el puerto 5173 con `npm run dev` y sirve la aplicación. | [x] Conforme | Ing. Entrante |
 | 3 | El linter `npm run lint` reporta 0 errores. | [x] Conforme | Ing. Entrante |
-| 4 | La prueba de regresión `node test_sistemico.mjs` concluye con éxito (N4 y N3 asignados correctamente). | [x] Conforme | Ing. Entrante |
+| 4 | La suite de tests (`npm test`) pasa los 36 tests de Vitest sin errores. | [x] Conforme | Ing. Entrante |
 | 5 | La compilación de producción `npm run build` genera la carpeta `dist/` sin advertencias críticas. | [x] Conforme | Ing. Entrante |
 | 6 | El endpoint `/api/smn` conecta con éxito y obtiene la situación oficial de CONAGUA. | [x] Conforme | Ing. Entrante |
 | 7 | El visor de satélite `/api/latest-gif` resuelve bucles válidos de NOAA GOES-19. | [x] Conforme | Ing. Entrante |

@@ -6,8 +6,9 @@
 
 1. [El Runner Autónomo](#1-el-runner-autónomo)
 2. [Las 6 reglas de evaluación](#2-las-6-reglas-de-evaluación)
-3. [Cálculo de la saturación (API)](#3-cálculo-de-la-saturación-api)
-4. [Aplicación del aviso SMN (H-MOTOR-06)](#4-aplicación-del-aviso-smn-h-motor-06)
+3. [Prioridad entre reglas](#3-prioridad-entre-reglas)
+4. [Cálculo de la saturación (API)](#4-cálculo-de-la-saturación-api)
+5. [Aplicación del aviso SMN (H-MOTOR-06)](#5-aplicación-del-aviso-smn-h-motor-06)
 
 ---
 
@@ -97,7 +98,52 @@ Si se cumple **cualquiera** → **N2**:
 
 ---
 
-## 3. Cálculo de la saturación (API)
+## 3. Prioridad entre reglas
+
+Cuando una localidad dispara más de una regla al mismo tiempo, el motor aplica una lógica de prioridad que se descubrió y blindó en H7a.4 con tests exhaustivos.
+
+### 3.1 Reglas acumulativas (nivel toma el máximo)
+
+Las reglas 1 a 6 se aplican **en orden**, y cada regla puede **subir** el nivel de alerta (nunca bajarlo):
+
+- Si Regla 1 da N1 y Regla 4 da N4 → gana N4.
+- Si Regla 2 da N4 y Regla 6 da N2 → gana N4.
+- Si Regla 5 da N3 y Regla 2 da N4 → gana N4.
+
+El motor usa `nivelAlerta = Math.max(nivelAlerta, nuevoNivel)` en cada regla, así que **nunca hay downgrade**.
+
+### 3.2 Excepción: Regla 4 sobreescribe el diagnóstico (no el nivel)
+
+La Regla 4 (inundación fluvial) tiene un comportamiento especial: usa `>=` en vez de `>` para comparar severidad:
+
+```javascript
+if (severidadFluvial >= nivelAlerta) {
+  nivelAlerta = severidadFluvial;
+  diagnostico = { titulo: "Riesgo de Desbordamiento e Inundación Ribereña", ... };
+}
+
+Consecuencia: si Regla 2 y Regla 4 ambas dan N4, el diagnóstico final es "Inundación Ribereña", no "Deslave Crítico". El nivel es el mismo (N4), pero el título se sobreescribe.
+
+Razón de diseño: la inundación afecta a más población (especialmente si poblacion_aguas_arriba >= 50000). El sistema prefiere reportar el evento más masivo cuando ambos son graves.
+
+### 3.3 Casos de prioridad verificados por tests
+Los tests en src/engine/__tests__/riskEvaluator.test.js (H7a.4) verifican estos casos:
+
+Escenario	Regla ganadora	Nivel final
+Ladera crítica (N4) + inundación (N4)	Regla 4 (inundación)	N4
+Ladera crítica (N4) + inundación (N3)	Regla 2 (deslave)	N4
+Ladera moderada (N3) + inundación (N4)	Regla 4 (inundación)	N4
+Altiplano plano (N1) + cumple condiciones de Regla 4	Regla 4 NO aplica	N1 o N2
+Nota: el último caso existe porque Regla 4 tiene un filtro explícito !esZonaAltiplanoPlano que la desactiva en las 5 zonas del Altiplano.
+
+### 3.4 Lo que NO está resuelto todavía
+H-MOTOR-01: el runner tiene su propia copia inline de las 6 reglas, con divergencias sutiles (ver 04_HISTORIAL_BUGS.md). La unificación va en V3.0.
+
+H-MOTOR-05: sobreclasificación N2 en zonas húmedas (XIC, HUA, ZAC) por el umbral fijo de 30 mm. Requiere re-auditoría de 90 días. Va en V3.0.
+
+---
+
+## 4. Cálculo de la saturación (API)
 
 El cálculo es **determinista** (no usa IA):
 
@@ -115,7 +161,7 @@ Si el suelo tiene > 65 mm de saturación y la pendiente es alta, el riesgo es re
 
 ---
 
-## 4. Aplicación del aviso SMN (H-MOTOR-06)
+## 5. Aplicación del aviso SMN (H-MOTOR-06)
 
 A partir de la Etapa 3, `lluviaEfectiva24h` **NO** se aplica a todas las zonas de Sierra por igual. Solo se aplica el piso de lluvia del aviso (`rango_lluvia_min_mm`) si la localidad pertenece a uno de los `estados_afectados` (`HGO`, `PUE`, `VER`).
 
