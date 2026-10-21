@@ -1,59 +1,26 @@
 # SatRC V2.0 — Backlog de Pendientes (Post-Etapa 3)
 
-**Última actualización:** Octubre 2026 (Etapa 3 en curso, H0–H7a cerrados).
-**Estado:** H0, H1, H2a, H2b, H2c, H3, H6, H7a cerrados. H4, H5, H7b, H8, H9 pendientes.
+**Última actualización:** Octubre 2026 (Etapa 3 Finalizada).
+**Estado:** H0 a H9 cerrados y verificados en producción. Backlog limpio.
 
 > Este documento lista lo que queda pendiente DESPUÉS de la Etapa 3.
 > Lo que ya se cerró se documenta en `04_HISTORIAL_BUGS.md`.
-> Lo que va a Versión 3.0 se marca explícitamente.
 
 ---
 
-## 1. Etapa 3 — Pendiente inmediato
+## 1. Etapa 3 — Completada
 
-### H4 — Motor unificado (Opción A: gemelo separado)
+Todos los hitos de la Etapa 3 han sido cerrados, testeados y verificados en producción.
 
-- **Estado:** ✅ Cerrado en Etapa 3 (commits `a94324c` + `3e702f4`).
-- **Alcance completado:**
-  - Extraído `scripts/engine/riskEvaluatorRunner.mjs` como gemelo documentado del runner (H-MOTOR-01 parcial).
-  - **NO unificado** con `src/engine/riskEvaluator.js`. Esa unificación va a V3.0.
-- **Red de seguridad:** 3 tests nuevos (shape, zonaSinDatos, paridad funcional) + 36 tests de H7a = 39/39 passing.
-- **Verificación en producción:** workflow `sara_cron.yml` con 14/14 zonas OK, `/api/sara` responde 200.
+- **H0-H3:** Documentación base, resiliencia del runner (lotes de 4), limpieza de backend (SMN, glm.js) y expansión del fallback frontend a 14 nodos.
+- **H4:** Extracción del gemelo del motor (`riskEvaluatorRunner.mjs`) para eliminar el código inline del runner.
+- **H5:** Blindaje de la lectura de visibilidad (N18) y documentación de la deuda de seguridad (H-SEG-01).
+- **H6:** Refactor DRY. Extracción de 7 funciones duplicadas a `src/lib/compartido/`.
+- **H7a/H7b:** Suite completa de Vitest (79 tests passing), extracción del parser NOAA (`noaa.js`) y validación de rangos (H-UI-19).
+- **H8:** Validación estricta de datos con Zod. Doble esquema (`Blob` y `Response`) activo en el runner y en `/api/sara`.
+- **H9:** Cierre documental y tag `etapa-3-cerrada`.
 
-### H5 — N18 + H-SEG-01
-
-- **Estado:** ✅ Cerrado en Etapa 3 (commits `6becdf9` + `de1801c`).
-- **Alcance completado:**
-  - **N18:** ✅ Resuelto en H7a.2 (el código ya leía `visibility_gfs_seamless`). En H5 se agregó un test de blindaje del fallback triple para evitar regresiones.
-  - **H-SEG-01:** ⏸️ Diferido a V3.0. Documentado en §2.
-- **Verificación:** `npm test` 40/40 passing.
-
-### H7b — Vitest resto
-
-- **Estado:** ✅ Cerrado en Etapa 3 (commits `4c23f52` + `54f00d0`).
-- **Alcance completado:**
-  - Tests de `repararMojibake`, `repararObjeto` (`mojibake.test.js`).
-  - Tests de `normalizarDatosRegionales`, `construirBloqueRegional` (`regionales.test.js`).
-  - Tests de `formatearTimestamp` (`fechas.test.js`).
-  - Extracción de `parseNoaaStamp` a `src/lib/compartido/noaa.js` + tests (`noaa.test.js`).
-  - Refactorización de `api/latest-gif.js` para usar `parseNoaaStamp` (resuelve H-UI-19).
-- **Verificación:** `npm test` 72/72 passing.
-
-### H8 — Zod activo
-
-- **Estado:** ✅ Cerrado en Etapa 3 (commits `af82f44` + `bd5ca6d` + `c168385`).
-- **Alcance completado:**
-  - Schema doble (`EstadoDiocesanoBlobSchema` y `EstadoDiocesanoResponseSchema`).
-  - Validación en `/api/sara.js` (Blob) y en `ejecutar_sara_autonomo.mjs` (antes de publicar).
-  - 7 tests nuevos.
-- **Pendiente para V3.0:** Validación Zod específica para `reporteDiario.mjs` (su contrato difiere del estado diocesano).
-
-### H9 — Cierre documental
-
-- **Estado:** ⏳ Pendiente (último hito).
-- **Alcance:**
-  - Actualizar `04_HISTORIAL_BUGS.md`, `06_PENDIENTES.md`, `AUDITORIA_MOTOR.md`, handover.
-  - Tag git `etapa-3-cerrada`.
+*(Ver `04_HISTORIAL_BUGS.md` para el detalle técnico de cada fix y `08_ETAPA3_PLAN.md` para el roadmap completo).*
 
 ---
 
@@ -66,7 +33,7 @@
 - **Fix actual:** parche defensivo en lectura (`repararMojibake` + `repararObjeto`), ahora en `src/lib/compartido/mojibake.js` (H6.4).
 - **Fix futuro (V3.0):** diagnosticar por qué `@vercel/blob` hace doble encoding y corregir el `put()` en el origen.
 
-### H-MOTOR-05 — Sobreclasificación N2 en zonas húmedas
+### H-MOTOR-05 / H-DIAG-04 — Sobreclasificación N2 en zonas húmedas
 
 - **Estado:** ⏸️ Aceptado para V3.0.
 - **Síntoma:** XIC (61.9%), HUA (52.4%), ZAC (45.2%) pasan más de la mitad del tiempo en N2 por saturación.
@@ -84,16 +51,16 @@
 - **Estado:** ⏸️ Aceptado para V3.0.
 - **Nota:** en Etapa 3 se resuelve parcialmente (gemelo separado en H4). La unificación total (frontend + runner con un solo archivo) va a V3.0.
 
-### H-DIAG-04 — Motor no calibrado para XIC/HUA/ZAC
-
-- **Estado:** ⏸️ Aceptado para V3.0.
-- **Nota:** es el mismo hallazgo que H-MOTOR-05, visto desde el diagnóstico. Requiere re-auditoría.
-
 ### H-MOTOR-03 — Reporte diario exige 216h, runner filtra 192h
 
-- **Estado:** ⏸️ Aceptado para V3.0 (o H4b si se acepta).
+- **Estado:** ⏸️ Aceptado para V3.0.
 - **Síntoma:** `reporteDiario.mjs` exige `serie >= 216h` para usar una zona. El runner ya filtró a `MIN_HORAS_REQUERIDAS = 192`. Una zona con 200h se descarta del reporte diario aunque el semáforo la haya usado.
 - **Fix futuro:** ajustar el criterio a 216h coherente con 192h, o documentar la divergencia.
+
+### Validación Zod para `reporteDiario.mjs`
+
+- **Estado:** ⏸️ Aceptado para V3.0.
+- **Nota:** En H8 se validó el `paqueteMaestro` del runner y la respuesta de `/api/sara`. El contrato específico del reporte diario (que es distinto) quedó pendiente para no forzar un schema incorrecto.
 
 ---
 
@@ -148,14 +115,13 @@
 - **Estado:** ⏸️ V3.0.
 - **Alcance:** agregar `vercel.json` con configuración explícita (región, memoria, timeout) en vez de depender de autodetección.
 
-### H-UI-07/09/11/19/23 — Mejoras cosméticas
+### H-UI-07/09/11/23 — Mejoras cosméticas
 
 - **Estado:** ⏸️ V3.0.
 - **Alcance:**
   - H-UI-07: guard de contenido en secciones I-VI.
   - H-UI-09: `TextoEnriquecido` con markdown completo.
   - H-UI-11: print CSS del modal operativo.
-  - H-UI-19: `parseNoaaStamp` con validación de rangos.
   - H-UI-23: eliminar código muerto en `DisclaimerModal`.
 
 ### H-API-02/05 — Mejoras de backend
@@ -174,7 +140,7 @@
 
 ## 4. Estado de la Etapa 3 (resumen)
 
-### Cerrados ✅
+### Cerrados ✅ (Todos los hitos)
 
 | Hito | Descripción |
 |---|---|
@@ -184,17 +150,12 @@
 | H2b | Eliminar `api/glm.js` |
 | H2c | Fix lluvia efectiva solo a estados afectados |
 | H3 | Fallback frontend con 14 nodos |
+| H4 | Motor unificado (gemelo separado) |
+| H5 | N18 (visibilidad blindada) + H-SEG-01 |
 | H6 | DRY (5 módulos compartidos, 14 copias eliminadas) |
 | H7a | Vitest bloqueante (36 tests, CI en GitHub Actions) |
-
-### Pendientes ⏳
-
-| Hito | Descripción |
-|---|---|
-| H4 | Motor unificado (gemelo separado) |
-| H5 | N18 + H-SEG-01 |
-| H7b | Vitest resto |
-| H8 | Zod activo |
+| H7b | Vitest resto (79 tests totales) + extracción NOAA |
+| H8 | Zod activo (Blob y Response) + Hotfix H8.5 |
 | H9 | Cierre documental |
 
 ---

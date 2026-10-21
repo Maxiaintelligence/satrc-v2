@@ -1,6 +1,6 @@
 # SatRC V2.0 — Guía de Operación y Despliegue
 
-> **Última actualización:** Octubre 2026 (Etapa 3 en curso, H0–H6 cerrados).
+> **Última actualización:** Octubre 2026 (Etapa 3 cerrada. H0–H9 completados).
 
 ## Índice
 
@@ -23,12 +23,12 @@
 
 - **Deploy automático:** al hacer `git push origin main`, Vercel hace deploy.
 - **Sin `vercel.json`:** el deploy usa autodetección (funciones en `api/`, frontend en `src/`).
-- **Verificación:** en [Vercel Dashboard](https://vercel.com/dashboard) → proyecto `satrc-v2` → *Deployments*. El último commit debe aparecer como **Ready** (o **Skipped** si solo toca `docs/`).
+- **Verificación:** en [Vercel Dashboard](https://vercel.com/dashboard) → proyecto `satrc-v2` → *Deployments*. El último commit debe aparecer como **Ready**.
 
 ### Runner (GitHub Actions)
 
 - **Deploy automático:** al hacer `git push origin main`, el próximo workflow usa el código nuevo.
-- **Workflow:** `.github/workflows/sara_cron.yml`.
+- **Workflow:** `.github/workflows/sara_cron.yml` (runner) y `.github/workflows/tests.yml` (tests).
 - **Horario:** cada 3 horas (`cron '21 */3 * * *'`) + disparo manual.
 - **Scheduler externo:** cron-job.org (llama a `/api/disparar-workflow`).
 
@@ -59,6 +59,8 @@
 
 > **Modo emergencia:** si faltan zonas, se genera un reporte parcial que **NO** se guarda en el Blob (protege el vigente).
 
+> **Nota de tokens:** el LLM está configurado con `max_completion_tokens: 4096` (H8.5) para evitar que el JSON de 7 secciones se corte y Groq devuelva HTTP 400.
+
 ### Claves de operador
 
 - **Ubicación:** `api/reporte-ondemand.js` (mapa `USUARIOS_AUTORIZADOS`).
@@ -69,13 +71,11 @@
 
 ## 3. Disparar el workflow manualmente
 
-Hay 3 formas. **Recomendación:** usar `gh` CLI (Git Bash).
+Hay 3 formas. **Recomendación:** usar `gh` CLI.
 
 ### Opción A — `gh` CLI (recomendada)
 
 **Requisitos:** tener `gh` instalado y estar logueado (`gh auth login`).
-
-En Git Bash:
 
 ```bash
 gh workflow run sara_cron.yml --ref main --repo Maxiaintelligence/satrc-v2
@@ -96,17 +96,13 @@ gh run view <RUN_ID> --repo Maxiaintelligence/satrc-v2 --log
 ### Opción B — UI de GitHub
 
 1. Abrir: <https://github.com/Maxiaintelligence/satrc-v2/actions/workflows/sara_cron.yml>
-2. Click en **Run workflow** (arriba a la derecha).
+2. Click en **Run workflow**.
 3. Branch: `main`.
-4. Click en el botón verde **Run workflow**.
-
-No requiere contraseña (solo estar logueado en GitHub).
+4. Click en **Run workflow**.
 
 ### Opción C — PowerShell con `CRON_SECRET`
 
 **Requisitos:** tener `CRON_SECRET` (en Vercel → Settings → Environment Variables).
-
-En PowerShell:
 
 ```powershell
 $secret = "<CRON_SECRET>"
@@ -114,8 +110,6 @@ Invoke-RestMethod -Uri "https://satrc-v2.vercel.app/api/disparar-workflow" `
   -Method POST `
   -Headers @{ "x-cron-secret" = $secret }
 ```
-
-> ⚠️ Si el `CRON_SECRET` es incorrecto, el endpoint devuelve `401 No autorizado` sin disparar el workflow. Verifica el valor antes de usar este método.
 
 ---
 
@@ -129,11 +123,11 @@ Invoke-RestMethod -Uri "https://satrc-v2.vercel.app/api/disparar-workflow" `
 curl.exe -s -o NUL -w "/: HTTP %{http_code}`n" "https://satrc-v2.vercel.app/"
 ```
 
-**2. ¿`/api/sara` responde?**
+**2. ¿`/api/sara` responde y valida Zod? (H8)**
 
 ```powershell
 $sara = Invoke-RestMethod -Uri "https://satrc-v2.vercel.app/api/sara?t=$(Get-Date -UFormat %s)" -Method GET
-Write-Host "origen: $($sara.origen)"
+Write-Host "origen: $($sara.origen)" # Debe ser VERCEL_BLOB_ACTUALIZADO
 Write-Host "Semáforo: N4=$($sara.semaforo.totalNivel4), N3=$($sara.semaforo.totalNivel3)"
 Write-Host "Bitácora: $($sara.bitacora.Count) entradas"
 ```
@@ -154,18 +148,19 @@ Write-Host "GIF: $($gif.url.Substring(0, 60))..."
 
 ### Runner (última corrida)
 
-En Git Bash:
-
 ```bash
 gh run list --workflow=sara_cron.yml --repo Maxiaintelligence/satrc-v2 --limit 3
 ```
 
-**Esperado:** 3 corridas recientes con ✓ (success) o ✗ (failure).
+Esperado: corridas con ✓ (success).
 
-Ver el log de la última:
+### Tests locales (Vitest)
 
-```bash
-gh run view <RUN_ID> --repo Maxiaintelligence/satrc-v2 --log
+Antes de hacer un push, verificar que los 79 tests pasen:
+
+```powershell
+cd "C:\Users\anton\...\satrc-v3"
+npm test
 ```
 
 ---
@@ -177,31 +172,28 @@ gh run view <RUN_ID> --repo Maxiaintelligence/satrc-v2 --log
 1. Ver el log: `gh run view <RUN_ID> --log`.
 2. Buscar errores comunes:
 
-   | Error | Causa probable |
-   |---|---|
-   | `Cannot find module` | Import roto |
-   | `ReferenceError` | Función no definida |
-   | `Open-Meteo HTTP 503` | Open-Meteo caído (transitorio) |
-   | `BLOB_READ_WRITE_TOKEN` | Credenciales faltantes |
+| Error | Causa probable |
+|---|---|
+| `Cannot find module` | Import roto |
+| `Open-Meteo HTTP 503` | Open-Meteo caído (transitorio) |
+| `BLOB_READ_WRITE_TOKEN` | Credenciales faltantes |
+| `❌ [ZOD] El paqueteMaestro no cumple el schema` | (H8) Bug en el motor. El runner abortó para no publicar datos corruptos. |
 
-3. Si es transitorio (503): esperar y reintentar.
-4. Si es código: diagnosticar, fix, commit, push, reintentar.
+- **Si es transitorio (503):** esperar y reintentar.
+- **Si es Zod (H8):** revisar el `console.error` que imprimió Zod. Indica exactamente qué campo falló (ej. `nivel_alerta` fuera de rango). Corregir el motor, pushear y reintentar.
 
 ### El Blob no se actualiza
 
 1. Verificar que el runner corrió: `gh run list --workflow=sara_cron.yml --limit 1`.
 2. Si el runner falló: ver el log.
 3. Si el runner corrió OK pero el Blob no cambió: verificar `put()` en el log (`✅ [SARA RUNNER] Publicación exitosa`).
-4. Si aparece `❌ Error al publicar en Vercel Blob`: verificar `BLOB_READ_WRITE_TOKEN` en los secrets de GitHub Actions.
+4. Si aparece `❌ Error al publicar en Vercel Blob`: verificar `BLOB_READ_WRITE_TOKEN`.
 
-### `/api/sara` devuelve 500
+### `/api/sara` devuelve 500 o fallback en vivo
 
-1. Verificar que Vercel esté en **Ready** (dashboard de Vercel).
-2. Si está en **Error**: ver los logs de Vercel Functions.
-3. Errores comunes:
-   - Import roto (`.js` faltante).
-   - `estado_diocesano.json` corrupto (Zod lo detecta en H8).
-4. **Rollback:** `git revert <hash-del-commit-roto>` + push.
+1. Verificar que Vercel esté en **Ready**.
+2. Si Vercel está OK, pero `/api/sara` devuelve `origen: RESPUESTA_EN_VIVO` en vez de `VERCEL_BLOB_ACTUALIZADO`: Zod rechazó el Blob. Revisar los logs de Vercel (`[ZOD] El estado del Blob no cumple el schema`). Esto significa que el Blob tiene datos viejos o corruptos que no coinciden con el contrato actual.
+3. **Rollback:** `git revert <hash-del-commit-roto>` + push.
 
 ### `/api/sara` devuelve datos viejos
 
@@ -277,16 +269,15 @@ $env:GROQ_API_KEY = "gsk_..."
 $env:BLOB_READ_WRITE_TOKEN = "vercel_blob_rw_..."
 ```
 
-> **Decisión de Etapa 3:** la verificación funcional es 100 % en GitHub Actions. **No** se corre el runner completo en local.
->
-> `node --check` y `npm run build` sí se usan (validan sintaxis, no hacen una corrida completa).
+> **Decisión de Etapa 3:** la verificación funcional es 100 % en GitHub Actions.
 
 ---
 
 ## 8. Estado de la Etapa 3
 
-- **Cerrados:** H0, H1, H2a, H2b, H2c, H3, H6.
-- **Pendientes:** H7a, H4, H5, H7b, H8, H9.
+- **Cerrados:** H0, H1, H2a, H2b, H2c, H3, H4, H5, H6, H7a, H7b, H8, H9.
+- **Tests:** 79 passing (CI en GitHub Actions).
+- **Producción:** validación estricta con Zod.
 
 Ver `docs/08_ETAPA3_PLAN.md` para el detalle completo.
 
@@ -296,10 +287,10 @@ Ver `docs/08_ETAPA3_PLAN.md` para el detalle completo.
 
 | Rol | Persona | Clave de operador |
 |---|---|---|
-| Desarrollador principal | Ing. Antonio G. Madrigal | `Preguntar clave al desarrollador` |
-| Coordinación pastoral | Padre Roberto López Medina | `Preguntar clave al desarrollador` |
-| Coordinación pastoral | Padre Omar Martínez Vázquez | `Preguntar clave al desarrollador` |
-| Autoridad eclesiástica | Mons. Óscar Roberto Domínguez C. | `Preguntar clave al desarrollador` |
+| Desarrollador principal | Ing. Antonio G. Madrigal | Preguntar clave al desarrollador |
+| Coordinación pastoral | Padre Roberto López Medina | Preguntar clave al desarrollador |
+| Coordinación pastoral | Padre Omar Martínez Vázquez | Preguntar clave al desarrollador |
+| Autoridad eclesiástica | Mons. Óscar Roberto Domínguez C. | Preguntar clave al desarrollador |
 
 **Para emergencias operativas:** contactar al coordinador de Cáritas diocesano.
 
@@ -309,6 +300,6 @@ Ver `docs/08_ETAPA3_PLAN.md` para el detalle completo.
 
 - [Open-Meteo docs](https://open-meteo.com/en/docs)
 - [Groq API docs](https://console.groq.com/docs)
-- [Vercel Blob docs](https://vercel.com/docs/storage/vercel-blob)
-- [NOAA GOES-19](https://www.goes.noaa.gov/)
+- [Vercel Blob docs](https://vercel.com/docs/vercel-blob)
+- [NOAA GOES-19](https://www.star.nesdis.noaa.gov/goes/)
 - [SMN](https://smn.conagua.gob.mx/)

@@ -5,9 +5,9 @@ Cáritas Pastoral Social • Arquidiócesis de Tulancingo (Hidalgo, Sierra Norte
 
 | Campo | Detalle |
 |---|---|
-| **Versión del documento** | 2.1.0 |
-| **Fecha de corte y actualización** | 20 de octubre de 2026 |
-| **Estado del sistema en producción** | Operativo y Estable (Etapa 3 de estabilización de deuda técnica; H0 a H7a cerrados) |
+| **Versión del documento** | 2.2.0 (Cierre de Etapa 3) |
+| **Fecha de corte y actualización** | 21 de octubre de 2026 |
+| **Estado del sistema en producción** | Operativo y Estable (Etapa 3 finalizada; H0 a H9 cerrados) |
 | **Audiencia** | Ingenieros de software, administradores de sistemas, líderes técnicos y auditores que asuman la operación y evolución del proyecto |
 
 ---
@@ -102,7 +102,7 @@ Cubre **405 localidades** rurales y semiurbanas de alta marginación y relieve a
 │                                                                                             │
 │  [Runner Autónomo] (scripts/ejecutar_sara_autonomo.mjs) ──► Cada 3h vía GitHub Actions      │
 │  [API Endpoints]                                                                            │
-│    • /api/sara               ◄── Entrega estado diocesano, semáforo y bitácora              │
+│    • /api/sara               ◄── Entrega estado diocesano (validado con Zod)                │
 │    • /api/smn                ◄── Scraper tolerante a fallos de avisos CONAGUA               │
 │    • /api/latest-gif         ◄── Resuelve el bucle animado más reciente de GOES-19          │
 │    • /api/reporte-ondemand   ◄── LLM Groq (gpt-oss-120b) + Fallback Determinista            │
@@ -137,106 +137,139 @@ Cubre **405 localidades** rurales y semiurbanas de alta marginación y relieve a
 | Herramienta de Build | Vite | ^8.3.0 | Empaquetador ultrarrápido y servidor de desarrollo |
 | Estilos | Tailwind CSS / PostCSS | ^3.4.19 | Utility-first CSS, paletas contrastadas para rescate |
 | Cartografía | Leaflet / React-Leaflet | 1.9.4 / 5.0.0 | Renderizado geoespacial de mapas sin costo de API |
-| Validación de Schemas | Zod | ^4.6.5 | Validación en el borde de contratos de datos |
+| Validación de Schemas | Zod | ^4.6.5 | Validación estricta en el borde de contratos (H8) |
 | Linter / Análisis | Oxlint | ^1.81.0 | Linter de alto rendimiento en Rust |
 | Iconografía | Lucide React | ^1.50.0 | Iconografía táctica ligera |
 | LLM Inference | Groq (`openai/gpt-oss-120b`) | API v1 | Redacción de reportes estructurados en < 3 seg |
 | Satélite | NOAA NESDIS STAR GOES-19 | CDN Público | Monitoreo de nubes, celdas convectivas y fuego |
+| Testing | Vitest | ^5.0.5 | Suite de 79 tests unitarios y de integración (H7a/H7b) |
 
 ### 2.3 Estructura de Directorios Explicada
 
 ```text
-satrc-v2/
-├── .github/workflows/
-│   └── sara_cron.yml           # Workflow de GitHub Actions (ejecuta el runner cada 3h)
-├── api/                        # Funciones backend serverless
-│   ├── disparar-workflow.js    # Disparador webhook para cron-job.org
-│   ├── latest-gif.js           # Scraping dinámico del último GIF de GOES-19
-│   ├── reporte-ondemand.js     # Generación de reportes de emergencia con Groq/Fallback
-│   ├── sara.js                 # Endpoint maestro de estado, dictamen y bitácora
-│   └── smn.js                  # Scraper del aviso vigente de CONAGUA/SMN
-├── docs/                       # Acervo documental formal
-│   ├── 00_METODOLOGIA.md       # Metodología de investigación y auditoría empírica
-│   ├── 01_CONTEXTO.md          # Contexto pastoral, territorio y principios
-│   ├── 02_ARQUITECTURA.md      # Arquitectura de componentes y estado
-│   ├── 03_MOTOR_RIESGO.md      # Formulación matemática y física de las 6 reglas
-│   ├── 04_HISTORIAL_BUGS.md    # Registro histórico de anomalías resueltas
-│   ├── 05_PROMPT_SARA.md       # Ingeniería de prompts del agente SARA
-│   ├── 06_PENDIENTES.md        # Backlog de deuda técnica (H7a, H4, H5, H8)
-│   ├── 07_GUIA_OPERACION.md    # Guía de monitoreo, contingencias y rollback
-│   ├── 08_ETAPA3_PLAN.md       # Plan detallado de estabilización Etapa 3
-│   ├── 09_HALLAZGOS_ETAPA3.md  # Catálogo de 35 hallazgos de línea base
-│   └── 10_HANDOVER.md          # Este documento maestro de entrega
-├── public/                     # Activos estáticos, manifest PWA e iconos
-│   ├── icon.svg, favicon.svg   # Identidad visual oficial de Cáritas Tulancingo
-│   ├── manifest.json           # Declaración de instalación PWA
-│   └── sw.js                   # Service Worker para capacidades offline
-├── scripts/                    # Scripts de diagnóstico y automatización
-│   ├── ejecutar_sara_autonomo.mjs   # Runner autónomo (cronjob principal)
-│   └── reportes/reporteDiario.mjs   # Generador de reporte diario matutino (06:00 hrs)
-├── src/
-│   ├── assets/                 # Gráficos e imágenes
-│   ├── components/             # Componentes React reutilizables
-│   │   ├── DisclaimerModal.jsx       # Aviso legal y de subordinación a Protección Civil
-│   │   ├── OfficialAlertBanner.jsx   # Cinta superior de alertas SMN
-│   │   ├── ReporteCuerpo.jsx         # Renderizador tipográfico de las 7 secciones de SARA
-│   │   ├── ReporteModalOperativo.jsx # Modal de exportación, WhatsApp y descarga TXT
-│   │   ├── ReporteModalPublico.jsx   # Modal de consulta pública informativa
-│   │   ├── RiskMap.jsx               # Mapa Leaflet interactivo con círculos por nivel
-│   │   └── SatelliteViewer.jsx       # Visor NOAA GOES-19 con selector de productos
-│   ├── config/noaa-goes.js     # Metadatos de los 5 canales GOES-19
-│   ├── data/localidades.json   # Base de datos con 405 localidades categorizadas
-│   ├── engine/                 # Núcleo de cálculo meteorológico del frontend
-│   │   ├── consensusEngine.js        # Mediana con filtro de ceros espurios (240h)
-│   │   ├── meteoFetcher.js           # Peticiones resilientes a Open-Meteo
-│   │   ├── reportesRegionales.js     # Agrupación de métricas de las 14 zonas
-│   │   └── riskEvaluator.js          # Evaluación de las 6 reglas de riesgo local
-│   ├── lib/compartido/         # Módulos DRY extraídos en Etapa 3 (H6)
-│   │   ├── fechas.js           # Formateo canónico de marcas de tiempo
-│   │   ├── markdown.jsx        # Parser ligero seguro de negritas y viñetas
-│   │   ├── mock-blob.js        # Almacén de blobs en memoria para AI Studio
-│   │   ├── mojibake.js         # Filtro de sanitización de doble UTF-8
-│   │   ├── nodos.js            # Selección de nodo de referencia por zona
-│   │   └── regionales.js       # Normalización y construcción de bloques de texto
-│   ├── schemas/estadoDiocesanoSchema.js # Contrato de datos validado con Zod
-│   ├── views/                  # Vistas principales de navegación
-│   │   ├── MonitorPublico.jsx  # Vista comunitaria sin restricciones
-│   │   └── SatRCOperativo.jsx  # Sala de control con clave y funciones avanzadas
-│   ├── App.jsx                 # Controlador raíz de autenticación y navegación
-│   └── index.css, main.jsx     # Puntos de entrada de React y Tailwind
-├── tailwind.config.js          # Configuración del motor de diseño Tailwind
-└── vite.config.js              # Configuración de compilación Vite
+satrc-v3/
+├── .github/
+│   └── workflows/
+│       ├── sara_cron.yml           # Cronjob: ejecuta el runner autónomo cada 3h
+│       └── tests.yml               # CI: corre los 79 tests de Vitest en cada push
+│
+├── api/                            # Vercel Serverless Functions (Backend Node.js)
+│   ├── disparar-workflow.js        # Endpoint webhook (cron-job.org) para disparar el runner
+│   ├── latest-gif.js               # Scraper de NOAA: obtiene el último GIF del satélite
+│   ├── reporte-ondemand.js         # Generador de reportes manuales con Groq (valida auth)
+│   ├── sara.js                     # Endpoint principal: entrega el estado y la bitácora
+│   └── smn.js                      # Scraper del SMN/CONAGUA: detecta avisos oficiales
+│
+├── docs/                           # Documentación fundacional del proyecto (00 a 10)
+│   ├── 00_METODOLOGIA.md           # Reglas de oro de desarrollo y commits
+│   ├── 01_CONTEXTO.md              # Manifiesto, alcance y glosario
+│   ├── 02_ARQUITECTURA.md          # Diagramas de componentes y flujo de datos
+│   ├── 03_MOTOR_RIESGO.md          # Explicación física de las 6 reglas y el consenso
+│   ├── 04_HISTORIAL_BUGS.md        # Registro de todos los fixes aplicados
+│   ├── 05_PROMPT_SARA.md           # Ingeniería de prompts para el LLM de SARA
+│   ├── 06_PENDIENTES.md            # Backlog de deuda técnica (V3.0)
+│   ├── 07_GUIA_OPERACION.md        # Runbook de fallos, despliegue y rollback
+│   ├── 08_ETAPA3_PLAN.md           # Roadmap detallado de la deuda técnica
+│   ├── 09_HALLAZGOS_ETAPA3.md      # Catálogo de los 36 hallazgos de auditoría
+│   └── 10_HANDOVER.md              # Este documento maestro
+│
+├── public/                         # Activos estáticos servidos por Vite
+│   ├── favicon.svg                 # Icono de la pestaña del navegador
+│   ├── icon.svg, icons.svg         # Identidad visual de Cáritas
+│   ├── manifest.json               # Configuración de la PWA (Progressive Web App)
+│   └── sw.js                       # Service Worker para capacidades offline
+│
+├── scripts/                        # Scripts de automatización y CLI
+│   ├── diagnostico/                # Scripts auxiliares en PowerShell (calibración)
+│   ├── engine/
+│   │   ├── __tests__/
+│   │   │   └── riskEvaluatorRunner.test.js # Tests de paridad del motor (H4)
+│   │   └── riskEvaluatorRunner.mjs # Gemelo del motor de riesgo para el runner (H4)
+│   ├── reportes/
+│   │   └── reporteDiario.mjs       # Generador del reporte automático de las 6:00 AM
+│   └── ejecutar_sara_autonomo.mjs  # Orquestador principal (se corre cada 3h)
+│
+├── src/                            # Código fuente del Frontend (React)
+│   ├── assets/                     # Imágenes y SVGs estáticos
+│   ├── components/                 # Componentes React reutilizables
+│   │   ├── DisclaimerModal.jsx     # Aviso legal y subordinación a PC
+│   │   ├── OfficialAlertBanner.jsx # Banner superior de alertas SMN
+│   │   ├── ReporteCuerpo.jsx       # Renderizador de las 7 secciones de SARA
+│   │   ├── ReporteModalOperativo.jsx # Modal de reportes (Operadores)
+│   │   ├── ReporteModalPublico.jsx # Modal de reportes (Público)
+│   │   ├── RiskMap.jsx             # Mapa Leaflet con los 405 puntos de riesgo
+│   │   └── SatelliteViewer.jsx     # Visor de los GIFs de NOAA
+│   ├── config/
+│   │   └── noaa-goes.js            # Configuración de los 5 canales satelitales
+│   ├── data/
+│   │   └── localidades.json        # Base de datos de las 405 localidades
+│   ├── engine/                     # Núcleo lógico del frontend
+│   │   ├── __tests__/              # Tests del motor, consenso y regresión
+│   │   ├── consensusEngine.js      # Mediana de GFS+ICON+GEM
+│   │   ├── meteoFetcher.js         # Peticiones a Open-Meteo
+│   │   ├── reportesRegionales.js   # Caché y agrupación de datos por zona
+│   │   └── riskEvaluator.js        # Motor canónico de las 6 reglas
+│   ├── lib/                        # Librerías y utilidades
+│   │   └── compartido/             # Módulos DRY compartidos con el backend (H6)
+│   │       ├── __tests__/          # Tests de utilidades (mojibake, noaa, etc.)
+│   │       ├── fechas.js           # Formateo de fechas a hora México
+│   │       ├── markdown.jsx        # Renderizador de viñetas y negritas
+│   │       ├── mojibake.js         # Limpiador de UTF-8 corrupto
+│   │       ├── noaa.js             # Parser de timestamps satelitales (H7b)
+│   │       ├── nodos.js            # Selecciona el nodo de referencia por zona
+│   │       └── regionales.js       # Normalizador de bloques regionales
+│   ├── schemas/
+│   │   └── estadoDiocesanoSchema.js # Contrato Zod de validación (H8)
+│   ├── views/                      # Vistas principales de la PWA
+│   │   ├── MonitorPublico.jsx      # Vista pública
+│   │   └── SatRCOperativo.jsx      # Sala de mando con autenticación
+│   ├── App.css, index.css          # Estilos globales
+│   ├── App.jsx                     # Componente raíz y enrutamiento
+│   └── main.jsx                    # Punto de entrada de React
+│
+├── .env.local                      # Variables de entorno locales (no commiteado)
+├── .gitignore                      # Archivos ignorados por Git
+├── .oxlintrc.json                  # Configuración del linter Oxlint
+├── AUDITORIA_MOTOR.md              # Notas de la auditoría inicial
+├── index.html                      # HTML raíz de la PWA
+├── localidades_crudo.csv           # CSV fuente original de datos
+├── package.json                    # Dependencias del proyecto
+├── package-lock.json               # Árbol exacto de dependencias
+├── postcss.config.js               # Configuración de PostCSS (Tailwind)
+├── procesar_datos.cjs              # Script de generación del JSON de localidades
+├── README.md                       # Readme principal
+├── series_historicas_14_zonas.json # Datos históricos de prueba
+├── simulacion_nodos_resultado.json # Resultados de simulación
+├── simulacion_nodos_resultado_v2.json
+├── tailwind.config.js              # Configuración de Tailwind CSS
+└── vite.config.js                  # Configuración del bundler Vite
+
+⚠️ Nota de arquitectura: Existen carpetas temporales como test/ o notas_personales/ que no forman parte del código de producción. El núcleo del sistema se concentra en src/, api/ y scripts/.
+
 ```
 
 ### 2.4 Registro de Decisiones de Arquitectura (ADRs)
 
-#### ADR-001: Adopción de 14 Nodos Regionales de Referencia (en sustitución del Nodo Único)
+#### ADR-001: Adopción de 14 Nodos Regionales de Referencia
 
-- **Fecha:** Octubre 2026.
-- **Contexto:** en la versión inicial V1, todas las 405 localidades se evaluaban utilizando únicamente el pronóstico meteorológico de Huauchinango. Esto provocaba que localidades situadas en el Altiplano semiárido (ej. Actopan o Apan) sufrieran falsas alarmas de saturación de suelo cuando llovía en la Sierra, y viceversa.
-- **Decisión:** dividir el territorio en 14 zonas de resguardo (5 en Altiplano y 9 en Sierra). Para cada zona, se toma como nodo meteorológico de referencia la localidad más poblada. Todas las comunidades de esa zona se evalúan con dicha serie meteorológica, pero aplicando su propia topografía y red vial específica.
-- **Consecuencia:** se eliminó el 86% de las falsas emergencias N4 registradas en la auditoría de 90 días (de 22 falsas alarmas a solo 3 eventos justificados).
+- **Contexto:** en V1, las 405 localidades se evaluaban con el pronóstico de Huauchinango, causando falsas alarmas en el Altiplano.
+- **Decisión:** dividir en 14 zonas de resguardo. Cada zona usa su localidad más poblada como nodo.
+- **Consecuencia:** se eliminó el 86 % de las falsas emergencias N4.
 
 #### ADR-002: Consenso Determinista Multi-Modelo (GFS + ICON + GEM)
 
-- **Fecha:** Octubre 2026.
-- **Contexto:** confiar en un solo modelo global introduce sesgos sistemáticos (ej. GFS sobreestima lluvia orográfica en México, mientras que ICON suele reportar ceros tempranos).
-- **Decisión:** calcular la mediana matemática hora a hora entre GFS (EE. UU.), ICON (Alemania) y GEM (Canadá), acompañada de un algoritmo de exclusión de ceros espurios (si dos modelos predicen lluvia significativa ≥ 0.5 mm y uno predice 0 mm, se descarta el cero).
-- **Consecuencia:** máxima confiabilidad sin necesidad de comprar pronósticos privados.
+- **Decisión:** calcular la mediana hora a hora entre GFS, ICON y GEM, con filtro de ceros espurios.
+- **Consecuencia:** máxima confiabilidad sin comprar pronósticos privados.
 
 #### ADR-003: Cadena de Bloques Criptográfica en la Bitácora
 
-- **Fecha:** Octubre 2026.
-- **Contexto:** en situaciones de desastre natural, existe el riesgo de cuestionamientos legales o deslindes de responsabilidad respecto a si la diócesis alertó a tiempo o alteró los registros posteriores.
-- **Decisión:** cada evento registrado por el runner o por los operadores genera un registro con el hash del bloque previo (`prev_hash`) y un nuevo hash calculado con `crypto.createHash('sha256')`. El primer registro enlaza con un `BLOQUE_GENESIS` de 64 ceros.
-- **Consecuencia:** imposibilidad técnica de adulterar el orden temporal de las advertencias emitidas.
+- **Decisión:** cada registro incluye `prev_hash` y un `hash_completo` calculado con SHA-256. El primer registro enlaza con `BLOQUE_GENESIS`.
+- **Consecuencia:** imposibilidad técnica de adulterar el orden temporal.
 
-#### ADR-004: Arquitectura DRY en Módulos Compartidos (`src/lib/compartido/`)
+#### ADR-004: Arquitectura DRY en Módulos Compartidos (H6)
 
-- **Fecha:** Octubre 2026 (Hito H6).
-- **Contexto:** existían 14 funciones duplicadas entre el frontend (`src/`), los endpoints serverless (`api/`) y el runner de consola (`scripts/`), provocando desincronización de reglas y errores de encoding divergentes.
-- **Decisión:** extraer toda la lógica común a `src/lib/compartido/` (`fechas.js`, `nodos.js`, `mojibake.js`, `regionales.js`, `markdown.jsx`).
-- **Consecuencia:** una sola fuente de verdad para el cálculo y formateo de datos.
+- **Decisión:** extraer toda la lógica común a `src/lib/compartido/`.
+- **Consecuencia:** una sola fuente de verdad.
 
 ---
 
@@ -244,9 +277,9 @@ satrc-v2/
 
 ### 3.1 Requisitos Previos
 
-- **Sistema Operativo:** Linux (Ubuntu 22.04+ recomendado), macOS o Windows con WSL2.
-- **Node.js:** versión 22.x (LTS recomendada).
-- **NPM:** v10.x o superior (se utiliza estrictamente `npm`; no usar Yarn, PNPM ni Bun).
+- **Sistema operativo:** Linux (Ubuntu 22.04+), macOS o Windows con WSL2.
+- **Node.js:** versión 22.x (LTS).
+- **NPM:** v10.x o superior.
 - **Git:** instalado en el PATH.
 
 ### 3.2 Instalación Paso a Paso desde Cero
@@ -265,39 +298,28 @@ npm install
 npm run dev
 ```
 
-El servidor iniciará en http://localhost:5173. Al acceder, la aplicación carga la interfaz gráfica (PWA) en el navegador. Los endpoints /api/* no están disponibles en el servidor de desarrollo local, ya que se ejecutan como Vercel Functions en la nube.
+El servidor iniciará en `http://localhost:5173`. Los endpoints `/api/*` no están disponibles en local (se ejecutan como Vercel Functions en la nube).
 
 ### 3.3 Variables de Entorno (Configuradas en Vercel)
 
-| Variable | Tipo | Requerida en Prod | Descripción y Valor por Defecto |
+| Variable | Tipo | Requerida en Prod | Descripción |
 |---|---|---|---|
-| `PORT` | Numérica | No (default: 5173) | Puerto de enlace del servidor HTTP. |
-| `NODE_ENV` | String | Sí | `development` en local / `production` en despliegue. |
-| `SARA_ADMIN_TOKEN` | String | Sí (Prod) | Token para forzar revaluaciones manuales en `/api/sara`. |
-| `SARA_ONDEMAND_TOKEN` | String | Sí (Prod) | Token del backend para autorizar la emisión de reportes. |
-| `VITE_SARA_ONDEMAND_TOKEN` | String | Sí (Prod) | Token expuesto al cliente Vite para autenticar llamadas de consola. |
-| `GROQ_API_KEY` | String | Opcional | Clave API de Groq para LLM `openai/gpt-oss-120b`. Si falta, se activa el motor determinista. |
-| `BLOB_READ_WRITE_TOKEN` | String | Sí (Vercel) | Token de lectura/escritura de Vercel Blob en la nube. |
-| `GITHUB_PAT` | String | Opcional | Personal Access Token con permiso `workflow` para disparar GitHub Actions. |
-| `CRON_SECRET` | String | Opcional | Secreto compartido recibido desde cron-job.org. |
+| `SARA_ADMIN_TOKEN` | String | Sí | Token para forzar revaluaciones manuales en `/api/sara`. |
+| `SARA_ONDEMAND_TOKEN` | String | Sí | Token del backend para autorizar la emisión de reportes. |
+| `VITE_SARA_ONDEMAND_TOKEN` | String | Sí | Token expuesto al cliente Vite para autenticar llamadas. |
+| `GROQ_API_KEY` | String | Opcional | Clave API de Groq (`openai/gpt-oss-120b`). |
+| `BLOB_READ_WRITE_TOKEN` | String | Sí (Vercel) | Token de lectura/escritura de Vercel Blob. |
+| `GITHUB_PAT` | String | Opcional | Token para disparar GitHub Actions. |
+| `CRON_SECRET` | String | Opcional | Secreto compartido con cron-job.org. |
 
 ### 3.4 Comandos de Ejecución, Pruebas y Construcción
 
 ```bash
-# Ejecutar entorno de desarrollo (Vite + HMR, puerto 5173)
-npm run dev
-
-# Ejecutar el linter estático ultrarrápido (Oxlint)
-npm run lint
-
-# Ejecutar la suite completa de tests (Vitest, 36 tests)
-npm test
-
-# Ejecutar tests en modo watch (desarrollo local)
-npm run test:watch
-
-# Compilar para producción (genera bundle estático en dist/)
-npm run build
+npm run dev         # Vite + HMR
+npm run lint        # Oxlint
+npm test            # Vitest (79 tests)
+npm run test:watch  # Vitest en modo watch
+npm run build       # Compilación de producción
 ```
 
 ---
@@ -306,64 +328,43 @@ npm run build
 
 ### 4.1 Entornos y Diferencias
 
-| Aspecto | Local (Vite dev server) | Producción en la Nube (Vercel + GitHub Actions) |
+| Aspecto | Local | Producción (Vercel + GitHub Actions) |
 |---|---|---|
-| Almacenamiento | No disponible (requiere Vercel Blob) | Vercel Blob Storage persistente |
-| Generador SARA | No disponible (requiere Vercel Function) | Groq LLM `openai/gpt-oss-120b` (si falla, retorna error 504) |
-| Runner Automático | Ejecutable bajo demanda vía CLI | GitHub Actions Cronjob (cada 3 horas) |
+| Almacenamiento | No disponible | Vercel Blob Storage |
+| Generador SARA | No disponible | Groq LLM |
+| Runner automático | Manual | GitHub Actions (cada 3 h) |
 
 ### 4.2 Proceso de Despliegue y Rollback
 
-#### Despliegue Automático (CI/CD)
-
-- **Frontend + API (Vercel):** cada `git push origin main` desencadena una compilación automática en Vercel. La autodetección compila `src/` mediante Vite y asigna `api/*.js` a Serverless Functions.
-- **Runner Autónomo (GitHub Actions):** el archivo `.github/workflows/sara_cron.yml` se ejecuta automáticamente en la nube cada 3 horas (en el minuto 21: `21 */3 * * *`).
-
-#### Procedimiento de Rollback
-
-Si se introduce una regresión crítica en producción:
+- **CI/CD:** cada `git push origin main` despliega en Vercel y activa el workflow en GitHub.
+- **Rollback:**
 
 ```bash
-# Identificar el hash del commit defectuoso
-git log -n 5 --oneline
-
-# Revertir el commit generando uno nuevo
 git revert <HASH_DEFECTUOSO> --no-edit
-
-# Empujar a la rama principal (Vercel y GitHub Actions desplegarán inmediatamente el estado anterior)
 git push origin main
 ```
 
 ### 4.3 Monitoreo y Puntos de Observación
 
-- **Estado de la Bitácora:** consultar en el navegador `https://<dominio>/api/sara`. Verificar que `dictamen.timestamp` no tenga más de 3.5 horas de antigüedad.
-- **Logs del Runner:** en el repositorio de GitHub, pestaña **Actions** → *SARA Cronjob Autónomo Diocesano* → Última ejecución → Inspeccionar logs de *Ejecutar Motor Autónomo Multivectorial SARA*.
-- **Logs de API en Vercel:** Vercel Dashboard → Proyecto `satrc-v2` → pestaña **Logs** → Filtrar por `/api/sara` o `/api/reporte-ondemand`.
+- **Bitácora:** `GET /api/sara`. Verificar antigüedad de `dictamen.timestamp` (< 3.5 h).
+- **Logs del Runner:** GitHub → Actions.
+- **Logs de API:** Vercel Dashboard → Logs.
 
-### 4.4 Runbook de Contingencias y Problemas Frecuentes
+### 4.4 Runbook de Contingencias
 
-#### Caso 1: El Runner de GitHub Actions aparece en Rojo (Fallo del Cron)
+#### Caso 1: El Runner falla (rojo)
 
-- **Síntoma:** no se actualiza el semáforo y en GitHub Actions el workflow falla con código de salida 1.
-- **Causas probables:**
-  - Open-Meteo devolvió un error HTTP 503 *Service Unavailable* o timeout por congestión.
-  - Vercel Blob rechazó la conexión por expiración del `BLOB_READ_WRITE_TOKEN`.
-- **Acción inmediata:**
-  1. Abrir el log del runner: `gh run view --log`.
-  2. Si es 503 de Open-Meteo: es un fallo transitorio de la red meteorológica; el sistema se recupera solo en la siguiente corrida de 3 horas.
-  3. Si es un fallo de token: acceder a GitHub Repo → **Settings** → **Secrets and variables** → **Actions** → actualizar `BLOB_READ_WRITE_TOKEN`.
+- **Causas:** Open-Meteo 503 (transitorio), `BLOB_READ_WRITE_TOKEN` expirado, o Zod rechazó el `paqueteMaestro` (H8).
+- **Acción:** revisar el log. Si es Zod, el error indica el campo exacto que falló. Corregir el motor y reintentar.
 
-#### Caso 2: El Generador de Reportes On-Demand no responde o reporta "Timeout de Groq"
+#### Caso 2: Error 400 en Groq (On-Demand)
 
-- **Síntoma:** el modal de la sala operativa permanece en "Generando reporte..." y concluye en error 504.
-- **Causa:** la API de Groq en la nube experimenta latencia superior a los 30 segundos (`TIMEOUT_GROQ_MS = 30000`).
-- **Solución automática implementada:** el código de `api/reporte-ondemand.js` conmuta automáticamente al motor determinista basado en reglas, asegurando que el operador reciba su reporte estructurado en 7 secciones sin interrumpir el auxilio diocesano.
+- **Causa:** el JSON de 7 secciones se cortó por falta de tokens.
+- **Solución (H8.5):** se configuró `max_completion_tokens: 4096`. Si persiste, revisar los logs.
 
-#### Caso 3: Inconsistencia o textos con caracteres extraños (Mojibake UTF-8)
+#### Caso 3: Mojibake
 
-- **Síntoma:** palabras como `SituaciÃ³n` o `TulancingÃ³` en pantallas o reportes.
-- **Diagnóstico:** conflicto de doble codificación UTF-8 en cadenas serializadas.
-- **Solución:** todos los módulos ahora consumen `repararMojibake()` y `repararObjeto()` ubicados en `src/lib/compartido/mojibake.js`, el cual normaliza secuencias corruptas tanto en strings directos como en estructuras anidadas.
+- **Solución:** el frontend y la API limpian automáticamente con `repararMojibake()`.
 
 ---
 
@@ -371,56 +372,55 @@ git push origin main
 
 ### 5.1 Matriz de Servicios y Credenciales
 
-| Servicio / Cuenta | Propósito | Dónde se Guarda | Quién lo Administra |
-|---|---|---|---|
-| GitHub (`Maxiaintelligence/satrc-v2`) | Control de versiones y Runner CI/CD | github.com | Ing. Antonio G. Madrigal |
-| Vercel (`satrc-v2`) | Hosting PWA, API Serverless y Blob Storage | Vercel Environment Variables | Ing. Antonio G. Madrigal |
-| Groq Cloud API | Modelo `openai/gpt-oss-120b` para SARA | Secretos de Actions y Vercel | Ing. Antonio G. Madrigal |
-| cron-job.org | Llamador HTTP externo cada 3 horas | Configuración externa web | Ing. Antonio G. Madrigal |
-| Open-Meteo | Datos horarios de GFS, ICON y GEM | Libre (sin clave / dominio público) | Open-Meteo GmbH |
-| SMN / CONAGUA | Avisos de tiempo severo en México | Scraping público (sin clave) | Gobierno de México |
-| NOAA GOES-19 | Bucle satelital de 5 canales | CDN público (sin clave) | NOAA NESDIS (EE. UU.) |
+| Servicio | Propósito | Dónde se Guarda |
+|---|---|---|
+| GitHub | Código y Runner CI/CD | github.com |
+| Vercel | Hosting y Blob | Vercel Env Vars |
+| Groq | LLM SARA | Secrets |
+| cron-job.org | Scheduler externo | Web |
+| Open-Meteo | Datos meteorológicos | Libre |
+| SMN / CONAGUA | Avisos oficiales | Scraping público |
+| NOAA GOES-19 | Imágenes satelitales | CDN público |
 
-> **POLÍTICA DE SEGURIDAD ESTRICTA:** ninguna credencial, token o clave privada debe registrarse en el control de versiones. Todas residen en los administradores de secretos de GitHub Actions y Vercel.
+> **SEGURIDAD:** ninguna credencial se registra en el control de versiones.
 
-### 5.2 Estructura de Costos y Vencimientos
+### 5.2 Costos
 
-- **Costo total de operación:** $0.00 MXN mensuales.
-- Todos los servicios operan bajo planes "Hobby / Free Tier" permanentes.
-- No existen licencias comerciales ni vencimientos de tarjetas de crédito vinculadas.
+**Costo total:** $0.00 MXN mensuales (Free Tier).
 
 ---
 
 ## 6. Estado Actual del Proyecto y Deuda Técnica
 
-### 6.1 Lo que está Terminado y Operativo al 100%
+### 6.1 Lo que está Terminado y Operativo al 100 %
 
-- [x] Motor de consenso multi-modelo de 240 horas con filtro de ceros espurios.
-- [x] Algoritmo de clasificación de riesgo geomecánico e hidrológico sobre 405 localidades.
-- [x] Arquitectura de 14 nodos de referencia regional.
-- [x] Scraper de avisos de CONAGUA/SMN con mapeo a niveles 1, 2 y 3.
-- [x] Visor de bucles satelitales GOES-19 con resolución automática de GIFs en tiempo real.
-- [x] Consola operativa protegida por clave con generación de reportes on-demand.
-- [x] Bitácora auditable con encadenamiento criptográfico SHA-256.
-- [x] Módulos DRY extraídos en `src/lib/compartido/`.
+- [x] Motor de consenso multi-modelo de 240 h.
+- [x] Algoritmo de riesgo sobre 405 localidades.
+- [x] Arquitectura de 14 nodos.
+- [x] Scraper de avisos SMN.
+- [x] Visor satelital GOES-19 (con parser validado en H7b).
+- [x] Consola operativa con generación de reportes.
+- [x] Bitácora auditable SHA-256.
+- [x] Validación estricta de contratos con Zod (H8).
+- [x] Módulos DRY.
 
-### 6.2 Deuda Técnica Conocida y Roadmap Inmediato
+### 6.2 Deuda Técnica Conocida y Roadmap
 
-**Etapa 3 (Estabilización y Refactoring):**
+**Etapa 3 (finalizada):**
 
-- [x] **H0:** Documentación de línea base (35 hallazgos analizados)
-- [x] **H1:** Cobertura del runner con lotes concurrentes de 4
-- [x] **H2a:** Sincronización del parser SMN del runner
-- [x] **H2b:** Eliminación de `api/glm.js` huérfano
-- [x] **H2c:** Aplicación de aviso SMN restringida a estados afectados
-- [x] **H3:** Fallback en vivo del frontend expandido a 14 nodos
-- [x] **H6:** Refactorización DRY en `src/lib/compartido/`
-- [x] **H7a:** Vitest instalado, 36 tests, CI en GitHub Actions (cerrado en Etapa 3)
-- [x] **H4:** Creación del gemelo desacoplado del motor en runner
-- [x] **H5:** Corrección de variable `visibility_gfs_seamless` (N18)
-- [x] **H7b:** Pruebas unitarias de utilidades de cadenas y fechas
-- [x] **H8:** Activación de validación estricta Zod en tiempo de ejecución
-- [ ] **H9:** Cierre documental formal de Etapa 3
+- [x] **H0:** documentación de línea base.
+- [x] **H1:** cobertura del runner con lotes de 4.
+- [x] **H2a:** sincronización del parser SMN del runner.
+- [x] **H2b:** eliminación de `api/glm.js` huérfano.
+- [x] **H2c:** aplicación de aviso SMN restringida a estados afectados.
+- [x] **H3:** fallback en vivo del frontend expandido a 14 nodos.
+- [x] **H4:** creación del gemelo desacoplado del motor en runner.
+- [x] **H5:** corrección de variable `visibility_gfs_seamless` (N18).
+- [x] **H6:** refactorización DRY en `src/lib/compartido/`.
+- [x] **H7a:** Vitest instalado, 36 tests, CI en GitHub Actions.
+- [x] **H7b:** pruebas unitarias de utilidades y extracción NOAA.
+- [x] **H8:** activación de validación estricta Zod en tiempo de ejecución.
+- [x] **H9:** cierre documental formal de Etapa 3.
 
 ---
 
@@ -428,30 +428,27 @@ git push origin main
 
 ### 7.1 Convenciones de Código y Commits
 
-- **Filosofía de commits:** commits atómicos bajo la regla *"Un commit = Una causa"*. El título del commit debe referenciar el componente o hito (ej. `fix(smn): normalizar extraccion de avisos para Puebla y Veracruz`).
-- **Estrategia de ramas:** trunk-based simplificado. Todo cambio pasa por validación local antes de fusionarse en `main`.
-- **Análisis de código:** se utiliza `oxlint` para garantizar ausencia de errores sintácticos, dependencias circulares o imports huérfanos.
+- **Regla:** "Un commit = Una causa".
+- **Formato:** `tipo(área): descripción corta`.
+- **Ramas:** trunk-based simplificado.
 
 ### 7.2 Estrategia de Pruebas
 
-#### Suite formal con Vitest (H7a)
+#### Suite formal con Vitest
 
-El proyecto cuenta con **36 tests unitarios** ejecutados con Vitest. Se corren con `npm test` y también en cada push/PR a `main` vía GitHub Actions (`.github/workflows/tests.yml`).
+El proyecto cuenta con 79 tests unitarios ejecutados con Vitest.
 
 **Archivos de test:**
 
-- **`src/engine/__tests__/consensusEngine.test.js`** (12 tests): mediana de precipitación, filtro de ceros espurios, ráfagas como máximo, clasificación de confiabilidad por dispersión, lectura de visibilidad real (N18).
-- **`src/engine/__tests__/riskEvaluator.test.js`** (16 tests): las 6 reglas del motor (N1–N4), prioridad entre reglas, niebla densa (N18), aplicación del aviso SMN solo a estados afectados (H-MOTOR-06).
-- **`src/engine/__tests__/regresionFase1.test.js`** (8 tests): firma incompleta de `alertaSMN`, principio precautorio (SMN vs Open-Meteo), discriminación territorial (Apan con terracería), aviso SMN vencido, validación con el schema Zod real.
-
-**Casos de estrés cubiertos por los tests:**
-
-- **Huehuetla:** cañada fluvial escarpada; saturación de suelo > 100 mm con talud de 54°. Debe clasificar en **NIVEL 4 (EMERGENCIA)** (cubierto por tests de la Regla 2).
-- **Apan / La Unión:** comunidad de montaña con camino de terracería. Debe clasificar en **NIVEL 3 (ALERTA_TEMPRANA)** por Regla 5 (corte vial) (cubierto por `regresionFase1.test.js`).
-
-#### Validación de Schemas
-
-Archivo `src/schemas/estadoDiocesanoSchema.js` mediante Zod para verificar que ningún objeto de datos viaje incompleto hacia el frontend. Los tests de `regresionFase1.test.js` validan que el schema rechaza payloads corruptos (semáforo negativo, evaluaciones vacías) y acepta payloads válidos.
+- `src/engine/__tests__/consensusEngine.test.js` (13 tests).
+- `src/engine/__tests__/riskEvaluator.test.js` (16 tests).
+- `src/engine/__tests__/regresionFase1.test.js` (8 tests).
+- `scripts/engine/__tests__/riskEvaluatorRunner.test.js` (3 tests).
+- `src/lib/compartido/__tests__/mojibake.test.js` (6 tests).
+- `src/lib/compartido/__tests__/regionales.test.js` (7 tests).
+- `src/lib/compartido/__tests__/fechas.test.js` (7 tests).
+- `src/lib/compartido/__tests__/noaa.test.js` (12 tests).
+- `src/lib/compartido/__tests__/estadoDiocesanoSchema.test.js` (7 tests).
 
 ---
 
@@ -459,57 +456,20 @@ Archivo `src/schemas/estadoDiocesanoSchema.js` mediante Zod para verificar que n
 
 ### 8.1 Catálogo Geoespacial (`src/data/localidades.json`)
 
-Contiene 405 registros. Cada entrada incluye:
-
-```json
-{
-  "id": "LOC_HGO_HUEHUETLA_01",
-  "nombre": "Huehuetla",
-  "municipio": "Huehuetla",
-  "estado": "Hidalgo",
-  "zona_id": "HYC",
-  "zona_nombre": "Huehuetla-San Bartolo Tutotepec",
-  "coords": { "lat": 20.4633, "lon": -98.0739 },
-  "topografia": {
-    "altitud_msnm": 480,
-    "pendiente_max_deg": 54.91,
-    "relieve": "CANADA",
-    "twi": 11.2
-  },
-  "hidrologia": {
-    "subcuenca_cve": "RH27Ba",
-    "subcuenca_nom": "Río Pantepec",
-    "posicion": "FONDO_VALLE",
-    "distancia_cauce_km": 0.12,
-    "tc_horas": 2.1
-  },
-  "vulnerabilidad": {
-    "poblacion": 2845,
-    "marginacion": "MUY ALTO",
-    "acceso_vial": "CAMINO_TERRACERIA",
-    "dist_hospital_km": 24.9
-  }
-}
-```
+Contiene 405 registros con topografía, hidrología y vulnerabilidad.
 
 ### 8.2 Estructura del Bloque de Bitácora Criptográfica
-
-Cada registro se almacena en `bitacora_sara.json`:
 
 ```json
 {
   "id": "SARA_LOG_142",
   "fecha_dia_mexico": "20 de octubre de 2026",
-  "hora_exacta_mexico": "06:00:15 a. m.",
   "timestamp_iso_utc": "2026-10-20T12:00:15.120Z",
-  "timestamp_local": "06:00 a. m.",
   "origen_evento": "PROGRAMADO_CRON",
   "estado_situacion": "SITUACION_NORMAL",
-  "titulo": "Situación Diocesana de Calma y Vigilancia Preventiva",
-  "resumen": "Monitoreo matutino sobre 405 localidades. 0 en Nivel 4, 0 en Nivel 3.",
+  "titulo": "Situación Diocesana de Calma",
   "prev_hash": "4a7f8b9c1d2e3f4a...",
-  "hash": "8e2b1c0d4f5a6b7c...",
-  "hash_completo": "8e2b1c0d4f5a6b7c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c"
+  "hash_completo": "8e2b1c0d4f5a6b7c..."
 }
 ```
 
@@ -517,52 +477,47 @@ Cada registro se almacena en `bitacora_sara.json`:
 
 ## 9. Personas, Responsabilidades y Escalamiento
 
-### 9.1 Matriz de Roles y Responsabilidades
+### 9.1 Matriz de Roles
 
-| Rol | Titular | Responsabilidad Primaria |
-|---|---|---|
-| Arquitecto y Desarrollador Líder | Ing. Antonio G. Madrigal | Mantenimiento del código, estabilidad de APIs y arquitectura de software. |
-| Coordinador Pastoral Diocesano | Padre Roberto López Medina | Toma de decisiones de ayuda humanitaria, apertura de albergues y contacto parroquial. |
-| Oficial de Enlace de Emergencias | Padre Omar Martínez Vázquez | Difusión de avisos preventivos a párrocos y brigadas de campo. |
-| Autoridad Eclesiástica Máxima | Mons. Oscar Roberto Domínguez C. | Aprobación institucional de protocolos de auxilio y directrices diocesanas. |
+| Rol | Titular |
+|---|---|
+| Arquitecto y Desarrollador Líder | Ing. Antonio G. Madrigal |
+| Coordinador Pastoral Diocesano | Padre Roberto López Medina |
+| Oficial de Enlace de Emergencias | Padre Omar Martínez Vázquez |
+| Autoridad Eclesiástica Máxima | Mons. Oscar Roberto Domínguez C. |
 
-### 9.2 Canales de Comunicación y Enlace
+### 9.2 Canales de Comunicación
 
-- **Canal operativo urgente:** grupo cerrado de WhatsApp de Emergencias Cáritas Tulancingo.
-- **Canal oficial ciudadano:** avisos publicados a través del portal y boletines de la Arquidiócesis.
-- **Autoridades civiles de referencia:**
-  - Subsecretaría de Protección Civil y Gestión de Riesgos del Estado de Hidalgo.
-  - Dirección General de Protección Civil del Estado de Puebla.
-  - Centro Nacional de Prevención de Desastres (CENAPRED).
+- **Canal operativo:** grupo de WhatsApp de Emergencias.
+- **Canal oficial:** portal y boletines de la Arquidiócesis.
+- **Autoridades civiles:** Protección Civil (Hidalgo, Puebla), CENAPRED.
 
 ---
 
 ## 10. Transferencia de Conocimiento y Checklist de Aceptación
 
-### 10.1 Ruta Sugerida de Capacitación (Walkthrough)
+### 10.1 Ruta Sugerida de Capacitación
 
-Para un nuevo ingeniero que asuma el mantenimiento del sistema:
+1. **Fundamentos:** `docs/01_CONTEXTO.md` y `docs/03_MOTOR_RIESGO.md`.
+2. **Arquitectura:** `docs/02_ARQUITECTURA.md` y `src/lib/compartido/`.
+3. **Pruebas:** `npm run dev`, `npm run lint`, `npm test` (79 tests).
+4. **Sala operativa:** probar con clave `emergencia` y operador `Antonio2026`.
+5. **Cloud:** revisar workflows y `/api/sara`.
 
-1. **Paso 1 — Fundamentos:** leer íntegramente `docs/01_CONTEXTO.md` y `docs/03_MOTOR_RIESGO.md` para comprender la formulación física de las 6 reglas geomecánicas.
-2. **Paso 2 — Arquitectura:** revisar `docs/02_ARQUITECTURA.md` y la carpeta `src/lib/compartido/`.
-3. **Paso 3 — Pruebas y auditoría:** ejecutar localmente `npm run dev`, `npm run lint` y `npm test` (36 tests con Vitest). Simular un cambio de umbral y verificar que los tests fallan (red de seguridad).
-4. **Paso 4 — Sala operativa:** entrar en `http://localhost:5173`, acceder a la sala operativa con la clave `emergencia` y generar un reporte on-demand usando la clave autorizada de operador `Antonio2026`.
-5. **Paso 5 — Integraciones cloud:** revisar el workflow `.github/workflows/sara_cron.yml` y comprobar el endpoint `/api/sara`.
+### 10.2 Checklist Formal de Aceptación
 
-### 10.2 Checklist Formal de Aceptación y Entrega
-
-| # | Criterio de Verificación | Estado | Verificado por |
-|---|---|---|---|
-| 1 | El repositorio clona limpiamente y ejecuta `npm install` sin conflictos. | [x] Conforme | Ing. Entrante |
-| 2 | El servidor inicia en el puerto 5173 con `npm run dev` y sirve la aplicación. | [x] Conforme | Ing. Entrante |
-| 3 | El linter `npm run lint` reporta 0 errores. | [x] Conforme | Ing. Entrante |
-| 4 | La suite de tests (`npm test`) pasa los 36 tests de Vitest sin errores. | [x] Conforme | Ing. Entrante |
-| 5 | La compilación de producción `npm run build` genera la carpeta `dist/` sin advertencias críticas. | [x] Conforme | Ing. Entrante |
-| 6 | El endpoint `/api/smn` conecta con éxito y obtiene la situación oficial de CONAGUA. | [x] Conforme | Ing. Entrante |
-| 7 | El visor de satélite `/api/latest-gif` resuelve bucles válidos de NOAA GOES-19. | [x] Conforme | Ing. Entrante |
-| 8 | La sala operativa permite autenticarse con `emergencia` y emitir reportes de prueba. | [x] Conforme | Ing. Entrante |
-| 9 | La bitácora en `/api/sara` encadena correctamente los hashes SHA-256 sin romper la secuencia. | [x] Conforme | Ing. Entrante |
-| 10 | Las credenciales están debidamente resguardadas fuera del código fuente. | [x] Conforme | Ing. Entrante |
+| # | Criterio | Estado |
+|---|---|---|
+| 1 | El repositorio clona limpiamente. | [x] Conforme |
+| 2 | El servidor inicia en el puerto 5173. | [x] Conforme |
+| 3 | El linter `npm run lint` reporta 0 errores. | [x] Conforme |
+| 4 | La suite de tests (`npm test`) pasa los 79 tests. | [x] Conforme |
+| 5 | La compilación `npm run build` genera `dist/`. | [x] Conforme |
+| 6 | `/api/smn` conecta con CONAGUA. | [x] Conforme |
+| 7 | `/api/latest-gif` resuelve bucles de NOAA. | [x] Conforme |
+| 8 | La sala operativa emite reportes. | [x] Conforme |
+| 9 | La bitácora encadena hashes SHA-256. | [x] Conforme |
+| 10 | Las credenciales están fuera del código. | [x] Conforme |
 
 ---
 
