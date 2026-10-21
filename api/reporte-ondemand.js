@@ -276,7 +276,9 @@ Devuelve la respuesta en formato JSON estricto.`;
     });
 
     if (!respuestaGroq.ok) {
-      throw new Error(`Groq API HTTP ${respuestaGroq.status}`);
+      const errorText = await respuestaGroq.text();
+      console.error("❌ [GROQ] Error detallado:", errorText);
+      throw new Error(`Groq API HTTP ${respuestaGroq.status}: ${errorText}`);
     }
 
     const data = await respuestaGroq.json();
