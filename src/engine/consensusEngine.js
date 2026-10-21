@@ -29,6 +29,41 @@ function filtrarCerosEspurios(p_gfs, p_icon, p_gem) {
   return lecturas.map(l => l.valor);
 }
 
+/**
+ * H6.3 — Consensúa una variable E4 extrayendo los 3 valores del modelo
+ * y aplicando la estrategia indicada.
+ * 
+ * @param {Object} datosHorarios - Objeto hourly de Open-Meteo (con sufijos _gfs_seamless, _icon_seamless, _gem_seamless).
+ * @param {string} nombreVariable - Nombre base sin sufijo (ej. "surface_pressure").
+ * @param {number} indice - Índice de la hora.
+ * @param {string} estrategia - "mediana" (default) | "max" | "gfs_preferente".
+ * @returns {number|null} Valor consensuado o null si no hay datos.
+ */
+function consensuarVariableE4(datosHorarios, nombreVariable, indice, estrategia = "mediana") {
+  const gfs = datosHorarios[`${nombreVariable}_gfs_seamless`]?.[indice];
+  const icon = datosHorarios[`${nombreVariable}_icon_seamless`]?.[indice];
+  const gem = datosHorarios[`${nombreVariable}_gem_seamless`]?.[indice];
+
+  const validos = [gfs, icon, gem].filter(v => v !== null && v !== undefined && Number.isFinite(v));
+
+  if (validos.length === 0) return null;
+
+  if (estrategia === "gfs_preferente") {
+    // Para freezing_level_height: GEM devuelve null, GFS es la fuente preferida
+    if (Number.isFinite(gfs)) return gfs;
+    if (Number.isFinite(icon)) return icon;
+    if (Number.isFinite(gem)) return gem;
+    return null;
+  }
+
+  if (estrategia === "max") {
+    return Math.max(...validos);
+  }
+
+  // "mediana" (default)
+  return calcularMediana(validos);
+}
+
 export function generarConsensoDeterminista(datosHorarios) {
   if (!datosHorarios || !datosHorarios.time) return [];
 
@@ -78,6 +113,16 @@ export function generarConsensoDeterminista(datosHorarios) {
     if (dispersion > 12.0) confiabilidad = "EN_DISPUTA";
     else if (dispersion > 4.0) confiabilidad = "MODERADA";
 
+    // === H6.3: Variables E4 consensuadas (nombre plano para el orquestador) ===
+    const presionHpaRaw = consensuarVariableE4(datosHorarios, "surface_pressure", i);
+    const sensacionTermicaRaw = consensuarVariableE4(datosHorarios, "apparent_temperature", i);
+    const coberturaNubosaRaw = consensuarVariableE4(datosHorarios, "cloud_cover", i);
+    const bulboHumedoRaw = consensuarVariableE4(datosHorarios, "wet_bulb_temperature_2m", i);
+    const capeJkgRaw = consensuarVariableE4(datosHorarios, "cape", i, "max");
+    const nivelCongelacionRaw = consensuarVariableE4(datosHorarios, "freezing_level_height", i, "gfs_preferente");
+    const humedad700Raw = consensuarVariableE4(datosHorarios, "relative_humidity_700hPa", i);
+    const viento700Raw = consensuarVariableE4(datosHorarios, "wind_speed_700hPa", i, "max");
+
     serieConsenso.push({
       fecha_hora: horas[i],
       lluvia_mm: parseFloat(lluviaConsenso.toFixed(1)),
@@ -90,7 +135,16 @@ export function generarConsensoDeterminista(datosHorarios) {
       detalle_modelos: {
         lluvia: { gfs: p_gfs, icon: p_icon, gem: p_gem },
         temp: { gfs: t_gfs, icon: t_icon, gem: t_gem }
-      }
+      },
+      // === H6.3: Variables E4 consensuadas (nombre plano) ===
+      presion_hpa: presionHpaRaw !== null ? parseFloat(presionHpaRaw.toFixed(1)) : null,
+      sensacion_termica_c: sensacionTermicaRaw !== null ? parseFloat(sensacionTermicaRaw.toFixed(1)) : null,
+      cobertura_nubosa_pct: coberturaNubosaRaw !== null ? Math.round(coberturaNubosaRaw) : null,
+      bulbo_humedo_c: bulboHumedoRaw !== null ? parseFloat(bulboHumedoRaw.toFixed(1)) : null,
+      cape_jkg: capeJkgRaw !== null ? parseFloat(capeJkgRaw.toFixed(1)) : null,
+      nivel_congelacion_m: nivelCongelacionRaw !== null ? Math.round(nivelCongelacionRaw) : null,
+      humedad_700hpa: humedad700Raw !== null ? Math.round(humedad700Raw) : null,
+      viento_700hpa: viento700Raw !== null ? parseFloat(viento700Raw.toFixed(1)) : null
     });
   }
 
