@@ -134,11 +134,14 @@
 - **Commits:** `4c23f52` (H7b.1 tests compartidos), `54f00d0` (H7b.2 extracción NOAA + docs).
 - **Verificación:** `npm test` 72/72 passing (60 + 12 nuevos).
 
-### H8 — Zod activo — ⏳ PENDIENTE
-- Actualizar `estadoDiocesanoSchema.js` con `origen`, `ultimo_reporte_ondemand`, `bitacora`.
-- Validar en `/api/sara.js` antes de responder.
-- Validar en runner antes de `put()`.
-- **Commits:** 3.
+### H8 — Zod activo — ✅ COMPLETO
+- Schema dividido en `EstadoDiocesanoBlobSchema` (runner) y `EstadoDiocesanoResponseSchema` (API).
+- Validación activa en `/api/sara.js` (camino del Blob; fallback en vivo queda libre).
+- Validación activa en el runner (`ejecutar_sara_autonomo.mjs`) antes de `put()`. Si el paquete está corrupto, aborta el proceso (código 1).
+- La validación del reporte diario (`reporteDiario.mjs`) se difiere a V3.0 (su contrato es distinto al del estado).
+- 7 tests nuevos para los schemas.
+- **Commits:** `af82f44` (H8.1), `bd5ca6d` (H8.2), `c168385` (H8.3 + docs).
+- **Verificación:** `npm test` 79/79 passing, workflow `sara_cron.yml` con 14/14 zonas OK, `/api/sara` 200.
 
 ### H9 — Cierre documental — ⏳ PENDIENTE
 - Actualizar `04_HISTORIAL_BUGS.md`, `06_PENDIENTES.md`, `AUDITORIA_MOTOR.md`, handover.

@@ -7,6 +7,7 @@ import { generarReporteDiario } from './reportes/reporteDiario.mjs';
 import { seleccionarNodosRegionales as seleccionarNodosRegionalesShared } from '../src/lib/compartido/nodos.js';
 import { repararMojibake } from '../src/lib/compartido/mojibake.js';
 import { evaluarLocalidadRunner } from './engine/riskEvaluatorRunner.mjs';
+import { EstadoDiocesanoBlobSchema } from '../src/schemas/estadoDiocesanoSchema.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rutaJSON = path.join(__dirname, '../src/data/localidades.json');
@@ -693,6 +694,12 @@ Comunidades críticas bajo tensión: ${JSON.stringify(criticas)}.` }
     }
   }
 
+    // H8 — Validar el contrato de datos antes de publicar al Blob.
+  const validacion = EstadoDiocesanoBlobSchema.safeParse(paqueteMaestro);
+  if (!validacion.success) {
+    console.error("❌ [ZOD] El paqueteMaestro no cumple el schema:", validacion.error.errors);
+    process.exit(1);
+  }
 
   try {
     await put('estado_diocesano.json', JSON.stringify(paqueteMaestro), {

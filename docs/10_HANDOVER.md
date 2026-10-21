@@ -419,7 +419,7 @@ git push origin main
 - [x] **H4:** Creación del gemelo desacoplado del motor en runner
 - [x] **H5:** Corrección de variable `visibility_gfs_seamless` (N18)
 - [x] **H7b:** Pruebas unitarias de utilidades de cadenas y fechas
-- [ ] **H8:** Activación de validación estricta Zod en tiempo de ejecución
+- [x] **H8:** Activación de validación estricta Zod en tiempo de ejecución
 - [ ] **H9:** Cierre documental formal de Etapa 3
 
 ---

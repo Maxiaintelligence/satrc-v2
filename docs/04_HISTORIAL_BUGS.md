@@ -279,3 +279,16 @@ Este documento registra los bugs estructurales resueltos en Octubre de 2026 (Fas
   - H7b.1: `4c23f52` — Tests de mojibake, regionales y fechas.
   - H7b.2: `54f00d0` — Extracción NOAA + tests + docs.
 - **Estado:** ✅ Cerrado en Etapa 3 (H7b).
+
+## H8 — Zod activo: validación del contrato de datos (Resuelto en Etapa 3)
+
+- **Síntoma:** el schema Zod (`src/schemas/estadoDiocesanoSchema.js`) existía pero no se usaba en producción. El runner podía publicar datos corruptos y el frontend los consumía sin validar.
+- **Causa:** el schema se escribió en V2.0 pero nunca se activó en los flujos de producción.
+- **Fix (Etapa 3, hito H8):**
+  - **H8.1:** se dividió en `EstadoDiocesanoBlobSchema` (lo que publica el runner) y `EstadoDiocesanoResponseSchema` (lo que devuelve `/api/sara`). 7 tests nuevos.
+  - **H8.2:** validación activa en `/api/sara.js` (camino del Blob). Si falla, cae al fallback en vivo (sin devolver 500).
+  - **H8.3:** validación activa en `ejecutar_sara_autonomo.mjs` antes del `put()`. Si el paquete maestro no cumple el contrato, aborta el proceso (código 1).
+- **Deuda diferida:** la validación específica de `reporteDiario.mjs` va a V3.0 (su contrato es distinto al del estado diocesano).
+- **Verificación:** `npm test` 79/79 passing, workflow `sara_cron.yml` con 14/14 OK, `/api/sara` 200.
+- **Commits:** `af82f44`, `bd5ca6d`, `c168385`.
+- **Estado:** ✅ Cerrado en Etapa 3 (H8).

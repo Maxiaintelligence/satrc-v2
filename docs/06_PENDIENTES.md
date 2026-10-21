@@ -41,11 +41,12 @@
 
 ### H8 — Zod activo
 
-- **Estado:** ⏳ Pendiente (después de H7b).
-- **Alcance:**
-  - Actualizar `estadoDiocesanoSchema.js` con `origen`, `ultimo_reporte_ondemand`, `bitacora`.
-  - Validar en `/api/sara.js` antes de responder.
-  - Validar en runner antes de `put()`.
+- **Estado:** ✅ Cerrado en Etapa 3 (commits `af82f44` + `bd5ca6d` + `c168385`).
+- **Alcance completado:**
+  - Schema doble (`EstadoDiocesanoBlobSchema` y `EstadoDiocesanoResponseSchema`).
+  - Validación en `/api/sara.js` (Blob) y en `ejecutar_sara_autonomo.mjs` (antes de publicar).
+  - 7 tests nuevos.
+- **Pendiente para V3.0:** Validación Zod específica para `reporteDiario.mjs` (su contrato difiere del estado diocesano).
 
 ### H9 — Cierre documental
 
