@@ -121,3 +121,20 @@ Este documento registra los bugs estructurales resueltos en Octubre de 2026 (Fas
 - **Verificación:** 7/7 tests del orquestador, 112/112 tests de la suite completa, CI en verde.
 - **Commit:** `<hash>` (obtenido con `git log --oneline -1`).
 - **Nota:** este hallazgo destrabó el commit de `crossThreatOrchestrator.js` + su test (untracked desde el bloqueo del equipo anterior). Desbloquea H6-E4.
+
+### H-ORQ-02 — `windEvaluator` emitía nivelContinuo inconsistente (Resuelto en Etapa 4, H6.4a)
+
+- **Síntoma:** En la auditoría H6.4, 47 localidades de Pachuca reportaban N2 falso. El `windEvaluator` emitía `nivel_alerta=1` (Vientos Normales) pero `nivel_alerta_continuo=2.25`. El orquestador usaba el continuo y las trataba como N2.
+- **Causa:** las fórmulas de `nivelContinuo` no estaban clampeadas al nivel discreto. Para N1 con `vEqFinal=47.6`, la fórmula lineal supera 2.0 sin que el motor cambie a N2.
+- **Fix:** `Math.min(1.99, ...)`, `Math.min(2.99, ...)`, `Math.min(3.99, ...)` en las 3 fórmulas de `windEvaluator.js`.
+- **Verificación:** 10/10 tests de `windEvaluator`, 116/116 suite completa. Auditoría H6.4 post-fix: cambio total 2-3% (antes 14.3%).
+- **Commit:** `<hash>`.
+- **Lección:** todo campo nuevo en el shape (como `nivel_alerta_continuo`) debe tener al menos un test que verifique su rango esperado, no solo el nivel discreto. Documentado como H-TEST-05 para V3.0.
+
+### H-ORQ-03 — `mapearANivel` desalineado con el diseño de los módulos (Resuelto en Etapa 4, H6.4a)
+
+- **Síntoma:** En la auditoría H6.4, 47 localidades de Pachuca seguían reportando N2 falso incluso después del clamp del `windEvaluator`.
+- **Causa:** `mapearANivel` usaba umbrales `>= 1.5 → 2`, `>= 2.5 → 3`, `>= 3.5 → 4`. Pero los 4 módulos emiten `nivelContinuo` entre `[nivel, nivel+0.99]`. Un N1 con `nivelContinuo=1.69` disparaba N2 global. El clamp del `windEvaluator` a 1.99 no era suficiente.
+- **Fix:** `mapearANivel` ahora usa umbrales `>= 2.0 → 2`, `>= 3.0 → 3`, `>= 4.0 → 4`. Alineado con el rango de cada nivel.
+- **Verificación:** 7/7 tests de `crossThreatOrchestrator`, 116/116 suite completa. Auditoría H6.4 post-fix: cambio total ~2-3%.
+- **Commit:** `<hash>`.

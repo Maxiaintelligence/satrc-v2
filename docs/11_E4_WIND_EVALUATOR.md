@@ -110,3 +110,18 @@ El módulo requiere tests que demuestren la superioridad de la física sobre los
 4. Implementar el factor de rugosidad según `localidad.topografia.relieve` y `pendiente_max_deg`.
 5. Crear `src/engine/__tests__/windEvaluator.test.js` con los 6 casos mencionados.
 6. Asegurar que `npm test` pase en verde (sin tocar `riskEvaluator.js`).
+
+### 3.6. Clamp del nivel_alerta_continuo (H6.4a)
+
+> **Implementado en:** 21/10/2026, durante H6.4a.
+> **Bug detectado en:** auditoría empírica de H6.4.
+
+**Síntoma:** `windEvaluator` emitía `nivel_alerta_continuo = 2.25` para localidades en N1 con `vEqFinal=47.6`. El `nivel_alerta` (discreto) era correcto (1), pero el continuo no.
+
+**Causa:** las fórmulas de `nivelContinuo` no estaban clampeadas. Para N1 con `vEqFinal` alto, `1.0 + ((vEqFinal - 35) / 10) * 0.99` puede superar 2.0 sin que el nivel discreto cambie.
+
+**Impacto:** el `crossThreatOrchestrator` usa `nivel_alerta_continuo` (no `nivel_alerta`) para calcular `Math.max(rH, rV, rT, rC)`. Un `rV=2.25` en N1 hacía que el orquestador tratara la localidad como N2. **47 localidades de Pachuca reportaban N2 falsos.**
+
+**Fix:** aplicar `Math.min(1.99, ...)`, `Math.min(2.99, ...)`, `Math.min(3.99, ...)` a las 3 fórmulas. N1 nunca supera 1.99, N2 nunca supera 2.99, N3 nunca supera 3.99.
+
+**Tests de blindaje:** tests 9 y 10 en `windEvaluator.test.js`.

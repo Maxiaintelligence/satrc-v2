@@ -28,12 +28,19 @@ function calcularAcoplamiento(r1, r2, gamma) {
 }
 
 /**
- * Mapea un nivel continuo (1.0-4.0) al nivel discreto (1-4) del semáforo.
+ * H6.4a — Mapeo alineado con el diseño de los 4 módulos.
+ * Cada módulo emite nivelContinuo entre [nivel, nivel+0.99]:
+ *   - N1 → 1.0-1.99
+ *   - N2 → 2.0-2.99
+ *   - N3 → 3.0-3.99
+ *   - N4 → 4.0
+ * El mapeo anterior (1.5/2.5/3.5) causaba que N1 con vEqFinal alto
+ * (nivelContinuo=1.5-1.99) se tradujera a N2 global.
  */
 function mapearANivel(riesgoContinuo) {
-  if (riesgoContinuo >= 3.5) return 4;
-  if (riesgoContinuo >= 2.5) return 3;
-  if (riesgoContinuo >= 1.5) return 2;
+  if (riesgoContinuo >= 4.0) return 4;
+  if (riesgoContinuo >= 3.0) return 3;
+  if (riesgoContinuo >= 2.0) return 2;
   return 1;
 }
 

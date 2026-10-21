@@ -190,6 +190,22 @@ Todos los hitos de la Etapa 3 han sido cerrados, testeados y verificados en prod
 - **Scripts de verificación:** quedan en `scripts/diagnostico/verificar_variables_e4.ps1` y `verificar_variables_e4_nivel2.ps1` como evidencia reproducible.
 - **Output:** `diagnostico_variables_e4.json` (nivel 1) + `verificacion_e4_nivel2_output.txt` (nivel 2). Ambos deben agregarse a `.gitignore` en H6 (son artefactos de diagnóstico).
 
+### H6.4 — Auditoría de divergencia baseline vs multiamenaza (21/10/2026)
+
+- **Script:** `scripts/diagnostico/auditoria_h6_4.mjs` (one-shot, no commiteado).
+- **Cambio total:** XX registros de 405 (X.X%).
+- **Matriz de confusión:** N1→N2: X, N2→N1: X, N2→N3: X, N3→N2: X, N3→N4: X, N4→N3: X.
+- **Veredicto:** 🟢/🟡/🔴.
+- **Top cambios:** [resumen de los 3 principales].
+- **Decisión:** aplicar H6.4 con GAMMAS actuales / ajustar GAMMAS a XX / revisar caso por caso.
+
+
+### H-TEST-05 — Campos nuevos sin cobertura de tests
+
+- **Estado:** 📝 Documentación de lección (no es deuda activa).
+- **Contexto:** H-ORQ-02 detectó que `nivel_alerta_continuo` se agregó en Etapa 4 sin ningún test que verificara su rango. El bug existió en producción hasta H6.4a.
+- **Regla nueva:** todo campo nuevo en un shape debe tener al menos un test que verifique su valor esperado.
+- **Aplicable a:** futuros desarrollos que agreguen campos a `evaluaciones`, `paqueteMaestro`, o `estado_diocesano.json`.
 ---
 
 **Fin del backlog.**

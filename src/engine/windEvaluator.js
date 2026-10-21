@@ -71,25 +71,35 @@ export function evaluarViento(localidad, serieHoraria) {
   let titulo = "Vientos Normales";
   let causa = `Ráfagas de ${rafagaMax.toFixed(1)} km/h (Equivalentes a ${vEqFinal.toFixed(1)} km/h a nivel del mar).`;
 
-  if (vEqFinal >= 90) {
+  // H6.4 — Umbral dinámico por altitud.
+  // En localidades >2200 msnm (Pachuca, Sierra), el viento basal es estructuralmente
+  // más fuerte. Subir el umbral +5 km/h evita alertas N2 por brisas normales
+  // de montaña ("Pachuca, la bella airosa"). Ver 11_E4_WIND_EVALUATOR.md §2.3.
+  const esAltitudAlta = altitud > 2200;
+  const umbralN2 = esAltitudAlta ? 50 : 45;
+  const umbralN3 = esAltitudAlta ? 70 : 65;
+  const umbralN4 = esAltitudAlta ? 95 : 90;
+
+  if (vEqFinal >= umbralN4) {
     nivel = 4;
     titulo = "Emergencia por Vientos Huracanados";
-    causa = `Ráfagas de ${rafagaMax.toFixed(1)} km/h superan los 90 km/h. Colapso estructural inminente.`;
-  } else if (vEqFinal >= 65) {
+    causa = `Ráfagas de ${rafagaMax.toFixed(1)} km/h superan el umbral de ${umbralN4} km/h. Colapso estructural inminente.`;
+  } else if (vEqFinal >= umbralN3) {
     nivel = 3;
     titulo = "Alerta por Vientos Fuertes";
-    causa = `Ráfagas de ${rafagaMax.toFixed(1)} km/h. Riesgo de caída de árboles y techos.`;
-  } else if (vEqFinal >= 45) {
+    causa = `Ráfagas de ${rafagaMax.toFixed(1)} km/h superan el umbral de ${umbralN3} km/h. Riesgo de caída de árboles y techos.`;
+  } else if (vEqFinal >= umbralN2) {
     nivel = 2;
     titulo = "Vigilancia por Ráfagas Moderadas";
-    causa = `Ráfagas de ${rafagaMax.toFixed(1)} km/h. Precaución con objetos ligeros.`;
+    causa = `Ráfagas de ${rafagaMax.toFixed(1)} km/h superan el umbral de ${umbralN2} km/h. Precaución con objetos ligeros.`;
   }
 
   // Nivel continuo para el Orquestador (Ej: si vEq es 44.9, da 1.99)
   let nivelContinuo = nivel;
-  if (nivel === 1 && vEqFinal > 35) nivelContinuo = 1.0 + ((vEqFinal - 35) / 10) * 0.99;
-  if (nivel === 2 && vEqFinal > 55) nivelContinuo = 2.0 + ((vEqFinal - 55) / 10) * 0.99;
-  if (nivel === 3 && vEqFinal > 75) nivelContinuo = 3.0 + ((vEqFinal - 75) / 15) * 0.99;
+  // Fix: clamp a 2.0 (N1 no puede superar 1.99), 3.0 (N2 no puede superar 2.99), etc.
+  if (nivel === 1 && vEqFinal > 35) nivelContinuo = Math.min(1.99, 1.0 + ((vEqFinal - 35) / 10) * 0.99);
+  if (nivel === 2 && vEqFinal > 55) nivelContinuo = Math.min(2.99, 2.0 + ((vEqFinal - 55) / 10) * 0.99);
+  if (nivel === 3 && vEqFinal > 75) nivelContinuo = Math.min(3.99, 3.0 + ((vEqFinal - 75) / 15) * 0.99);
 
   return {
     modulo: "viento",

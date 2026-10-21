@@ -70,4 +70,54 @@ describe('windEvaluator.js', () => {
     const res = evaluarViento(loc, serie);
     expect(res.nivel_alerta).toBe(1);
   });
+
+  it('7. Umbral dinámico: ráfaga de 52 km/h en Pachuca (2400m) da N1 (no N2)', () => {
+    // H6.4: A >2200 msnm, umbral N2 sube a 50 km/h vEq.
+    // Pachuca: 2400m, presión 760 hPa, temp 15°C → rho ≈ 0.92
+    // vEq = 52 * sqrt(0.92/1.225) ≈ 45 km/h → con umbral 50 → N1
+    const loc = mockLocalidad(2400, 'MESETA');
+    const serie = mockSerie({ rafaga: 52, presion: 760, temp: 15 });
+    
+    const res = evaluarViento(loc, serie);
+    expect(res.nivel_alerta).toBe(1);
+    expect(res.datos_tecnicos.velocidad_equivalente_kmh).toBeLessThan(50);
+  });
+
+  it('8. Umbral dinámico: ráfaga de 52 km/h en el nivel del mar sigue dando N2', () => {
+    // H6.4: A nivel del mar, umbral N2 se mantiene en 45 km/h.
+    // 52 * sqrt(1.225/1.225) = 52 km/h → con umbral 45 → N2
+    const loc = mockLocalidad(100, 'LLANURA_COSTERA');
+    const serie = mockSerie({ rafaga: 52, presion: 1013, temp: 20 });
+    
+    const res = evaluarViento(loc, serie);
+    expect(res.nivel_alerta).toBe(2);
+    expect(res.datos_tecnicos.velocidad_equivalente_kmh).toBeGreaterThanOrEqual(45);
+  });
+
+    it('9. Clamp: N1 con vEqFinal=47.6 NO debe emitir nivelContinuo > 2.0', () => {
+    // Bug detectado en H6.4a: N1 con vEqFinal=47.6 emitía nivelContinuo=2.25,
+    // causando que el orquestador tratara como N2 una localidad que el motor veía como N1.
+    // Con el clamp, N1 nunca supera 1.99.
+    const loc = mockLocalidad(2400, 'MESETA');
+    const serie = mockSerie({ rafaga: 55, presion: 760, temp: 15 });
+
+    const res = evaluarViento(loc, serie);
+    // vEqFinal ≈ 47.6 → nivel=1 (umbral 50 no alcanzado) → nivelContinuo debe ser 1.99
+    expect(res.nivel_alerta).toBe(1);
+    expect(res.nivel_alerta_continuo).toBeLessThan(2.0);
+    expect(res.nivel_alerta_continuo).toBeGreaterThan(1.9);
+  });
+
+  it('10. Clamp: N2 con vEqFinal=59.5 NO debe emitir nivelContinuo > 3.0', () => {
+    // Análogo para N2: si el motor ve N2, no puede emitir continuo > 2.99.
+    const loc = mockLocalidad(500, 'LLANURA_COSTERA');  // altitud baja, umbral 45
+    const serie = mockSerie({ rafaga: 60, presion: 1013, temp: 20 });
+
+    const res = evaluarViento(loc, serie);
+    // vEqFinal ≈ 59.5 (nivel mar) → N2 (45-65) → nivelContinuo debe ser <= 2.99
+    expect(res.nivel_alerta).toBe(2);
+    expect(res.nivel_alerta_continuo).toBeLessThan(3.0);
+    expect(res.nivel_alerta_continuo).toBeGreaterThan(2.0);
+  });
+
 });
