@@ -7,6 +7,7 @@ import { generarReporteDiario } from './reportes/reporteDiario.mjs';
 import { seleccionarNodosRegionales as seleccionarNodosRegionalesShared } from '../src/lib/compartido/nodos.js';
 import { repararMojibake } from '../src/lib/compartido/mojibake.js';
 import { evaluarLocalidadRunner } from './engine/riskEvaluatorRunner.mjs';
+import { evaluarMultiamenaza } from '../src/engine/crossThreatOrchestrator.js';
 import { EstadoDiocesanoBlobSchema } from '../src/schemas/estadoDiocesanoSchema.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -526,12 +527,49 @@ async function ejecutarSARA() {
     seriesPorZona[zonaId] = series[zonaId]?.ok ? series[zonaId].serie : [];
   });
 
-  // --- 5. Evaluación por localidad (delegada a scripts/engine/riskEvaluatorRunner.mjs en H4) ---
+  // --- 5. Evaluación por localidad con el orquestador multiamenaza (H6.4) ---
+  // Adaptador de shape: el orquestador devuelve nivel_alerta_global,
+  // pero Zod y el frontend esperan nivel_alerta. Mapeamos nivel_alerta_global → nivel_alerta
+  // y agregamos los campos nuevos como aditivos. Si el orquestador falla para una
+  // localidad puntual, caemos al motor viejo (fallback) para no romper la corrida.
   const evaluaciones = todasLocalidades.map(loc => {
     const zonaId = loc.zona_id;
     const serieZona = seriesPorZona[zonaId] || [];
     const zonaSinDatos = series[zonaId]?.ok === false;
-    return evaluarLocalidadRunner(loc, serieZona, { alertaSMN, zonaSinDatos });
+
+    try {
+      const res = evaluarMultiamenaza(loc, serieZona, { alertaSMN, zonaSinDatos });
+      return {
+        // Campos requeridos por Zod (compatibilidad con frontend):
+        localidad_id: res.localidad_id,
+        nombre: res.nombre,
+        municipio: res.municipio,
+        estado: res.estado,
+        zona_id: res.zona_id,
+        zona_nombre: res.zona_nombre,
+        nivel_alerta: res.nivel_alerta_global,       // ← mapear global → nivel_alerta
+        color_alerta: res.color_alerta,
+        estado_alerta: res.estado_alerta,
+        vector_dominante: res.vector_dominante,
+        sin_datos_regionales: res.sin_datos_regionales || false,
+        diagnostico: res.diagnostico,
+        donde: res.donde,
+        geografia: res.geografia,
+        tiempos: res.tiempos,
+        impactoSistemico: res.impactoSistemico,
+        protocolo: res.protocolo,
+        // Campos nuevos del orquestador (aditivos, Zod tolera con .passthrough()):
+        nivel_alerta_global: res.nivel_alerta_global,
+        riesgo_continuo: res.riesgo_continuo,
+        niveles_por_vector: res.niveles_por_vector,
+        acciones_operativas: res.acciones_operativas,
+        diagnosticos_por_vector: res.diagnosticos_por_vector
+      };
+    } catch (e) {
+      console.error(`[H6.4] Error en orquestador para localidad ${loc.id}: ${e.message}`);
+      // Fallback al motor viejo para esta localidad puntual
+      return evaluarLocalidadRunner(loc, serieZona, { alertaSMN, zonaSinDatos });
+    }
   });
 
   evaluaciones.sort((a, b) => b.nivel_alerta - a.nivel_alerta);

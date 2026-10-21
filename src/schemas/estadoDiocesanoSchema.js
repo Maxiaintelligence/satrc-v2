@@ -24,7 +24,7 @@ const EvaluacionSchema = z.object({
   diagnostico: z.object({
     titulo: z.string(),
     causa: z.string()
-  }),
+  }).passthrough(), // H6.5: acepta 'acoplamiento' y otros campos del orquestador
   donde: z.object({
     coordenadas: z.object({ lat: z.number(), lon: z.number() })
   }).passthrough(), // Permite otros campos en 'donde' (ej. subcuenca)
@@ -46,7 +46,22 @@ const EvaluacionSchema = z.object({
     saturacionTotalSueloMm: z.number(),
     lluviaEvento24hMm: z.number()
   }).passthrough(),
-  protocolo: z.string().optional()
+  protocolo: z.string().optional(),
+
+  // === H6.5: Campos del orquestador multiamenaza (Etapa 4, aditivos) ===
+  // Se declaran como opcionales para documentar el contrato. El .passthrough()
+  // del objeto los deja pasar aunque no estuvieran, pero declararlos aquí
+  // permite que TypeScript o futuras herramientas los reconozcan.
+  nivel_alerta_global: z.number().min(1).max(4).optional(),
+  riesgo_continuo: z.number().min(1).max(4).optional(),
+  niveles_por_vector: z.object({
+    hidrologico: z.number(),
+    viento: z.number(),
+    termico: z.number(),
+    convectivo: z.number()
+  }).optional(),
+  acciones_operativas: z.array(z.string()).optional(),
+  diagnosticos_por_vector: z.record(z.any()).optional()
 }).passthrough(); // Permite campos extra en la evaluación
 
 // 2. Schema para el Blob (lo que guarda el runner)
