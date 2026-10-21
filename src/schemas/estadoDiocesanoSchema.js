@@ -79,5 +79,7 @@ export const EstadoDiocesanoResponseSchema = EstadoDiocesanoBlobSchema.extend({
   hora_servidor_mexico: z.string().optional(),
   bitacora: z.array(z.any()),
   ultimo_reporte_ondemand: z.any().nullable(),
-  bitacora_guardada: z.boolean().optional()
+  bitacora_guardada: z.boolean().optional(),
+  // H8.4 — La API usa hora_servidor_mexico, no hora_local_mexico (heredado del Blob).
+  hora_local_mexico: z.string().optional()
 });
