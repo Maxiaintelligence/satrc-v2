@@ -267,13 +267,13 @@ Devuelve la respuesta en formato JSON estricto.`;
       body: JSON.stringify({
         model: "openai/gpt-oss-120b",
         temperature: 0.1,
+        max_completion_tokens: 4096, // 🔥 FIX H8.5: Evita que el JSON de 7 secciones se corte
         response_format: { type: "json_object" },
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt }
         ]
       })
-    });
 
     if (!respuestaGroq.ok) {
       const errorText = await respuestaGroq.text();
