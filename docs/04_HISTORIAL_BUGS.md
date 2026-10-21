@@ -112,3 +112,12 @@ Este documento registra los bugs estructurales resueltos en Octubre de 2026 (Fas
 - **Tag:** `etapa-3-cerrada`.
 - **Commit:** `<hash-commit-H9>`.
 - **Estado:** ✅ **Etapa 3 completada.**
+
+### H-ORQ-01 — Test 1 del orquestador con aserción incompatible con la sigmoide (Resuelto en Etapa 4, H5)
+
+- **Síntoma:** El Test 1 ("Calma Total") del `crossThreatOrchestrator.test.js` fallaba con `expected 1.12 to be 1` en línea 86.
+- **Causa:** La aserción `expect(niveles_por_vector.convectivo).toBe(1.0)` contradecía el diseño documentado de la sigmoide anti-parpadeo de `convectiveEvaluator.js` (§2.1 de `13_E4_CONVECTIVE_EVALUATOR.md`). Para CAPE=500, la sigmoide devuelve 1.118 → 1.12.
+- **Fix:** Se ajustó la aserción a `toBeGreaterThanOrEqual(1.0)` + `toBeLessThan(2.0)` (rango N1 continuo, coherente con el diseño).
+- **Verificación:** 7/7 tests del orquestador, 112/112 tests de la suite completa, CI en verde.
+- **Commit:** `<hash>` (obtenido con `git log --oneline -1`).
+- **Nota:** este hallazgo destrabó el commit de `crossThreatOrchestrator.js` + su test (untracked desde el bloqueo del equipo anterior). Desbloquea H6-E4.

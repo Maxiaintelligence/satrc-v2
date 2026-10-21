@@ -166,6 +166,16 @@ Todos los hitos de la Etapa 3 han sido cerrados, testeados y verificados en prod
 2. **Cada ítem debe tener:** estado, alcance, prioridad (alta/media/baja), y si va a Etapa 3 o V3.0.
 3. **Si se cierra un ítem, se borra de acá y se documenta en `04_HISTORIAL_BUGS.md`.**
 
+
+### H-E4-01 — Variables E4 no verificadas empíricamente en Open-Meteo
+
+- **Estado:** 🔴 Alta prioridad — bloqueante de H6.
+- **Síntoma:** Los scripts `diagnostico_calibracion.ps1`, `simulacion_nodos.ps1` y `simulacion_nodos_v2.ps1` solo verificaron `precipitation`, `temperature_2m`, `wind_speed_10m`, `wind_gusts_10m`.
+- **Causa:** Las 8 variables que usan `windEvaluator`, `thermalEvaluator` y `convectiveEvaluator` (`surface_pressure`, `apparent_temperature`, `cloud_cover`, `wet_bulb_temperature_2m`, `cape`, `freezing_level_height`, `relative_humidity_700hPa`, `wind_speed_700hPa`) NO fueron verificadas con PowerShell contra Open-Meteo real.
+- **Riesgo:** Si alguna no existe o devuelve `null` para la región, los módulos E4 quedan silenciosamente inertes en producción (los fallbacks del orquestador los rellenan con valores sintéticos).
+- **Fix:** Verificar con `Invoke-RestMethod` que las 8 variables devuelven datos no-null para las 14 zonas antes de integrar el orquestador en H6. Documentar el output en `diagnostico_variables_e4.json`.
+
+
 ---
 
 **Fin del backlog.**
