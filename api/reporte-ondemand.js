@@ -274,7 +274,8 @@ Devuelve la respuesta en formato JSON estricto.`;
           { role: "user", content: userPrompt }
         ]
       })
-
+  });
+  
     if (!respuestaGroq.ok) {
       const errorText = await respuestaGroq.text();
       console.error("❌ [GROQ] Error detallado:", errorText);
