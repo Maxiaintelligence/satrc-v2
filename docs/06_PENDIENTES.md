@@ -167,14 +167,28 @@ Todos los hitos de la Etapa 3 han sido cerrados, testeados y verificados en prod
 3. **Si se cierra un ítem, se borra de acá y se documenta en `04_HISTORIAL_BUGS.md`.**
 
 
-### H-E4-01 — Variables E4 no verificadas empíricamente en Open-Meteo
+### H-E4-01 — Verificación empírica de variables E4 en Open-Meteo
 
-- **Estado:** 🔴 Alta prioridad — bloqueante de H6.
-- **Síntoma:** Los scripts `diagnostico_calibracion.ps1`, `simulacion_nodos.ps1` y `simulacion_nodos_v2.ps1` solo verificaron `precipitation`, `temperature_2m`, `wind_speed_10m`, `wind_gusts_10m`.
-- **Causa:** Las 8 variables que usan `windEvaluator`, `thermalEvaluator` y `convectiveEvaluator` (`surface_pressure`, `apparent_temperature`, `cloud_cover`, `wet_bulb_temperature_2m`, `cape`, `freezing_level_height`, `relative_humidity_700hPa`, `wind_speed_700hPa`) NO fueron verificadas con PowerShell contra Open-Meteo real.
-- **Riesgo:** Si alguna no existe o devuelve `null` para la región, los módulos E4 quedan silenciosamente inertes en producción (los fallbacks del orquestador los rellenan con valores sintéticos).
-- **Fix:** Verificar con `Invoke-RestMethod` que las 8 variables devuelven datos no-null para las 14 zonas antes de integrar el orquestador en H6. Documentar el output en `diagnostico_variables_e4.json`.
-
+- **Estado:** ✅ **RESUELTO** (21/10/2026).
+- **Contexto:** Los scripts `diagnostico_calibracion.ps1`, `simulacion_nodos.ps1` y `simulacion_nodos_v2.ps1` solo verificaron `precipitation`, `temperature_2m`, `wind_speed_10m`, `wind_gusts_10m`. Las 8 variables E4 nunca se verificaron empíricamente.
+- **Verificación ejecutada:** `scripts/diagnostico/verificar_variables_e4.ps1` (nivel 1) + `scripts/diagnostico/verificar_variables_e4_nivel2.ps1` (nivel 2) sobre las 14 zonas.
+- **Resultado nivel 1:** 0/8 variables con datos. Causa aparente: ausencia.
+- **Resultado nivel 2:** ✅ las 8 variables **sí existen** y devuelven datos reales.
+  - **V1-V3 (individuales con GFS puro):** ✅ OK.
+  - **V4 (8 variables con GFS puro):** ✅ 8/8 OK, 48/48 no-null.
+  - **V5 (8 variables con ICON puro):** ✅ 8/8 OK.
+  - **V6 (8 variables con GEM puro):** ⚠️ 7/8 OK. `freezing_level_height` devuelve `null` en todas las horas.
+  - **V7 (superficie sin `models=`):** ✅ OK con nombres planos.
+  - **V8 (superficie con 3 modelos):** ⚠️ las variables llegan con sufijo `_gfs_seamless`, `_icon_seamless`, `_gem_seamless`.
+- **Causa raíz del falso negativo:** cuando se consulta con `models=gfs_seamless,icon_seamless,gem_seamless`, Open-Meteo **agrega el sufijo `_modelo`** al nombre de cada variable. El script de nivel 1 buscaba nombres planos y por eso encontró 0/8.
+- **Veredicto:** las 8 variables E4 **existen y devuelven datos reales**. H6 puede proceder.
+- **Impacto en H6:**
+  1. `meteoFetcher.js` debe pedir las 8 variables con los 3 modelos (con sufijos).
+  2. `consensusEngine.js` debe consensuar cada variable E4 (mediana con filtro, con `max` para `cape_jkg` y `wind_speed_700hPa`).
+  3. `freezing_level_height` requiere fallback a GFS cuando GEM devuelve `null`.
+  4. El shape de la serie consenso debe exponer las variables sin sufijo (`presion_hpa`, `sensacion_termica_c`, `cape_jkg`, etc.) para el orquestador.
+- **Scripts de verificación:** quedan en `scripts/diagnostico/verificar_variables_e4.ps1` y `verificar_variables_e4_nivel2.ps1` como evidencia reproducible.
+- **Output:** `diagnostico_variables_e4.json` (nivel 1) + `verificacion_e4_nivel2_output.txt` (nivel 2). Ambos deben agregarse a `.gitignore` en H6 (son artefactos de diagnóstico).
 
 ---
 
