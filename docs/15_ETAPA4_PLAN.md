@@ -1,132 +1,93 @@
 # SatRC V2.0 — Plan de Etapa 4: Arquitectura Multiamenaza
 
-| Campo | Detalle |
-|---|---|
-| **Fecha** | Octubre 2026 |
-| **Estado** | Diseño completado. Listo para implementación |
-| **Objetivo** | Transformar SatRC de un detector hidrológico a un **Sistema Experto Meteorológico Multiamenaza**, capaz de predecir y alertar sobre lluvias, vientos, calor, frío, nevadas, granizo y sus intersecciones |
+**Fecha:** Octubre 2026
+**Estado:** Diseño completado y validado empíricamente. Listo para implementación.
+**Objetivo:** Transformar SatRC de un detector hidrológico a un **Sistema Experto Meteorológico Multiamenaza**, capaz de predecir y alertar sobre lluvias, vientos, calor, frío, nevadas, granizo y sus intersecciones, usando física numérica y termodinámica.
 
 ---
 
-## 1. La Nueva Filosofía: Arquitectura de Módulos Especialistas
+## 1. La Nueva Filosofía: Módulos Especialistas y Adaptadores
 
-El éxito de la Etapa 3 radicó en la estabilidad del motor hidrológico (`riskEvaluator.js`). **No vamos a reescribirlo.** En su lugar, se adopta una arquitectura de **módulos especialistas e independientes**, cada uno con su propia física y test unitario, coordinados por un orquestador.
+El éxito de la Etapa 3 radicó en la estabilidad del motor hidrológico (`riskEvaluator.js`). **No vamos a reescribirlo.** En su lugar, adoptaremos una arquitectura de **Módulos Especialistas**, cada uno con su propia física y test unitario, coordinados por un Orquestador no lineal.
 
 ```text
 src/engine/
 ├── riskEvaluator.js            # [INTACTO] Motor Hidrológico actual (lluvia, deslaves)
-├── windEvaluator.js            # [NUEVO] Riesgo por Viento y Ráfagas
-├── thermalEvaluator.js         # [NUEVO] Riesgo por Frío, Calor, Heladas y Nieve
-├── convectiveEvaluator.js      # [NUEVO] Riesgo por Granizo y Downbursts (CAPE)
-└── crossThreatOrchestrator.js  # [NUEVO] El cerebro que cruza todas las amenazas
+├── hydroAdapter.js             # [NUEVO] Suavizado del motor hidrológico (Capa continua)
+├── windEvaluator.js            # [NUEVO] Riesgo por Viento y Ráfagas (Densidad y Presión Dinámica)
+├── thermalEvaluator.js         # [NUEVO] Riesgo por Frío, Calor, Heladas y Nieve (Termodinámica)
+├── convectiveEvaluator.js      # [NUEVO] Riesgo por Granizo y Downbursts (CAPE y Humedad)
+└── crossThreatOrchestrator.js  # [NUEVO] El Cerebro que acopla todas las amenazas
 ```
 
 ---
 
-## 2. Detalle de los Módulos (Física y Lógica)
+## 2. Detalle de los Módulos (Física y Lógica Validada)
 
-### 2.1 Motor Hidrológico (`riskEvaluator.js`)
+### 2.1. Motor Hidrológico (`riskEvaluator.js` + `hydroAdapter.js`)
 
-**Estado:** se queda exactamente como está. Sigue evaluando la saturación del suelo (API), la pendiente y las 6 reglas de deslave e inundación.
+- **Motor Original:** Se queda intacto, usando el proxy de saturación (`API_7dias + lluvia_24h`).
+- **Nota de Validación de Open-Meteo:** Se intentó usar `soil_moisture` (humedad real del suelo), pero la API devuelve `null` para nuestra región geográfica. Por lo tanto, se mantiene el proxy.
+- **El Adaptador (`hydroAdapter.js`):** Envuelve al `riskEvaluator.js`. Elimina el "Salto de Borde" usando una función sigmoide. Si el motor original da N3 pero la saturación está a 64.9 mm (cerca del umbral de 65 mm para N4), el adaptador retorna un nivel continuo de 3.8 (Alerta inminente), en lugar de esperar el salto brusco.
 
-### 2.2 Motor de Viento (`windEvaluator.js`)
+### 2.2. Motor de Viento (`windEvaluator.js`)
 
-- **El Bug de Pachuca:** se elimina el uso de viento sostenido. Se evalúan **ráfagas** (`wind_gusts_10m`).
-- **Umbrales dinámicos:** se aplica un `Factor_Altitud`. Localidades > 2300 msnm (Pachuca, Amajac) tienen un umbral de daño más alto (ej. ráfagas > 65 km/h para N2) que las zonas de valle (ej. > 45 km/h para N2).
+- **El Fin del Bug de Pachuca:** Ya no se usa un umbral de altitud. Se calcula la Densidad del Aire local con `surface_pressure` y `temperature_2m`.
+- **Velocidad Equivalente:** Se normaliza la ráfaga (`wind_gusts_10m`) a nivel del mar para calcular la presión dinámica real.
+- **Reglas:** Ráfagas > 45 km/h (N2), > 65 km/h (N3), > 90 km/h (N4).
 
-| Nivel | Significado |
-|---|---|
-| **N1** (Calma) | Ráfagas por debajo del umbral ajustado |
-| **N2** (Vigilancia) | Desprendimiento de objetos, lonas |
-| **N3** (Alerta) | Caída de árboles y cortes de energía |
-| **N4** (Emergencia) | Colapso estructural (ráfagas > 90–100 km/h) |
+### 2.3. Motor Térmico (`thermalEvaluator.js`)
 
-### 2.3 Motor Térmico (`thermalEvaluator.js`)
+- **El Peligro del Termómetro a 2 m:** Se estima la temperatura del suelo (Grass Minimum) usando `cloud_cover` (radiación) y `wind_speed` (mezcla). Si el cielo está despejado y no hay viento, la superficie se congela aunque el aire esté a +2°C.
+- **Nevadas:** Usa `wet_bulb_temperature_2m` (bulbo húmedo) en lugar de temperatura seca, porque la evaporación del copo enfría el aire.
+- **Transiciones:** Uso de funciones sigmoides para los rangos de frío/calor (evita parpadeos en el semáforo).
 
-**La física:** no usa temperatura seca. Usa la **sensación térmica** (`apparent_temperature`), que combina temperatura, viento (*wind chill*) y humedad (*heat index*).
+### 2.4. Motor Convectivo (`convectiveEvaluator.js`)
 
-- **Invierno (frío):** sensación < 0 °C → **N2** (hipotermia). Sensación < -5 °C → **N3**.
-- **Heladas agrícolas:** `temperature_2m` < 2 °C + viento bajo + cielo despejado (`cape` < 50) → **N2** (alerta para cultivos).
-- **Nevadas:** `precipitation` > 0 + `temperature_2m` < 1.5 °C + nivel de congelación (`freezing_level_height`) por debajo de la altitud del cerro → **N3** (cierre de vías).
-- **Primavera (calor):** sensación > 35 °C → **N2** (estrés). Sensación > 42 °C → **N3** (golpe de calor).
+- **Granizo:** Usa el espesor de la capa de fusión ($\Delta h = \text{freezing\_level\_height} - \text{altitud\_msnm}$). Si es menor a 1000 m, el granizo llega intacto al suelo.
+- **Downbursts:** En lugar de esperar a que la ráfaga destructiva ocurra, evalúa los precursores. Calcula el `Potencial_Desplome` cruzando el `cape` con la humedad en capas medias (`relative_humidity_700hPa`). Si el aire está seco y el CAPE es alto, el riesgo de racha descendente es inminente.
 
-### 2.4 Motor Convectivo (`convectiveEvaluator.js`)
+### 2.5. El Orquestador (`crossThreatOrchestrator.js`)
 
-**La física:** detecta inestabilidad atmosférica usando CAPE (Energía Potencial de Convección) y la altura de congelación.
+- **Adiós al `Math.max`:** El riesgo no es lineal. Un suelo blando (Hidrología N2) + Viento moderado (N2) = Árboles caídos (N3).
+- **Fórmula de Acoplamiento:**
 
-- **N2 (Vigilancia):** `cape` > 800 J/kg. Tormentas dispersas.
-- **N3 (Granizo / tormenta):** `cape` > 1500 J/kg + lluvia > 10 mm + congelación < 3500 m. Si la congelación está muy alta, el granizo se derrite antes de caer.
-- **N3/N4 (Downburst):** `cape` > 2000 J/kg + ráfagas > 70 km/h. Rachas descendentes destructivas.
+$$R_{orquestado} = \max(r_H, r_V, r_T, r_C) + \sum \gamma \cdot (r_i - 1)(r_j - 1)$$
 
----
-
-## 3. El Orquestador Multiamenaza (`crossThreatOrchestrator.js`)
-
-Este es el salto de nivel. Ejecuta los 4 módulos anteriores y evalúa la **intersección** (sinergia) de las amenazas. El nivel final es el máximo entre los vectores individuales, **pero** se eleva si dos amenazas moderadas coinciden espacial y temporalmente.
-
-### 3.1 Matriz de Intersección (Cross-Threat)
-
-| Amenaza 1 | Amenaza 2 | Escenario físico combinado | Nivel forzado |
-|---|---|---|---|
-| Hidrología (N2) | Viento (N2) | Suelo blando + ráfagas fuertes = árboles caídos en caminos | **N3** (Corte Vial) |
-| Hidrología (N2) | Térmico Frío (N2) | Lluvia + temperatura bajo cero = aguanieve / vías congeladas | **N3** (Vías Congeladas) |
-| Convectivo (N3) | Viento (N2) | Tormenta severa + ráfagas = *downburst* (rachas descendentes) | **N4** (Emergencia) |
-
-### 3.2 Contrato de Salida del Orquestador
-
-Reemplaza al objeto que genera `riskEvaluator.js`:
-
-```json
-{
-  "nivel_alerta_global": 3,
-  "vector_dominante": "HIDRO_VIENTO",
-  "niveles_por_vector": {
-    "hidrologico": 2,
-    "viento": 2,
-    "termico": 1,
-    "convectivo": 1
-  },
-  "diagnostico": {
-    "titulo": "Alerta por Caída de Árboles y Cortes Viales",
-    "causa": "El suelo saturado por lluvia y las ráfagas fuertes de viento generan riesgo de caída de árboles."
-  }
-}
-```
+- **Salida:** Entrega un `nivel_alerta_global` (entero) y un `riesgo_continuo` (decimal) para auditoría.
 
 ---
 
-## 4. Estrategia del SMN / CONAGUA: Precisión Geográfica
+## 3. Estrategia del SMN / CONAGUA: Precisión Geográfica
 
-Para resolver el falso positivo de Veracruz (Sur vs. Norte):
+Para resolver el falso positivo de Veracruz (Sur vs Norte):
 
-1. **Web Service (`method=1`):** consumir el Web Service GZIP de CONAGUA en lugar de hacer scraping del HTML.
-2. **Cruce de pronóstico:** si el SMN emite un aviso para el Sur de Veracruz, pero el modelo Open-Meteo indica 0 mm de lluvia en Huayacocotla (Norte), el sistema ignora el piso de lluvia del SMN para esa localidad.
-3. **Regla de aplicación:** el SMN se usa como "segunda opinión" solo si sus datos coinciden con la realidad local de Open-Meteo.
-
----
-
-## 5. Planeación de Implementación (Roadmap E4)
-
-La Etapa 4 se implementa de forma atómica, con tests antes de tocar el orquestador.
-
-- [ ] **H1 (E4) — Wind Evaluator:** codificar `windEvaluator.js` + sus 6 tests (incluye el fix de Pachuca). 1 commit.
-- [ ] **H2 (E4) — Thermal Evaluator:** codificar `thermalEvaluator.js` + sus tests (frío, calor, heladas). 1 commit.
-- [ ] **H3 (E4) — Convective Evaluator:** codificar `convectiveEvaluator.js` + tests (CAPE, granizo, downbursts). 1 commit.
-- [ ] **H4 (E4) — Orquestador:** codificar `crossThreatOrchestrator.js` + tests de intersección. 1 commit.
-- [ ] **H5 (E4) — Integración Frontend/Runner:** reemplazar `evaluarLocalidad` por `evaluarMultiamenaza` en el runner y en el frontend. Actualizar Zod si es necesario. 1 commit.
-- [ ] **H6 (E4) — SARA Multiamenaza:** actualizar los prompts de IA (Groq) para que redacte recomendaciones de frío, calor y viento. 1 commit.
+- **Web Service (`method=1`):** Consumir el Web Service GZIP de CONAGUA.
+- **Cruce de Pronóstico:** Si el SMN emite un aviso para el Sur de Veracruz, pero Open-Meteo dice que en Huayacocotla (Norte) habrá 0 mm, se ignora el piso de lluvia del SMN para esa localidad.
 
 ---
 
-## 6. Actualización de la IA (SARA) para Multiamenaza
+## 4. Planeación de Implementación (Roadmap E4)
+
+La Etapa 4 se implementará de forma atómica, respetando la regla "1 commit = 1 causa".
+
+1. **H1 (E4) — Wind Evaluator:** Codificar `windEvaluator.js` + sus 6 tests. 1 commit.
+2. **H2 (E4) — Thermal Evaluator:** Codificar `thermalEvaluator.js` + sus tests. 1 commit.
+3. **H3 (E4) — Convective Evaluator:** Codificar `convectiveEvaluator.js` + tests. 1 commit.
+4. **H4 (E4) — Hydro Adapter:** Codificar `hydroAdapter.js` + tests. 1 commit.
+5. **H5 (E4) — Orquestador:** Codificar `crossThreatOrchestrator.js` + tests de acoplamiento. 1 commit.
+6. **H6 (E4) — Integración Frontend/Runner:** Reemplazar `evaluarLocalidad` por `evaluarMultiamenaza` en el runner y en el frontend. Actualizar Zod. 1 commit.
+7. **H7 (E4) — SARA Multiamenaza:** Actualizar los prompts de IA (Groq) para que redacte recomendaciones de frío, calor y viento. 1 commit.
+
+---
+
+## 5. Actualización de la IA (SARA) para Multiamenaza
 
 Los prompts de `api/reporte-ondemand.js` y `reporteDiario.mjs` deben cambiar para dejar de ser "expertos en lluvia".
 
-**Nuevas reglas:**
+**Nuevas Reglas:**
 
-| Vector | Recomendación de SARA |
-|---|---|
-| `FRIO` | Recomendar abrigo, revisar techos y proteger cultivos |
-| `CALOR` | Recomendar hidratación y evitar actividades al sol |
-| `VIENTO` | Recomendar asegurar láminas y no salir a caminos de terracería |
-| `GRANIZO` | Recomendar resguardo de vehículos y cultivos |
+- Si el vector es `FRIO`: "Recomendar abrigo, revisar techos y proteger cultivos."
+- Si el vector es `CALOR`: "Recomendar hidratación y evitar actividades al sol."
+- Si el vector es `VIENTO`: "Recomendar asegurar láminas y no salir a caminos de terracería."
+- Si el vector es `GRANIZO`: "Recomendar resguardo de vehículos y cultivos."
