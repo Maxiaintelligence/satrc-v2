@@ -7,13 +7,24 @@ const OPEN_METEO_BASE = "https://api.open-meteo.com/v1/forecast";
 
 export async function consultarModelosDeterministas(lat, lon) {
   const variables = [
+    // Variables del motor hidrológico (producción actual)
     "precipitation",
     "temperature_2m",
     "relative_humidity_2m",
     "wind_speed_10m",
     "wind_gusts_10m",
     "visibility",
-    "weather_code"
+    "weather_code",
+    // Variables E4 (H6.1) — verificadas empíricamente el 21/10/2026
+    // Open-Meteo las expone con sufijo _gfs_seamless, _icon_seamless, _gem_seamless
+    "surface_pressure",          // windEvaluator (densidad del aire)
+    "apparent_temperature",      // thermalEvaluator (sensación térmica)
+    "cloud_cover",               // thermalEvaluator (Grass Minimum)
+    "wet_bulb_temperature_2m",   // thermalEvaluator (nevadas)
+    "cape",                      // convectiveEvaluator (inestabilidad)
+    "freezing_level_height",     // convectiveEvaluator (granizo) — GEM devuelve null
+    "relative_humidity_700hPa",  // convectiveEvaluator (downburst)
+    "wind_speed_700hPa"          // convectiveEvaluator (cizalladura)
   ].join(",");
 
   // Tríada verificada y sin deprecaciones: GFS (NOAA), ICON (DWD) y GEM (Canadá)
