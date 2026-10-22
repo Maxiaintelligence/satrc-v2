@@ -197,3 +197,30 @@
 - **Acciones:** actualización de `04_HISTORIAL_BUGS.md`, `06_PENDIENTES.md`, `10_HANDOVER.md` y creación de `HANDOVER_SESION_2026-10-22.md`.
 - **Tag:** `etapa-4-cerrada` (en commit `29009fe`).
 - **Estado:** ✅ **Etapa 4 completada a nivel funcional (H6.1–H6.7). Deuda aceptada: H6.6 (frontend), H7 (prompts SARA), H-ARCH-01 (extensibilidad del pipeline).**
+
+## Etapa 5 — Integración Multivectorial (H5.0)
+
+### H-ORQ-05 — N1 debe ser SIN_AMENAZA
+
+- **Síntoma:** 114 CONVECTIVO N1 falsos positivos + 35 VIENTO N1, con títulos de vectores que no correspondían al nivel (ej. "CONVECTIVO" en localidad sin amenaza).
+- **Causa:** `determinarVectorDominante` elegía un vector por margen ínfimo (1.05 vs 1.00) incluso en N1, donde ningún vector aporta amenaza real.
+- **Fix:** si `nivelGlobal === 1`, forzar `vectorDominante = 'SIN_AMENAZA'`.
+- **Verificación (22/10/2026):** 142 SIN_AMENAZA en producción, 0 CONVECTIVO N1, 0 VIENTO N1.
+- **Commit:** `f9845a6`.
+
+### H-ORQ-06 — Diagnóstico de acoplamiento específico por vector
+
+- **Síntoma:** 30 VIENTO N2 con causa "Vientos Normales" (contradicción nivel N2 vs vector N1) y 11 N3 hidro con "compuesto por acoplamiento (X + otras amenazas)" (verboso).
+- **Causa:** el diagnóstico se quedaba con el título del vector dominante, sin reflejar que el nivel subió por acoplamiento con otros vectores.
+- **Fix:** cuando `nivelGlobal > floor(nivelDelVectorTop)`:
+  - `titulo = "Acoplamiento {vector1} + {vector2} — Nivel {N}"`.
+  - `causa = "El nivel {N} se alcanza por acoplamiento entre {vector1} y {vector2}. {causaOriginal}"`.
+- **Verificación (22/10/2026):**
+  - 11 N3 hidro subido → "Acoplamiento hidrología + viento — Nivel 3". ✅
+  - 25 N3 hidro puro → sin cambios. ✅
+  - 30 VIENTO N2 → desaparecieron por cambio de clima (viento bajó de 1.99 a 1.93). Pero el test 10 los cubre artificialmente. ✅
+- **Commits:** `f9845a6` (test), `85a8013` (fix inicial), `c09d1c6` (Math.floor, intento fallido), `e30c266` (fix final H5.0.2b).
+
+### Nota metodológica
+
+El fix de H5.0.2 requirió 3 iteraciones (H5.0.2 → H5.0.2a con Math.floor → H5.0.2b con vectores específicos). **Lección:** antes de proponer un fix, analizar los datos reales de producción (los 11 casos tenían `hidro=2.94`, no 3.03, lo que el primer fix no consideró). Documentado como H-TEST-08.
