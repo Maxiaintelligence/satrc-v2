@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import { put, list } from '@vercel/blob';
 import { repararMojibake, repararObjeto } from '../src/lib/compartido/mojibake.js';
 import { EstadoDiocesanoResponseSchema } from '../src/schemas/estadoDiocesanoSchema.js';
+import { generarTituloDictamen } from '../src/lib/compartido/dictamen.js';
 
 const BLOQUE_GENESIS = "0000000000000000000000000000000000000000000000000000000000000000";
 const MAX_REGISTROS_BITACORA = 500;
@@ -180,16 +181,11 @@ export default async function handler(req, res) {
   const estadoSituacion = nivel4 > 0 ? "SITUACION_CRITICA" : (nivel3 > 0 ? "SITUACION_GRAVE" : "SITUACION_NORMAL");
   const { color, titulo: tituloBase } = ESTADOS[estadoSituacion];
 
-  let dictamenFinal = {
-    estado_situacion: estadoSituacion,
-    color,
-    titulo: tituloBase,
-    comentario_oficial: `Monitoreo en vivo (${horaMexicoStr}): Sincronización oficial con CONAGUA/SMN. Vigilancia prioritaria en comunidades de ladera de la Sierra. Altiplano central en calma.`,
-    hora_evaluacion: horaMexicoStr,
-    proxima_evaluacion: proximaCorridaStr,
-    timestamp: ahora.toISOString(),
-    modelo_ia: "SARA Core en Vivo"
-  };
+    // H5.2 — Título determinista (el contexto puede traer vectorTop, si no, default)
+  const vectorTop = contexto.vector_dominante || (nivel4 > 0 ? 'HIDROLOGICO' : 'SIN_AMENAZA');
+  const tituloDictamen = generarTituloDictamen(nivel4 > 0 ? 4 : (nivel3 > 0 ? 3 : 1), vectorTop);
+
+    titulo: tituloDictamen,
 
   if (apiKeyGroq && !killSwitchActivo) {
     try {

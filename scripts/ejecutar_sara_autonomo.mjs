@@ -9,6 +9,7 @@ import { repararMojibake } from '../src/lib/compartido/mojibake.js';
 import { evaluarLocalidadRunner } from './engine/riskEvaluatorRunner.mjs';
 import { evaluarMultiamenaza } from '../src/engine/crossThreatOrchestrator.js';
 import { EstadoDiocesanoBlobSchema } from '../src/schemas/estadoDiocesanoSchema.js';
+import { generarTituloDictamen } from '../src/lib/compartido/dictamen.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rutaJSON = path.join(__dirname, '../src/data/localidades.json');
@@ -583,6 +584,11 @@ async function ejecutarSARA() {
 
   console.log(`📊 [SARA CONSENSO GFS+ICON+GEM] N4: ${n4} | N3: ${n3} | N2: ${n2} | N1: ${n1} | Sin datos: ${sinDatos}`);
 
+  // H5.2 — Título determinista basado en el top-1 (vector dominante)
+  const top1 = evaluaciones[0]; // Ya ordenadas descendentemente por nivel_alerta
+  const nivelTop = top1 ? top1.nivel_alerta : 1;
+  const vectorTop = top1 ? top1.vector_dominante : 'SIN_AMENAZA';
+
   // --- 6. Inferencia con Groq ---
   let dictamenSARA = null;
   const apiKeyGroq = process.env.GROQ_API_KEY;
@@ -627,11 +633,13 @@ Comunidades críticas bajo tensión: ${JSON.stringify(criticas)}.` }
     dictamenSARA = {
       estado_situacion: n4 > 0 ? "SITUACION_CRITICA" : (n3 > 0 ? "SITUACION_GRAVE" : "SITUACION_NORMAL"),
       color: n4 > 0 ? "#EF4444" : (n3 > 0 ? "#F97316" : "#10B981"),
-      titulo: n4 > 0 ? "Emergencia por Deslaves en Taludes >= 45°" : (n3 > 0 ? "Alerta Temprana en Laderas Serranas" : "Situación Diocesana de Calma"),
+      titulo: generarTituloDictamen(nivelTop, vectorTop),
       comentario_oficial: `Corrida autónoma multi-nodo con consenso GFS+ICON+GEM (${horaMexicoStr}): ${zonasOk.length} zonas evaluadas.`
     };
   }
-
+  
+  // H5.2 — El título es determinista y siempre se genera desde el top-1
+  dictamenSARA.titulo = generarTituloDictamen(nivelTop, vectorTop);
   dictamenSARA.estado_situacion = normalizarEstadoSituacion(dictamenSARA.estado_situacion);
   dictamenSARA.hora_evaluacion = horaMexicoStr;
   dictamenSARA.proxima_evaluacion = proximaCorridaStr;
