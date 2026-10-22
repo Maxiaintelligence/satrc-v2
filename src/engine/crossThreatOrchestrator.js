@@ -193,17 +193,33 @@ export function evaluarMultiamenaza(localidad, serieHoraria, contexto = {}) {
     causa = modulosConRiesgo[0].diag?.causa || causa;
   }
 
-  // H5.0.2 — Coherencia nivel/diagnóstico por acoplamiento.
+  // H5.0.2b — Diagnóstico específico por acoplamiento.
   // Si el nivel global supera el nivel DISCRETO del vector top, el nivel
-  // subió por acoplamiento (no por el vector en sí). Usar Math.floor()
-  // evita marcar como "compuesto" los N3 hidro puros (3.03 → floor 3),
-  // donde el nivel global ya era 3 por el propio vector.
-  // Ver 04_HISTORIAL_BUGS.md H-ORQ-06.
+  // subió por acoplamiento. En ese caso, mostrar los DOS vectores que más
+  // contribuyeron, con formato "Acoplamiento X + Y — Nivel N".
+  // Los N3/N4 puros (donde el nivel global coincide con el nivel discreto
+  // del vector top) NO se tocan. Ver 04_HISTORIAL_BUGS.md H-ORQ-06.
   const nivelDelVectorTop = Math.max(rH, rV, rT, rC);
   const nivelDelVectorTopDiscreto = Math.floor(nivelDelVectorTop);
   if (nivelGlobal > nivelDelVectorTopDiscreto && nivelGlobal > 1) {
-    titulo = `Nivel compuesto por acoplamiento (${titulo} + otras amenazas)`;
-    causa = `El nivel ${nivelGlobal} se alcanza por acoplamiento entre múltiples amenazas. ${causa}`;
+    const NOMBRES_VECTOR = {
+      HIDROLOGICO: 'hidrología',
+      VIENTO: 'viento',
+      TERMICO: 'térmico',
+      CONVECTIVO: 'convección'
+    };
+    const vectoresOrdenados = [
+      { nombre: 'HIDROLOGICO', valor: rH },
+      { nombre: 'VIENTO', valor: rV },
+      { nombre: 'TERMICO', valor: rT },
+      { nombre: 'CONVECTIVO', valor: rC }
+    ].sort((a, b) => b.valor - a.valor);
+
+    const v1 = NOMBRES_VECTOR[vectoresOrdenados[0].nombre];
+    const v2 = NOMBRES_VECTOR[vectoresOrdenados[1].nombre];
+
+    titulo = `Acoplamiento ${v1} + ${v2} — Nivel ${nivelGlobal}`;
+    causa = `El nivel ${nivelGlobal} se alcanza por acoplamiento entre ${v1} y ${v2}. ${causa}`;
   }
 
   if (acoplamiento > 0.5) {
