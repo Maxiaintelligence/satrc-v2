@@ -99,7 +99,7 @@ function generarAcciones(vector, nivel) {
  */
 
 export function evaluarMultiamenaza(localidad, serieHoraria, contexto = {}) {
-  // 1. Convertir el array de objetos a objeto de arrays (para los nuevos módulos)
+  // 1. Convertir el array de objetos a objeto de`` arrays (para los nuevos módulos)
   let serieParaNuevosModulos = serieHoraria;
   
   if (Array.isArray(serieHoraria) && serieHoraria.length > 0) {
@@ -163,6 +163,16 @@ export function evaluarMultiamenaza(localidad, serieHoraria, contexto = {}) {
     } else if (rH > 1.5 && rT > 1.5) {
       vectorDominante = 'HIDRO_TERMICO';
     }
+  }
+
+  // H5.0.1 — Fix de coherencia vector/nivel.
+  // Un Nivel 1 (Calma) NO tiene vector dominante: todos los vectores están
+  // en su línea base (1.0). Elegir uno por margen ínfimo (ej. convectivo=1.05
+  // vs hidro=1.00) es un falso positivo del desempate y confunde al operador
+  // cuando audita la localidad. Se marca explícitamente como SIN_AMENAZA.
+  // Ver 04_HISTORIAL_BUGS.md H-ORQ-05.
+  if (nivelGlobal === 1) {
+    vectorDominante = 'SIN_AMENAZA';
   }
 
   const acciones = generarAcciones(vectorDominante, nivelGlobal);

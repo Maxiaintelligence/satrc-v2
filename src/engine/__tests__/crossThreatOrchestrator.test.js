@@ -202,4 +202,98 @@ describe('crossThreatOrchestrator.js', () => {
     expect(res.niveles_por_vector).toHaveProperty('convectivo');
   });
 
+  // === H5.0.1: Fix de coherencia vector/nivel para N1 ===
+  it('9. N1 con vectores marginales: vector_dominante debe ser SIN_AMENAZA', () => {
+    // Escenario real del 22/10/2026: Actopan (N1) con convectivo=1.05,
+    // hidro=1.00, viento=1.00, termico=1.00. El orquestador elegía
+    // CONVECTIVO por un margen de 0.05, generando incoherencia en la UI.
+    // Con el fix, debe ser SIN_AMENAZA.
+    const loc = mockLocalidad({
+      zona_id: 'ACT',
+      topografia: { altitud_msnm: 2000, pendiente_max_deg: 5, relieve: 'MESETA', twi: 8 }
+    });
+    // Serie con CAPE bajo (convectivo 1.05) y todo lo demás en calma
+    const serie = mockSerieCompleta({
+      lluvia: 0,
+      temp: 18,
+      sensacion: 18,
+      rafagas: 15,
+      sostenido: 5,
+      nubosidad: 30,
+      bulbo: 12,
+      cape: 200,          // CAPE bajo → convectivo 1.05 (marginal)
+      humedad700: 60,
+      nivelCongelacion: 4000,
+      presion: 1013
+    });
+    const res = evaluarMultiamenaza(loc, serie);
+
+    // Debe ser N1 (calma)
+    expect(res.nivel_alerta_global).toBe(1);
+    // Y el vector debe ser SIN_AMENAZA (no CONVECTIVO)
+    expect(res.vector_dominante).toBe('SIN_AMENAZA');
+    // Los niveles por vector deben reflejar el estado real (todos cerca de 1.0)
+    expect(res.niveles_por_vector.convectivo).toBeLessThan(1.1);
+    expect(res.niveles_por_vector.hidrologico).toBe(1.0);
+  });
+
+  it('10. N2 por acoplamiento: causa debe mencionar "compuesto por acoplamiento"', () => {
+    // Escenario: hidro 1.0 + viento 1.99 (a 2400 msnm, ráfaga 52 km/h) + convectivo 1.05
+    // El acoplamiento convectivo-viento (γ=0.30) sube el riesgo continuo a 2.00485 → N2.
+    // Pero el vector dominante (VIENTO, 1.99) está en N1.
+    // El diagnóstico debe decir "compuesto por acoplamiento".
+    const loc = mockLocalidad({
+      zona_id: 'PMN',
+      topografia: { altitud_msnm: 2400, pendiente_max_deg: 8, relieve: 'MESETA', twi: 10 }
+    });
+    const serie = mockSerieCompleta({
+      lluvia: 0,          // hidro = 1.0 (sin lluvia)
+      temp: 15,
+      sensacion: 15,
+      rafagas: 52,        // ← CAMBIO: 45 → 52. A 2400 msnm, vEqFinal ≈ 45 km/h → nivelContinuo = 1.99
+      sostenido: 10,
+      nubosidad: 50,
+      bulbo: 12,
+      cape: 300,          // convectivo = 1.05
+      humedad700: 60,
+      nivelCongelacion: 4000,
+      presion: 760        // presión a 2400 msnm
+    });
+    const res = evaluarMultiamenaza(loc, serie);
+
+    // Debe ser N2
+    expect(res.nivel_alerta_global).toBe(2);
+    // El título debe mencionar "compuesto por acoplamiento"
+    expect(res.diagnostico.titulo).toMatch(/compuesto por acoplamiento/i);
+    // La causa también
+    expect(res.diagnostico.causa).toMatch(/acoplamiento/i);
+  });
+
+it('11. N3 hidro puro: NO debe marcarse como "compuesto por acoplamiento"', () => {
+  // Los 36 N3 del 22/10/2026 son hidro puros. El fix NO debe tocarlos.
+  const loc = mockLocalidad({
+    zona_id: 'ZAC',
+    topografia: { altitud_msnm: 2000, pendiente_max_deg: 40, relieve: 'LADERA', twi: 13 },
+    vulnerabilidad: {
+      poblacion: 1000,
+      marginacion: 'ALTO',
+      acceso_vial: 'CAMINO_TERRACERIA',
+      dist_hospital_km: 10
+    }
+  });
+  // 24h de lluvia para forzar corte vial → N3 hidro
+  const serie = mockSerieCompleta({
+    lluvia: 1.0,        // 24mm total → N3 por corte vial
+    temp: 15,
+    rafagas: 20,        // viento bajo
+    presion: 800
+  });
+  const res = evaluarMultiamenaza(loc, serie);
+
+  expect(res.nivel_alerta_global).toBe(3);
+  expect(res.vector_dominante).toBe('HIDROLOGICO');
+  // NO debe mencionar acoplamiento (nivelGlobal === nivelDelVectorTop)
+  expect(res.diagnostico.titulo).not.toMatch(/compuesto por acoplamiento/i);
+});
+
 });
