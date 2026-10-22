@@ -355,17 +355,18 @@ async function registrarCorridaDegradada(horaMexicoStr, fechaDiaMexico, horaExac
 
   // H5.3 — Generar resumen multivector para la bitácora
   const resumenMulti = generarResumenMultivector(evaluaciones);
+  
 
     const prevHash = bitacoraHistorial.length > 0
       ? bitacoraHistorial[bitacoraHistorial.length - 1].hash_completo
       : BLOQUE_GENESIS;
-    const nuevoHash = generarHashSHA256(prevHash, dictamenSARA.timestamp, { 
-      n4, n3, n2, n1, 
-      resumenMulti, 
-      zonaOk: zonasOk.length, 
-      hora: horaMexicoStr, 
-      consenso: "GFS+ICON+GEM" 
-    });
+  const nuevoHash = generarHashSHA256(prevHash, dictamenSARA.timestamp, { 
+    n4, n3, n2, n1, 
+    resumenMulti, 
+    zonaOk: zonasOk.length, 
+    hora: horaMexicoStr, 
+    consenso: "GFS+ICON+GEM" 
+  });
     const nuevoId = siguienteIdBitacora(bitacoraHistorial);
 
     bitacoraHistorial.push({
@@ -377,7 +378,7 @@ async function registrarCorridaDegradada(horaMexicoStr, fechaDiaMexico, horaExac
       origen_evento: "CORRIDA_DEGRADADA",
       estado_situacion: "CORRIDA_DEGRADADA",
       titulo: "Corrida degradada: sin datos meteorológicos de ninguna zona",
-          resumen: `${resumenMulti} | Zonas OK: ${zonasOk.length}/${Object.keys(nodos).length}. ${dictamenSARA.comentario_oficial}`,
+      resumen: `${resumenMulti} | Zonas OK: ${zonasOk.length}/${Object.keys(nodos).length}. ${dictamenSARA.comentario_oficial}`,
       prev_hash: prevHash.slice(0, 16) + "...",
       hash: nuevoHash.slice(0, 16) + "...",
       hash_completo: nuevoHash
