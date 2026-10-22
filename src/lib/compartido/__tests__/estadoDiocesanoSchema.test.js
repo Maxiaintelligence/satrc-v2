@@ -81,4 +81,65 @@ describe('EstadoDiocesanoSchemas', () => {
       expect(res.success).toBe(false);
     });
   });
+
+    it('preserva los 5 campos del orquestador multiamenaza (H6.5)', () => {
+      const payload = {
+        ...payloadBlobValido,
+        evaluaciones: [{
+          ...payloadBlobValido.evaluaciones[0],
+          nivel_alerta_global: 3,
+          riesgo_continuo: 3.36,
+          niveles_por_vector: { hidrologico: 3.03, viento: 1.78, termico: 1.0, convectivo: 1.05 },
+          acciones_operativas: ['Restringir circulación en caminos de terracería.'],
+          diagnosticos_por_vector: {
+            hidrologico: { titulo: 'Corte Vial', causa: 'Terracería vulnerable' },
+            viento: { titulo: 'Vientos Normales', causa: 'Ráfagas de 40.7 km/h' },
+            termico: { titulo: 'Térmico Normal', causa: 'Sin amenaza' },
+            convectivo: { titulo: 'Atmósfera Estable', causa: 'Sin convección' }
+          }
+        }]
+      };
+      const res = EstadoDiocesanoBlobSchema.safeParse(payload);
+      expect(res.success).toBe(true);
+      const ev = res.data.evaluaciones[0];
+      expect(ev.nivel_alerta_global).toBe(3);
+      expect(ev.riesgo_continuo).toBe(3.36);
+      expect(ev.niveles_por_vector).toEqual({ hidrologico: 3.03, viento: 1.78, termico: 1.0, convectivo: 1.05 });
+      expect(ev.acciones_operativas).toEqual(['Restringir circulación en caminos de terracería.']);
+      expect(ev.diagnosticos_por_vector.hidrologico.titulo).toBe('Corte Vial');
+    });
+
+    it('acepta payload sin los 5 campos del orquestador (retrocompatibilidad)', () => {
+      // payloadBlobValido NO tiene los 5 campos. El schema debe aceptarlo.
+      const res = EstadoDiocesanoBlobSchema.safeParse(payloadBlobValido);
+      expect(res.success).toBe(true);
+      const ev = res.data.evaluaciones[0];
+      expect(ev.nivel_alerta_global).toBeUndefined();
+      expect(ev.niveles_por_vector).toBeUndefined();
+    });
+
+    it('rechaza nivel_alerta_global fuera de rango (1-4)', () => {
+      const payload = {
+        ...payloadBlobValido,
+        evaluaciones: [{
+          ...payloadBlobValido.evaluaciones[0],
+          nivel_alerta_global: 5
+        }]
+      };
+      const res = EstadoDiocesanoBlobSchema.safeParse(payload);
+      expect(res.success).toBe(false);
+    });
+
+    it('rechaza acciones_operativas si no es un array', () => {
+      const payload = {
+        ...payloadBlobValido,
+        evaluaciones: [{
+          ...payloadBlobValido.evaluaciones[0],
+          acciones_operativas: 'Restringir circulación'  // string, no array
+        }]
+      };
+      const res = EstadoDiocesanoBlobSchema.safeParse(payload);
+      expect(res.success).toBe(false);
+    });
+
 });
