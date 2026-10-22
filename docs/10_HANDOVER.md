@@ -5,9 +5,9 @@ Cáritas Pastoral Social • Arquidiócesis de Tulancingo (Hidalgo, Sierra Norte
 
 | Campo | Detalle |
 |---|---|
-| **Versión del documento** | 2.2.0 (Cierre de Etapa 3) |
-| **Fecha de corte y actualización** | 21 de octubre de 2026 |
-| **Estado del sistema en producción** | Operativo y Estable (Etapa 3 finalizada; H0 a H9 cerrados) |
+| **Versión del documento** | 2.3.0 (Cierre de Etapa 4) |
+| **Fecha de corte y actualización** | 22 de octubre de 2026 |
+| **Estado del sistema en producción** | Operativo y Estable (Etapa 3 y Etapa 4 finalizadas; H0 a H9 + H6.1 a H6.7 cerrados) |
 | **Audiencia** | Ingenieros de software, administradores de sistemas, líderes técnicos y auditores que asuman la operación y evolución del proyecto |
 
 ---
@@ -24,6 +24,7 @@ Cáritas Pastoral Social • Arquidiócesis de Tulancingo (Hidalgo, Sierra Norte
 8. [Modelo de Datos y Cadena Criptográfica](#8-modelo-de-datos-y-cadena-criptográfica)
 9. [Personas, Responsabilidades y Escalamiento](#9-personas-responsabilidades-y-escalamiento)
 10. [Transferencia de Conocimiento y Checklist de Aceptación](#10-transferencia-de-conocimiento-y-checklist-de-aceptación)
+11. [Metodología de Verificación Empírica](#11-metodología-de-verificación-empírica)
 
 ---
 
@@ -142,7 +143,7 @@ Cubre **405 localidades** rurales y semiurbanas de alta marginación y relieve a
 | Iconografía | Lucide React | ^1.50.0 | Iconografía táctica ligera |
 | LLM Inference | Groq (`openai/gpt-oss-120b`) | API v1 | Redacción de reportes estructurados en < 3 seg |
 | Satélite | NOAA NESDIS STAR GOES-19 | CDN Público | Monitoreo de nubes, celdas convectivas y fuego |
-| Testing | Vitest | ^5.0.5 | Suite de 79 tests unitarios y de integración (H7a/H7b) |
+| Testing | Vitest | ^5.0.5 | Suite de 123 tests unitarios y de integración (H7a/H7b/H6.7) |
 
 ### 2.3 Estructura de Directorios Explicada
 
@@ -151,7 +152,7 @@ satrc-v3/
 ├── .github/
 │   └── workflows/
 │       ├── sara_cron.yml           # Cronjob: ejecuta el runner autónomo cada 3h
-│       └── tests.yml               # CI: corre los 79 tests de Vitest en cada push
+│       └── tests.yml               # CI: corre los 123 tests de Vitest en cada push
 │
 ├── api/                            # Vercel Serverless Functions (Backend Node.js)
 │   ├── disparar-workflow.js        # Endpoint webhook (cron-job.org) para disparar el runner
@@ -160,7 +161,7 @@ satrc-v3/
 │   ├── sara.js                     # Endpoint principal: entrega el estado y la bitácora
 │   └── smn.js                      # Scraper del SMN/CONAGUA: detecta avisos oficiales
 │
-├── docs/                           # Documentación fundacional del proyecto (00 a 10)
+├── docs/                           # Documentación fundacional del proyecto (00 a 16)
 │   ├── 00_METODOLOGIA.md           # Reglas de oro de desarrollo y commits
 │   ├── 01_CONTEXTO.md              # Manifiesto, alcance y glosario
 │   ├── 02_ARQUITECTURA.md          # Diagramas de componentes y flujo de datos
@@ -169,9 +170,17 @@ satrc-v3/
 │   ├── 05_PROMPT_SARA.md           # Ingeniería de prompts para el LLM de SARA
 │   ├── 06_PENDIENTES.md            # Backlog de deuda técnica (V3.0)
 │   ├── 07_GUIA_OPERACION.md        # Runbook de fallos, despliegue y rollback
-│   ├── 08_ETAPA3_PLAN.md           # Roadmap detallado de la deuda técnica
-│   ├── 09_HALLAZGOS_ETAPA3.md      # Catálogo de los 36 hallazgos de auditoría
-│   └── 10_HANDOVER.md              # Este documento maestro
+│   ├── 08_ETAPA3_PLAN.md           # Roadmap detallado de la deuda técnica de Etapa 3
+│   ├── 09_HALLAZGOS_ETAPA3.md      # Catálogo de los 36 hallazgos de auditoría de Etapa 3
+│   ├── 10_HANDOVER.md              # Este documento maestro
+│   ├── 11_E4_WIND_EVALUATOR.md     # Spec del módulo de viento (Etapa 4)
+│   ├── 12_E4_THERMAL_EVALUATOR.MD  # Spec del módulo térmico (Etapa 4)
+│   ├── 13_E4_CONVECTIVE_EVALUATOR.md # Spec del módulo convectivo (Etapa 4)
+│   ├── 14_E4_CROSS_THREAT_ORCHESTRATOR.md # Spec del orquestador (Etapa 4)
+│   ├── 15_ETAPA4_PLAN.md           # Plan maestro de Etapa 4
+│   ├── 16_E4_HYDRO_ADAPTER.md      # Spec del adaptador hidrológico (Etapa 4)
+│   ├── HANDOVER_SESION_2026-10-22.md # Traspaso de la sesión del 22/10/2026
+│   └── CONTINUA.MD                 # Documento de traspaso del equipo anterior (legacy)
 │
 ├── public/                         # Activos estáticos servidos por Vite
 │   ├── favicon.svg                 # Icono de la pestaña del navegador
@@ -181,6 +190,12 @@ satrc-v3/
 │
 ├── scripts/                        # Scripts de automatización y CLI
 │   ├── diagnostico/                # Scripts auxiliares en PowerShell (calibración)
+│   │   ├── diagnostico_calibracion.ps1
+│   │   ├── simulacion_nodos.ps1
+│   │   ├── simulacion_nodos_v2.ps1
+│   │   ├── verificar_variables_e4.ps1       # Verificación H-E4-01 (nivel 1)
+│   │   ├── verificar_variables_e4_nivel2.ps1 # Verificación H-E4-01 (nivel 2)
+│   │   └── generar_fixture_openmeteo.ps1    # Fixture real para tests (H6.7)
 │   ├── engine/
 │   │   ├── __tests__/
 │   │   │   └── riskEvaluatorRunner.test.js # Tests de paridad del motor (H4)
@@ -204,11 +219,18 @@ satrc-v3/
 │   ├── data/
 │   │   └── localidades.json        # Base de datos de las 405 localidades
 │   ├── engine/                     # Núcleo lógico del frontend
-│   │   ├── __tests__/              # Tests del motor, consenso y regresión
-│   │   ├── consensusEngine.js      # Mediana de GFS+ICON+GEM
-│   │   ├── meteoFetcher.js         # Peticiones a Open-Meteo
+│   │   ├── __tests__/              # Tests del motor, consenso, evaluadores E4 y orquestador
+│   │   │   └── fixtures/
+│   │   │       └── openmeteo_sample.json # Fixture real de Open-Meteo (H6.7)
+│   │   ├── consensusEngine.js      # Mediana de GFS+ICON+GEM + 8 variables E4 (H6.3)
+│   │   ├── meteoFetcher.js         # Peticiones a Open-Meteo (15 variables, H6.1)
 │   │   ├── reportesRegionales.js   # Caché y agrupación de datos por zona
-│   │   └── riskEvaluator.js        # Motor canónico de las 6 reglas
+│   │   ├── riskEvaluator.js        # Motor canónico de las 6 reglas hidrológicas
+│   │   ├── hydroAdapter.js         # Adaptador continuo del motor hidrológico (H4-E4)
+│   │   ├── windEvaluator.js        # Evaluador de viento con umbral dinámico (H6.4a)
+│   │   ├── thermalEvaluator.js     # Evaluador térmico con sigmoides (H6)
+│   │   ├── convectiveEvaluator.js  # Evaluador convectivo con CAPE (H6)
+│   │   └── crossThreatOrchestrator.js # Orquestador multiamenaza (H6.4+H6.5)
 │   ├── lib/                        # Librerías y utilidades
 │   │   └── compartido/             # Módulos DRY compartidos con el backend (H6)
 │   │       ├── __tests__/          # Tests de utilidades (mojibake, noaa, etc.)
@@ -219,7 +241,7 @@ satrc-v3/
 │   │       ├── nodos.js            # Selecciona el nodo de referencia por zona
 │   │       └── regionales.js       # Normalizador de bloques regionales
 │   ├── schemas/
-│   │   └── estadoDiocesanoSchema.js # Contrato Zod de validación (H8)
+│   │   └── estadoDiocesanoSchema.js # Contrato Zod de validación (H8 + H6.5)
 │   ├── views/                      # Vistas principales de la PWA
 │   │   ├── MonitorPublico.jsx      # Vista pública
 │   │   └── SatRCOperativo.jsx      # Sala de mando con autenticación
@@ -243,10 +265,9 @@ satrc-v3/
 ├── simulacion_nodos_resultado_v2.json
 ├── tailwind.config.js              # Configuración de Tailwind CSS
 └── vite.config.js                  # Configuración del bundler Vite
-
-⚠️ Nota de arquitectura: Existen carpetas temporales como test/ o notas_personales/ que no forman parte del código de producción. El núcleo del sistema se concentra en src/, api/ y scripts/.
-
 ```
+
+> ⚠️ **Nota de arquitectura:** existen carpetas temporales como `test/` o `notas_personales/` que no forman parte del código de producción. El núcleo del sistema se concentra en `src/`, `api/` y `scripts/`. La carpeta `src/engine/__tests__/fixtures/` contiene datos reales de Open-Meteo para tests (H6.7).
 
 ### 2.4 Registro de Decisiones de Arquitectura (ADRs)
 
@@ -258,7 +279,7 @@ satrc-v3/
 
 #### ADR-002: Consenso Determinista Multi-Modelo (GFS + ICON + GEM)
 
-- **Decisión:** calcular la mediana hora a hora entre GFS, ICON y GEM, con filtro de ceros espurios.
+- **Decisión:** calcular la mediana hora a hora entre GFS, ICON y GEM, con filtro de ceros espurios. En Etapa 4 se extendió a 8 variables E4 adicionales (`surface_pressure`, `apparent_temperature`, `cloud_cover`, `wet_bulb_temperature_2m`, `cape`, `freezing_level_height`, `relative_humidity_700hPa`, `wind_speed_700hPa`).
 - **Consecuencia:** máxima confiabilidad sin comprar pronósticos privados.
 
 #### ADR-003: Cadena de Bloques Criptográfica en la Bitácora
@@ -270,6 +291,24 @@ satrc-v3/
 
 - **Decisión:** extraer toda la lógica común a `src/lib/compartido/`.
 - **Consecuencia:** una sola fuente de verdad.
+
+#### ADR-005: Orquestador Multiamenaza con Acoplamiento No Lineal (Etapa 4)
+
+- **Contexto:** el motor hidrológico original evaluaba solo lluvia. Un sistema tradicional reporta `Math.max(riesgo_lluvia, riesgo_viento)`, lo cual es físicamente incorrecto: el impacto de dos amenazas moderadas simultáneas se multiplica, no se suma.
+- **Decisión:** crear `crossThreatOrchestrator.js` que evalúa 4 módulos (hidrología, viento, térmico, convectivo) y aplica la fórmula de Richardson `R = max(r_i) + Σ γ_ij · (r_i - 1) · (r_j - 1)`. Los coeficientes γ están documentados en `14_E4_CROSS_THREAT_ORCHESTRATOR.md`.
+- **Consecuencia:** el semáforo captura el acoplamiento físico real (lluvia + viento = árboles caídos N3, downbursts N4, heladas N3, granizo N3, etc.).
+
+#### ADR-006: Adaptador de Shape en el Runner (H6.4+H6.5)
+
+- **Contexto:** `evaluarMultiamenaza` devuelve `nivel_alerta_global`, pero Zod y el frontend esperan `nivel_alerta`.
+- **Decisión:** adaptador en `ejecutar_sara_autonomo.mjs` que mapea `nivel_alerta_global` → `nivel_alerta` y agrega los campos nuevos como aditivos (Zod los acepta con `.passthrough()`).
+- **Consecuencia:** cero regresión en el frontend. Los campos nuevos (`nivel_alerta_global`, `riesgo_continuo`, `niveles_por_vector`, `acciones_operativas`, `diagnosticos_por_vector`) están disponibles para futuras vistas.
+
+#### ADR-007: Umbral Dinámico de Viento por Altitud (H6.4a)
+
+- **Contexto:** la auditoría H6.4 detectó 47 falsos positivos N2 en Pachuca. El umbral uniforme de 45 km/h vEq no consideraba que en zonas > 2200 msnm el viento basal es estructuralmente más fuerte.
+- **Decisión:** subir los umbrales N2/N3/N4 en +5 km/h para localidades > 2200 msnm. Además, clampear `nivelContinuo` para que N1 nunca supere 1.99, N2 nunca supere 2.99, N3 nunca supere 3.99.
+- **Consecuencia:** los 47 falsos positivos se redujeron a 0 en la auditoría. Pachuca ("la bella airosa") ya no alerta por brisas normales.
 
 ---
 
@@ -317,7 +356,7 @@ El servidor iniciará en `http://localhost:5173`. Los endpoints `/api/*` no est�
 ```bash
 npm run dev         # Vite + HMR
 npm run lint        # Oxlint
-npm test            # Vitest (79 tests)
+npm test            # Vitest (123 tests)
 npm run test:watch  # Vitest en modo watch
 npm run build       # Compilación de producción
 ```
@@ -336,8 +375,9 @@ npm run build       # Compilación de producción
 
 ### 4.2 Proceso de Despliegue y Rollback
 
-- **CI/CD:** cada `git push origin main` despliega en Vercel y activa el workflow en GitHub.
-- **Rollback:**
+**CI/CD:** cada `git push origin main` despliega en Vercel y activa el workflow en GitHub.
+
+**Rollback:**
 
 ```bash
 git revert <HASH_DEFECTUOSO> --no-edit
@@ -366,6 +406,16 @@ git push origin main
 
 - **Solución:** el frontend y la API limpian automáticamente con `repararMojibake()`.
 
+#### Caso 4: Falsos positivos N2 en zonas de altitud (Etapa 4)
+
+- **Causa:** umbral de viento uniforme no consideraba el viento basal de montaña.
+- **Solución (H6.4a):** umbral dinámico por altitud. Si aparecen nuevos falsos positivos, revisar `docs/11_E4_WIND_EVALUATOR.md` §3.5 y §3.6.
+
+#### Caso 5: El orquestador produce `nivel_alerta_global` distinto a `nivel_alerta`
+
+- **Causa:** el adaptador de shape no se aplicó.
+- **Solución:** verificar `scripts/ejecutar_sara_autonomo.mjs` líneas 530-575 (adaptador `evaluarMultiamenaza` → `nivel_alerta`).
+
 ---
 
 ## 5. Accesos, Credenciales y Dependencias Externas
@@ -382,7 +432,7 @@ git push origin main
 | SMN / CONAGUA | Avisos oficiales | Scraping público |
 | NOAA GOES-19 | Imágenes satelitales | CDN público |
 
-> **SEGURIDAD:** ninguna credencial se registra en el control de versiones.
+> 🔒 **SEGURIDAD:** ninguna credencial se registra en el control de versiones.
 
 ### 5.2 Costos
 
@@ -394,57 +444,76 @@ git push origin main
 
 ### 6.1 Lo que está Terminado y Operativo al 100 %
 
-- [x] Motor de consenso multi-modelo de 240 h.
-- [x] Algoritmo de riesgo sobre 405 localidades.
-- [x] Arquitectura de 14 nodos.
-- [x] Scraper de avisos SMN.
-- [x] Visor satelital GOES-19 (con parser validado en H7b).
-- [x] Consola operativa con generación de reportes.
-- [x] Bitácora auditable SHA-256.
-- [x] Validación estricta de contratos con Zod (H8).
-- [x] Módulos DRY.
-- [x] **Etapa 4 (H6):** Orquestador multiamenaza integrado en el runner. Los 405 registros usan `evaluarMultiamenaza` (hidrología + viento + térmico + convectivo + acoplamiento de Richardson). Semáforo ampliado con nueva física. Zod extendido.
-- [x] **Etapa 4 (H6.1–H6.5):** Motor multiamenaza integrado en producción.
-  - **H6.1:** `meteoFetcher.js` extendido con 8 variables E4 (surface_pressure, apparent_temperature, cloud_cover, wet_bulb_temperature_2m, cape, freezing_level_height, relative_humidity_700hPa, wind_speed_700hPa).
-  - **H6.2:** `consultarZonaUnaVez` del runner extendido idem.
-  - **H6.3:** `consensusEngine.js` consensúa las 8 variables con estrategias específicas (mediana, max, gfs_preferente).
-  - **H6.4a:** `windEvaluator.js` con umbral dinámico por altitud (>2200 msnm → +5 km/h) y clamp de `nivelContinuo`. `crossThreatOrchestrator.js` con `mapearANivel` alineado.
-  - **H6.4+H6.5:** `evaluarMultiamenaza` conectado al runner con adaptador de shape. Zod extendido con 5 campos opcionales (`nivel_alerta_global`, `riesgo_continuo`, `niveles_por_vector`, `acciones_operativas`, `diagnosticos_por_vector`).
-  - **Verificación:** 116/116 tests, CI en verde, `/api/sara` → `VERCEL_BLOB_ACTUALIZADO`, semáforo real sobre 405 localidades.
+- ☑ Motor de consenso multi-modelo de 240 h.
+- ☑ Algoritmo de riesgo hidrológico sobre 405 localidades.
+- ☑ Arquitectura de 14 nodos.
+- ☑ Scraper de avisos SMN.
+- ☑ Visor satelital GOES-19 (con parser validado en H7b).
+- ☑ Consola operativa con generación de reportes.
+- ☑ Bitácora auditable SHA-256.
+- ☑ Validación estricta de contratos con Zod (H8).
+- ☑ Módulos DRY.
+- ☑ **Etapa 4 (H6.1–H6.7):** motor multiamenaza integrado en producción. Los 405 registros se evalúan con `evaluarMultiamenaza` (hidrología + viento + térmico + convectivo + acoplamiento de Richardson). El semáforo se amplió con la nueva física.
 
+#### Detalle de los hitos de Etapa 4
 
-
-
+- **H6.1:** `meteoFetcher.js` extendido con 8 variables E4: `surface_pressure`, `apparent_temperature`, `cloud_cover`, `wet_bulb_temperature_2m`, `cape`, `freezing_level_height`, `relative_humidity_700hPa`, `wind_speed_700hPa`.
+- **H6.2:** `consultarZonaUnaVez` del runner extendido con las mismas 8 variables E4.
+- **H6.3:** `consensusEngine.js` consensúa las 8 variables con estrategias específicas: mediana para las variables de superficie, max para `cape` y `wind_speed_700hPa`, `gfs_preferente` para `freezing_level_height` (GEM devuelve null en esa variable).
+- **H6.4a:** `windEvaluator.js` con umbral dinámico por altitud (> 2200 msnm → +5 km/h en los umbrales N2/N3/N4) y clamp de `nivelContinuo`. `crossThreatOrchestrator.js` con `mapearANivel` alineado con el rango [nivel, nivel+0.99] de los 4 módulos.
+- **H6.4+H6.5:** `evaluarMultiamenaza` conectado al runner con adaptador de shape. Zod extendido con 5 campos opcionales: `nivel_alerta_global`, `riesgo_continuo`, `niveles_por_vector`, `acciones_operativas`, `diagnosticos_por_vector`.
+- **H6.7:** tests con fixture real de Open-Meteo.
+  - **Fixture:** `src/engine/__tests__/fixtures/openmeteo_sample.json` (240 h de datos reales de Pachuca, 8/8 variables E4, ~55 KB).
+  - **Tests nuevos:** 7 (3 consensus + 1 por evaluador + 1 orquestador).
+  - **Total tests:** 116 → 123.
+  - **Hallazgo:** los tests detectaron que `consensusEngine` produce un array de objetos, pero los evaluadores esperan un objeto de arrays. La conversión se hace en `crossThreatOrchestrator`. Los tests ahora replican esa conversión.
+  - **Verificación:** 123/123 tests, CI en verde, `/api/sara` → `VERCEL_BLOB_ACTUALIZADO`, semáforo real sobre 405 localidades.
 
 ### 6.2 Deuda Técnica Conocida y Roadmap
 
-**Etapa 3 (finalizada):**
+#### Etapa 3 (finalizada)
 
-- [x] **H0:** documentación de línea base.
-- [x] **H1:** cobertura del runner con lotes de 4.
-- [x] **H2a:** sincronización del parser SMN del runner.
-- [x] **H2b:** eliminación de `api/glm.js` huérfano.
-- [x] **H2c:** aplicación de aviso SMN restringida a estados afectados.
-- [x] **H3:** fallback en vivo del frontend expandido a 14 nodos.
-- [x] **H4:** creación del gemelo desacoplado del motor en runner.
-- [x] **H5:** corrección de variable `visibility_gfs_seamless` (N18).
-- [x] **H6:** refactorización DRY en `src/lib/compartido/`.
-- [x] **H7a:** Vitest instalado, 36 tests, CI en GitHub Actions.
-- [x] **H7b:** pruebas unitarias de utilidades y extracción NOAA.
-- [x] **H8:** activación de validación estricta Zod en tiempo de ejecución.
-- [x] **H9:** cierre documental formal de Etapa 3.
+- ☑ **H0:** documentación de línea base.
+- ☑ **H1:** cobertura del runner con lotes de 4.
+- ☑ **H2a:** sincronización del parser SMN del runner.
+- ☑ **H2b:** eliminación de `api/glm.js` huérfano.
+- ☑ **H2c:** aplicación de aviso SMN restringida a estados afectados.
+- ☑ **H3:** fallback en vivo del frontend expandido a 14 nodos.
+- ☑ **H4:** creación del gemelo desacoplado del motor en runner.
+- ☑ **H5:** corrección de variable `visibility_gfs_seamless` (N18).
+- ☑ **H6:** refactorización DRY en `src/lib/compartido/`.
+- ☑ **H7a:** Vitest instalado, 36 tests, CI en GitHub Actions.
+- ☑ **H7b:** pruebas unitarias de utilidades y extracción NOAA.
+- ☑ **H8:** activación de validación estricta Zod en tiempo de ejecución.
+- ☑ **H9:** cierre documental formal de Etapa 3.
 
-**Etapa 4 — Deuda aceptada (V3.0):**
+#### Etapa 4 (finalizada a nivel funcional, H6.1–H6.7 cerrados)
 
-- **H6.6:** Frontend no consume `nivel_alerta_global`, `niveles_por_vector`, `acciones_operativas` ni `diagnosticos_por_vector`. El operador no ve el desglose multiamenaza.
-- **H6.7:** 26 tests de Etapa 4 usan mocks sintéticos (no reflejan el formato real de Open-Meteo con sufijos `_gfs_seamless`). Si alguien rompe la consensuación, los tests no lo detectan.
-- **H7:** Prompts de SARA no adaptados a multiamenaza. Sigue describiendo N4 por viento con lenguaje hidrológico.
+- ☑ **H6.1:** `meteoFetcher` extendido con 8 variables E4.
+- ☑ **H6.2:** runner extendido con 8 variables E4.
+- ☑ **H6.3:** `consensusEngine` consensúa las 8 variables E4.
+- ☑ **H6.4a:** `windEvaluator` + `mapearANivel` calibrados.
+- ☑ **H6.4+H6.5:** orquestador integrado al runner + Zod extendido.
+- ☑ **H6.7:** tests con fixture real de Open-Meteo.
 
-**Etapa 4 (parcialmente completa):**
-- [x] **H6.1–H6.5:** Pipeline de datos extendido con 8 variables E4. Orquestador integrado al runner. Zod adaptado. Verificado en producción.
-- [ ] **H6.6:** Frontend consume campos nuevos (`nivel_alerta_global`, `niveles_por_vector`). Deuda.
-- [ ] **H6.7:** Tests de Etapa 4 reflejan datos reales de Open-Meteo. Deuda.
-- [ ] **H7:** SARA multiamenaza (prompts adaptados a viento, frío, calor, granizo). Pendiente.
+#### Etapa 4 — Deuda aceptada (V3.0)
+
+- **H6.6:** el frontend no consume `nivel_alerta_global`, `niveles_por_vector`, `acciones_operativas` ni `diagnosticos_por_vector`. El operador no ve el desglose multiamenaza. Trabajo estimado: 2-3 h.
+- **H7:** los prompts de SARA no están adaptados a multiamenaza. Sigue describiendo N4 por viento con lenguaje hidrológico. Trabajo estimado: 1-2 h.
+- **H-ARCH-01:** pipeline de datos no extensible. Agregar un 5to evaluador requiere tocar 7 archivos en 7 lugares distintos. Refactor propuesto: `src/engine/registry.js` declarativo en V3.0. Trabajo estimado: 4-6 h.
+
+#### Etapa 4 — Deudas de test (documentadas como lecciones)
+
+- **H-TEST-06:** los tests nuevos deben verificar la aritmética del escenario antes de asumir bugs.
+- **H-TEST-07:** los módulos que emiten continuos deben documentar su rango [min, max] explícitamente.
+
+#### Deudas heredadas de Etapa 3 (V3.0)
+
+- **H-MOTOR-05 / H-DIAG-04:** sobreclasificación N2 en zonas húmedas (XIC 61.9 %, HUA 52.4 %, ZAC 45.2 %). Requiere re-auditoría de 90 días y calibración de umbrales por zona.
+- **H-SEG-01:** `/api/sara` sin token expone bitácora y evaluaciones. Requiere autenticación real (JWT) en V3.0.
+- **N22/N27:** causa raíz del mojibake en `@vercel/blob`. Parche defensivo en lectura funciona; causa raíz diferida.
+- **H-MOTOR-03:** el reporte diario exige 216 h, el runner filtra 192 h. Divergencia documentada.
+- **H-MOTOR-01:** unificación total del motor (frontend + runner). Gemelo desacoplado en H4 de Etapa 3; unificación en V3.0.
 
 ---
 
@@ -460,19 +529,28 @@ git push origin main
 
 #### Suite formal con Vitest
 
-El proyecto cuenta con 79 tests unitarios ejecutados con Vitest.
+El proyecto cuenta con 123 tests unitarios y de integración ejecutados con Vitest. La suite corre en CI (GitHub Actions) en cada push a `main` y en cada Pull Request.
 
 **Archivos de test:**
 
-- `src/engine/__tests__/consensusEngine.test.js` (13 tests).
+- `src/engine/__tests__/consensusEngine.test.js` (16 tests) — incluye 3 tests con fixture real de Open-Meteo.
 - `src/engine/__tests__/riskEvaluator.test.js` (16 tests).
 - `src/engine/__tests__/regresionFase1.test.js` (8 tests).
+- `src/engine/__tests__/crossThreatOrchestrator.test.js` (8 tests) — incluye 1 test con fixture real.
+- `src/engine/__tests__/windEvaluator.test.js` (11 tests) — incluye 1 test con fixture real.
+- `src/engine/__tests__/thermalEvaluator.test.js` (8 tests) — incluye 1 test con fixture real.
+- `src/engine/__tests__/convectiveEvaluator.test.js` (8 tests) — incluye 1 test con fixture real.
+- `src/engine/__tests__/hydroAdapter.test.js` (6 tests).
 - `scripts/engine/__tests__/riskEvaluatorRunner.test.js` (3 tests).
 - `src/lib/compartido/__tests__/mojibake.test.js` (6 tests).
 - `src/lib/compartido/__tests__/regionales.test.js` (7 tests).
 - `src/lib/compartido/__tests__/fechas.test.js` (7 tests).
 - `src/lib/compartido/__tests__/noaa.test.js` (12 tests).
 - `src/lib/compartido/__tests__/estadoDiocesanoSchema.test.js` (7 tests).
+
+#### Fixture de datos reales
+
+`src/engine/__tests__/fixtures/openmeteo_sample.json` — 240 h de datos reales de Open-Meteo (Pachuca, PMN) con las 8 variables E4 × 3 modelos. Se genera con `scripts/diagnostico/generar_fixture_openmeteo.ps1`. Se usa en 7 tests de integración para validar el pipeline completo con datos reales.
 
 ---
 
@@ -522,11 +600,13 @@ Contiene 405 registros con topografía, hidrología y vulnerabilidad.
 
 ### 10.1 Ruta Sugerida de Capacitación
 
-1. **Fundamentos:** `docs/01_CONTEXTO.md` y `docs/03_MOTOR_RIESGO.md`.
+1. **Fundamentos:** `docs/01_CONTEXTO.md`, `docs/03_MOTOR_RIESGO.md`.
 2. **Arquitectura:** `docs/02_ARQUITECTURA.md` y `src/lib/compartido/`.
-3. **Pruebas:** `npm run dev`, `npm run lint`, `npm test` (79 tests).
-4. **Sala operativa:** probar con clave `emergencia` y operador `Antonio2026`.
-5. **Cloud:** revisar workflows y `/api/sara`.
+3. **Motor multiamenaza (Etapa 4):** `docs/11_E4_WIND_EVALUATOR.md`, `docs/12_E4_THERMAL_EVALUATOR.MD`, `docs/13_E4_CONVECTIVE_EVALUATOR.md`, `docs/14_E4_CROSS_THREAT_ORCHESTRATOR.md`, `docs/16_E4_HYDRO_ADAPTER.md`.
+4. **Pruebas:** `npm run dev`, `npm run lint`, `npm test` (123 tests).
+5. **Sala operativa:** probar con clave `emergencia` y operador `Antonio2026`.
+6. **Cloud:** revisar workflows y `/api/sara`.
+7. **Verificación empírica:** `scripts/diagnostico/verificar_variables_e4.ps1` y `verificar_variables_e4_nivel2.ps1` (ver [§11](#11-metodología-de-verificación-empírica)).
 
 ### 10.2 Checklist Formal de Aceptación
 
@@ -535,14 +615,43 @@ Contiene 405 registros con topografía, hidrología y vulnerabilidad.
 | 1 | El repositorio clona limpiamente. | [x] Conforme |
 | 2 | El servidor inicia en el puerto 5173. | [x] Conforme |
 | 3 | El linter `npm run lint` reporta 0 errores. | [x] Conforme |
-| 4 | La suite de tests (`npm test`) pasa los 79 tests. | [x] Conforme |
+| 4 | La suite de tests (`npm test`) pasa los 123 tests. | [x] Conforme |
 | 5 | La compilación `npm run build` genera `dist/`. | [x] Conforme |
 | 6 | `/api/smn` conecta con CONAGUA. | [x] Conforme |
 | 7 | `/api/latest-gif` resuelve bucles de NOAA. | [x] Conforme |
 | 8 | La sala operativa emite reportes. | [x] Conforme |
 | 9 | La bitácora encadena hashes SHA-256. | [x] Conforme |
 | 10 | Las credenciales están fuera del código. | [x] Conforme |
+| 11 | El runner publica el `paqueteMaestro` con `evaluarMultiamenaza` sobre las 405 localidades. | [x] Conforme |
+| 12 | `/api/sara` devuelve `origen: VERCEL_BLOB_ACTUALIZADO` con semáforo real. | [x] Conforme |
+| 13 | Los 5 campos nuevos del orquestador (`nivel_alerta_global`, `riesgo_continuo`, `niveles_por_vector`, `acciones_operativas`, `diagnosticos_por_vector`) están presentes en las evaluaciones. | [x] Conforme |
 
 ---
 
-*Fin del Documento de Handover. SatRC V2.0 — Cáritas Pastoral Social • Arquidiócesis de Tulancingo.*
+## 11. Metodología de Verificación Empírica
+
+**Regla no escrita pero aplicada en Etapa 4:** antes de codificar contra una API externa (Open-Meteo, NOAA, SMN, Groq), se verifica con `Invoke-RestMethod` / `Invoke-WebRequest` desde PowerShell que:
+
+1. La API responde (HTTP 200).
+2. Las variables pedidas existen en el JSON devuelto.
+3. Las variables devuelven datos no-null (no todos los campos son null).
+
+**Hallazgo clave de Etapa 4:** Open-Meteo devuelve las variables E4 con sufijo `_modelo` (`_gfs_seamless`, `_icon_seamless`, `_gem_seamless`) cuando se piden múltiples modelos. Sin verificar, el pipeline habría fallado silenciosamente con 0/8 variables.
+
+**Herramientas creadas durante Etapa 4:**
+
+- `scripts/diagnostico/verificar_variables_e4.ps1` — verificación nivel 1 (una consulta por zona con 8 variables).
+- `scripts/diagnostico/verificar_variables_e4_nivel2.ps1` — verificación nivel 2 (variantes de consulta: variables individuales, GFS puro, ICON puro, GEM puro, sin `models`).
+- `scripts/diagnostico/generar_fixture_openmeteo.ps1` — generador de fixture real para tests.
+- `scripts/diagnostico/auditoria_h6_4.mjs` — comparación baseline vs multiamenaza (one-shot, no commiteado).
+
+**Resultado de las verificaciones:**
+
+- Las 8 variables E4 existen y devuelven datos reales.
+- GEM devuelve null en `freezing_level_height` en las 240 h (fallback a GFS implementado en H6.3).
+- La auditoría H6.4 confirmó 0.0 % de cambio en un día de calma, y detectó 3 bugs de calibración (H-ORQ-02, H-ORQ-03) en un día con viento.
+- Documentado en `06_PENDIENTES.md` como H-E4-01. Los scripts quedaron commiteados como evidencia reproducible.
+
+---
+
+*Fin del Documento de Handover. SatRC V2.0 — Cáritas Pastoral Social • Arquidiócesis de Tulancingo. Versión 2.3.0 (Cierre de Etapa 4).*
