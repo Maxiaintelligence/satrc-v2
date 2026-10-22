@@ -195,4 +195,64 @@ describe('generarConsensoDeterminista', () => {
       expect(h.visibility_km).toBe(10);
     });
   });
+
+    // === H6.7: Tests con fixture real de Open-Meteo ===
+
+  it('procesa el fixture real de Open-Meteo sin errores', () => {
+    // Cargar el fixture real
+    const fs = require('fs');
+    const path = require('path');
+    const rutaFixture = path.join(__dirname, 'fixtures', 'openmeteo_sample.json');
+    const fixture = JSON.parse(fs.readFileSync(rutaFixture, 'utf-8'));
+
+    const serie = generarConsensoDeterminista(fixture.hourly);
+
+    // Debe devolver 240 horas
+    expect(serie).toHaveLength(240);
+
+    // Cada hora debe tener todos los campos (nuevos y viejos)
+    const hora = serie[168];  // ahora
+    expect(hora).toHaveProperty('lluvia_mm');
+    expect(hora).toHaveProperty('temperatura_c');
+    expect(hora).toHaveProperty('presion_hpa');
+    expect(hora).toHaveProperty('sensacion_termica_c');
+    expect(hora).toHaveProperty('cobertura_nubosa_pct');
+    expect(hora).toHaveProperty('bulbo_humedo_c');
+    expect(hora).toHaveProperty('cape_jkg');
+    expect(hora).toHaveProperty('nivel_congelacion_m');
+    expect(hora).toHaveProperty('humedad_700hpa');
+    expect(hora).toHaveProperty('viento_700hpa');
+  });
+
+  it('usa GFS como fallback de freezing_level_height cuando GEM es null', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const rutaFixture = path.join(__dirname, 'fixtures', 'openmeteo_sample.json');
+    const fixture = JSON.parse(fs.readFileSync(rutaFixture, 'utf-8'));
+
+    // Confirmar que GEM tiene nulls en el fixture
+    const gemNulls = fixture.hourly.freezing_level_height_gem_seamless.filter(v => v === null).length;
+    expect(gemNulls).toBe(240);  // Todos null
+
+    // La consensuación debe usar GFS como fallback
+    const serie = generarConsensoDeterminista(fixture.hourly);
+    const hora = serie[168];
+    expect(hora.nivel_congelacion_m).not.toBeNull();
+    expect(hora.nivel_congelacion_m).toBeGreaterThan(4000);  // Rango típico de Pachuca
+  });
+
+  it('el fixture real produce series de 240 horas con confiabilidad', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const rutaFixture = path.join(__dirname, 'fixtures', 'openmeteo_sample.json');
+    const fixture = JSON.parse(fs.readFileSync(rutaFixture, 'utf-8'));
+
+    const serie = generarConsensoDeterminista(fixture.hourly);
+
+    expect(serie).toHaveLength(240);
+    serie.forEach(h => {
+      expect(['ALTA', 'MODERADA', 'EN_DISPUTA']).toContain(h.confiabilidad);
+    });
+  });
+
 });

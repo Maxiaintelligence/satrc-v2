@@ -182,4 +182,24 @@ describe('crossThreatOrchestrator.js', () => {
     expect(res.nivel_alerta_global).toBe(1);
   });
 
+  // === H6.7: Test con fixture real ===
+  it('8. Procesa el fixture real de Open-Meteo sin errores', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const { generarConsensoDeterminista } = require('../consensusEngine.js');
+    const rutaFixture = path.join(__dirname, 'fixtures', 'openmeteo_sample.json');
+    const fixture = JSON.parse(fs.readFileSync(rutaFixture, 'utf-8'));
+    const serieConsenso = generarConsensoDeterminista(fixture.hourly);
+
+    const loc = mockLocalidad({ zona_id: 'PMN' });
+    const res = evaluarMultiamenaza(loc, serieConsenso);
+
+    expect(res.nivel_alerta_global).toBeGreaterThanOrEqual(1);
+    expect(res.nivel_alerta_global).toBeLessThanOrEqual(4);
+    expect(res.niveles_por_vector).toHaveProperty('hidrologico');
+    expect(res.niveles_por_vector).toHaveProperty('viento');
+    expect(res.niveles_por_vector).toHaveProperty('termico');
+    expect(res.niveles_por_vector).toHaveProperty('convectivo');
+  });
+
 });
