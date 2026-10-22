@@ -404,6 +404,17 @@ git push origin main
 - [x] Validación estricta de contratos con Zod (H8).
 - [x] Módulos DRY.
 - [x] **Etapa 4 (H6):** Orquestador multiamenaza integrado en el runner. Los 405 registros usan `evaluarMultiamenaza` (hidrología + viento + térmico + convectivo + acoplamiento de Richardson). Semáforo ampliado con nueva física. Zod extendido.
+- [x] **Etapa 4 (H6.1–H6.5):** Motor multiamenaza integrado en producción.
+  - **H6.1:** `meteoFetcher.js` extendido con 8 variables E4 (surface_pressure, apparent_temperature, cloud_cover, wet_bulb_temperature_2m, cape, freezing_level_height, relative_humidity_700hPa, wind_speed_700hPa).
+  - **H6.2:** `consultarZonaUnaVez` del runner extendido idem.
+  - **H6.3:** `consensusEngine.js` consensúa las 8 variables con estrategias específicas (mediana, max, gfs_preferente).
+  - **H6.4a:** `windEvaluator.js` con umbral dinámico por altitud (>2200 msnm → +5 km/h) y clamp de `nivelContinuo`. `crossThreatOrchestrator.js` con `mapearANivel` alineado.
+  - **H6.4+H6.5:** `evaluarMultiamenaza` conectado al runner con adaptador de shape. Zod extendido con 5 campos opcionales (`nivel_alerta_global`, `riesgo_continuo`, `niveles_por_vector`, `acciones_operativas`, `diagnosticos_por_vector`).
+  - **Verificación:** 116/116 tests, CI en verde, `/api/sara` → `VERCEL_BLOB_ACTUALIZADO`, semáforo real sobre 405 localidades.
+
+
+
+
 
 ### 6.2 Deuda Técnica Conocida y Roadmap
 
@@ -422,6 +433,12 @@ git push origin main
 - [x] **H7b:** pruebas unitarias de utilidades y extracción NOAA.
 - [x] **H8:** activación de validación estricta Zod en tiempo de ejecución.
 - [x] **H9:** cierre documental formal de Etapa 3.
+
+**Etapa 4 — Deuda aceptada (V3.0):**
+
+- **H6.6:** Frontend no consume `nivel_alerta_global`, `niveles_por_vector`, `acciones_operativas` ni `diagnosticos_por_vector`. El operador no ve el desglose multiamenaza.
+- **H6.7:** 26 tests de Etapa 4 usan mocks sintéticos (no reflejan el formato real de Open-Meteo con sufijos `_gfs_seamless`). Si alguien rompe la consensuación, los tests no lo detectan.
+- **H7:** Prompts de SARA no adaptados a multiamenaza. Sigue describiendo N4 por viento con lenguaje hidrológico.
 
 **Etapa 4 (parcialmente completa):**
 - [x] **H6.1–H6.5:** Pipeline de datos extendido con 8 variables E4. Orquestador integrado al runner. Zod adaptado. Verificado en producción.
