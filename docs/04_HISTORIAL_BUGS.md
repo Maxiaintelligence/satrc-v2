@@ -1,6 +1,8 @@
 # SatRC V2.0 — Historial de Bugs Críticos y Soluciones
 
-Este documento registra los bugs estructurales resueltos en Octubre de 2026 (Fase C2c) y durante la Etapa 3 de desarrollo.
+> **Versión:** 2.3.0 (Cierre de Etapa 4)
+> **Última actualización:** 22 de octubre de 2026.
+> Este documento registra los bugs estructurales resueltos en Octubre de 2026: Fase C2c (bugs iniciales), Etapa 3 (H0–H9) y Etapa 4 (H6.1–H6.7).
 
 ---
 
@@ -103,15 +105,14 @@ Este documento registra los bugs estructurales resueltos en Octubre de 2026 (Fas
 - **Fix H8.5:** se agregó `max_completion_tokens: 4096` y se cerró el paréntesis (`e3cff05`).
 - **Verificación:** Reporte on-demand generado exitosamente en producción.
 
----
-
-## Hito H9 — Cierre Documental
-
 ### H9 — Cierre de Etapa 3
 - **Acciones:** actualización de `04_HISTORIAL_BUGS.md`, `06_PENDIENTES.md`, `08_ETAPA3_PLAN.md` y `10_HANDOVER.md`.
 - **Tag:** `etapa-3-cerrada`.
-- **Commit:** `<hash-commit-H9>`.
 - **Estado:** ✅ **Etapa 3 completada.**
+
+---
+
+## Etapa 4 (Hitos H6.1–H6.7)
 
 ### H-ORQ-01 — Test 1 del orquestador con aserción incompatible con la sigmoide (Resuelto en Etapa 4, H5)
 
@@ -119,8 +120,19 @@ Este documento registra los bugs estructurales resueltos en Octubre de 2026 (Fas
 - **Causa:** La aserción `expect(niveles_por_vector.convectivo).toBe(1.0)` contradecía el diseño documentado de la sigmoide anti-parpadeo de `convectiveEvaluator.js` (§2.1 de `13_E4_CONVECTIVE_EVALUATOR.md`). Para CAPE=500, la sigmoide devuelve 1.118 → 1.12.
 - **Fix:** Se ajustó la aserción a `toBeGreaterThanOrEqual(1.0)` + `toBeLessThan(2.0)` (rango N1 continuo, coherente con el diseño).
 - **Verificación:** 7/7 tests del orquestador, 112/112 tests de la suite completa, CI en verde.
-- **Commit:** `<hash>` (obtenido con `git log --oneline -1`).
+- **Commit:** `29230c1`.
 - **Nota:** este hallazgo destrabó el commit de `crossThreatOrchestrator.js` + su test (untracked desde el bloqueo del equipo anterior). Desbloquea H6-E4.
+
+### H-E4-01 — Variables E4 no verificadas empíricamente en Open-Meteo (Resuelto en Etapa 4, H6.0)
+
+- **Síntoma:** los scripts `diagnostico_calibracion.ps1`, `simulacion_nodos.ps1` y `simulacion_nodos_v2.ps1` solo verificaron 4 variables hidrológicas (`precipitation`, `temperature_2m`, `wind_speed_10m`, `wind_gusts_10m`). Las 8 variables E4 nunca se verificaron con PowerShell contra Open-Meteo real.
+- **Causa:** el equipo anterior asumió que las variables existían porque la documentación de Open-Meteo las menciona. No se verificó empíricamente.
+- **Hallazgo (nivel 1):** `verificar_variables_e4.ps1` sobre 14 zonas dio 0/8 variables con datos. Parecía que las variables no existían.
+- **Hallazgo (nivel 2):** `verificar_variables_e4_nivel2.ps1` reveló que Open-Meteo devuelve las variables E4 con sufijo `_modelo` (`_gfs_seamless`, `_icon_seamless`, `_gem_seamless`) cuando se piden múltiples modelos. Las 8 variables SÍ existen, pero con sufijo. Además, GEM devuelve `null` en `freezing_level_height`.
+- **Fix:** el pipeline H6.1–H6.3 pide las 8 variables con los 3 modelos, consensúa con estrategias específicas (mediana, max, gfs_preferente) y expone los valores sin sufijo.
+- **Verificación:** 123/123 tests, `/api/sara` → `VERCEL_BLOB_ACTUALIZADO`, semáforo real sobre 405 localidades.
+- **Commits:** `8563829` (docs de cierre H-E4-01) + `b8f34f0` (hallazgo nivel 2).
+- **Lección:** documentada en `06_PENDIENTES.md` como metodología extendida. Antes de codificar contra una API externa, verificar con PowerShell.
 
 ### H-ORQ-02 — `windEvaluator` emitía nivelContinuo inconsistente (Resuelto en Etapa 4, H6.4a)
 
@@ -128,8 +140,8 @@ Este documento registra los bugs estructurales resueltos en Octubre de 2026 (Fas
 - **Causa:** las fórmulas de `nivelContinuo` no estaban clampeadas al nivel discreto. Para N1 con `vEqFinal=47.6`, la fórmula lineal supera 2.0 sin que el motor cambie a N2.
 - **Fix:** `Math.min(1.99, ...)`, `Math.min(2.99, ...)`, `Math.min(3.99, ...)` en las 3 fórmulas de `windEvaluator.js`.
 - **Verificación:** 10/10 tests de `windEvaluator`, 116/116 suite completa. Auditoría H6.4 post-fix: cambio total 2-3% (antes 14.3%).
-- **Commit:** `<hash>`.
-- **Lección:** todo campo nuevo en el shape (como `nivel_alerta_continuo`) debe tener al menos un test que verifique su rango esperado, no solo el nivel discreto. Documentado como H-TEST-05 para V3.0.
+- **Commit:** `74504c2`.
+- **Lección:** todo campo nuevo en el shape (como `nivel_alerta_continuo`) debe tener al menos un test que verifique su rango esperado, no solo el nivel discreto. Documentado como H-TEST-05.
 
 ### H-ORQ-03 — `mapearANivel` desalineado con el diseño de los módulos (Resuelto en Etapa 4, H6.4a)
 
@@ -137,4 +149,51 @@ Este documento registra los bugs estructurales resueltos en Octubre de 2026 (Fas
 - **Causa:** `mapearANivel` usaba umbrales `>= 1.5 → 2`, `>= 2.5 → 3`, `>= 3.5 → 4`. Pero los 4 módulos emiten `nivelContinuo` entre `[nivel, nivel+0.99]`. Un N1 con `nivelContinuo=1.69` disparaba N2 global. El clamp del `windEvaluator` a 1.99 no era suficiente.
 - **Fix:** `mapearANivel` ahora usa umbrales `>= 2.0 → 2`, `>= 3.0 → 3`, `>= 4.0 → 4`. Alineado con el rango de cada nivel.
 - **Verificación:** 7/7 tests de `crossThreatOrchestrator`, 116/116 suite completa. Auditoría H6.4 post-fix: cambio total ~2-3%.
-- **Commit:** `<hash>`.
+- **Commit:** `74504c2`.
+- **Lección:** documentada como H-TEST-07.
+
+### H-ORQ-04 — Adaptador de shape en el runner (Resuelto en Etapa 4, H6.4+H6.5)
+
+- **Síntoma:** `evaluarMultiamenaza` devuelve `nivel_alerta_global`, pero Zod (`EstadoDiocesanoBlobSchema`) y el frontend esperan `nivel_alerta`. Sin adaptador, Zod rechazaría el `paqueteMaestro`.
+- **Causa:** el shape del orquestador es distinto al shape del motor viejo.
+- **Fix:** adaptador en `ejecutar_sara_autonomo.mjs` (sección 5) que:
+  1. Mapea `res.nivel_alerta_global → nivel_alerta` (compatibilidad).
+  2. Mantiene los campos del orquestador como aditivos (`nivel_alerta_global`, `riesgo_continuo`, `niveles_por_vector`, `acciones_operativas`, `diagnosticos_por_vector`).
+  3. Incluye `try/catch` con fallback al motor viejo (`evaluarLocalidadRunner`) si el orquestador falla para una localidad puntual.
+- **Además (H6.5):** se extendió `EstadoDiocesanoBlobSchema` con 5 campos opcionales y se agregó `.passthrough()` al campo `diagnostico` para aceptar `acoplamiento`.
+- **Verificación:** 123/123 tests, CI en verde, `/api/sara` → `VERCEL_BLOB_ACTUALIZADO`, semáforo real sobre 405 localidades.
+- **Commit:** `caae110`.
+
+### H6.7 — Tests con fixture real de Open-Meteo (Resuelto en Etapa 4, H6.7)
+
+- **Síntoma:** los 26 tests de Etapa 4 usaban mocks sintéticos que inyectaban campos que la API real no devuelve (con nombres planos, no con sufijo `_modelo`). Si la consensuación se rompía, los tests no lo detectaban.
+- **Causa:** los mocks no reflejaban el formato real de Open-Meteo.
+- **Fix:** se creó `src/engine/__tests__/fixtures/openmeteo_sample.json` (240 h de datos reales de Pachuca) y se agregaron 7 tests que procesan el fixture real:
+  - 3 en `consensusEngine.test.js` (incluye fallback GFS para `freezing_level_height`).
+  - 1 en `windEvaluator.test.js`.
+  - 1 en `thermalEvaluator.test.js`.
+  - 1 en `convectiveEvaluator.test.js` (verifica que GEM null no rompe).
+  - 1 en `crossThreatOrchestrator.test.js`.
+- **Hallazgo:** los tests detectaron que `consensusEngine` produce array de objetos pero los evaluadores esperan objeto de arrays. La conversión se hace en `crossThreatOrchestrator`. Los tests de los evaluadores ahora replican esa conversión.
+- **Verificación:** 123/123 tests, CI en verde.
+- **Commits:** `6fdc414` (fixture) + `2b86e47` (tests con conversión).
+- **Lección:** documentada como H-TEST-06.
+
+---
+
+## Hito H9 — Cierre Documental de Etapa 3
+
+### H9 — Cierre de Etapa 3
+- **Acciones:** actualización de `04_HISTORIAL_BUGS.md`, `06_PENDIENTES.md`, `08_ETAPA3_PLAN.md` y `10_HANDOVER.md`.
+- **Tag:** `etapa-3-cerrada`.
+- **Estado:** ✅ **Etapa 3 completada.**
+
+---
+
+## Hito de Cierre Documental de Etapa 4
+
+### Cierre de Etapa 4 — 22 de octubre de 2026
+
+- **Acciones:** actualización de `04_HISTORIAL_BUGS.md`, `06_PENDIENTES.md`, `10_HANDOVER.md` y creación de `HANDOVER_SESION_2026-10-22.md`.
+- **Tag:** `etapa-4-cerrada` (en commit `29009fe`).
+- **Estado:** ✅ **Etapa 4 completada a nivel funcional (H6.1–H6.7). Deuda aceptada: H6.6 (frontend), H7 (prompts SARA), H-ARCH-01 (extensibilidad del pipeline).**
