@@ -403,6 +403,7 @@ git push origin main
 - [x] Bitácora auditable SHA-256.
 - [x] Validación estricta de contratos con Zod (H8).
 - [x] Módulos DRY.
+- [x] **Etapa 4 (H6):** Orquestador multiamenaza integrado en el runner. Los 405 registros usan `evaluarMultiamenaza` (hidrología + viento + térmico + convectivo + acoplamiento de Richardson). Semáforo ampliado con nueva física. Zod extendido.
 
 ### 6.2 Deuda Técnica Conocida y Roadmap
 
@@ -421,6 +422,12 @@ git push origin main
 - [x] **H7b:** pruebas unitarias de utilidades y extracción NOAA.
 - [x] **H8:** activación de validación estricta Zod en tiempo de ejecución.
 - [x] **H9:** cierre documental formal de Etapa 3.
+
+**Etapa 4 (parcialmente completa):**
+- [x] **H6.1–H6.5:** Pipeline de datos extendido con 8 variables E4. Orquestador integrado al runner. Zod adaptado. Verificado en producción.
+- [ ] **H6.6:** Frontend consume campos nuevos (`nivel_alerta_global`, `niveles_por_vector`). Deuda.
+- [ ] **H6.7:** Tests de Etapa 4 reflejan datos reales de Open-Meteo. Deuda.
+- [ ] **H7:** SARA multiamenaza (prompts adaptados a viento, frío, calor, granizo). Pendiente.
 
 ---
 

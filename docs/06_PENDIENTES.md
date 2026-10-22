@@ -208,4 +208,32 @@ Todos los hitos de la Etapa 3 han sido cerrados, testeados y verificados en prod
 - **Aplicable a:** futuros desarrollos que agreguen campos a `evaluaciones`, `paqueteMaestro`, o `estado_diocesano.json`.
 ---
 
+### Cierre de Etapa 4 (H6) — 21/10/2026
+
+**Estado:** ✅ COMPLETADO.
+
+**Commits del cierre:**
+- `43c1024` — H6.1 (meteoFetcher + 8 variables E4)
+- `1cd4bbe` — H6.2 (runner consultarZonaUnaVez + 8 variables E4)
+- `91d0f4c` — H6.3 (consensusEngine consensúa 8 variables E4)
+- `74504c2` — H6.4a (windEvaluator umbral dinámico + clamp)
+- `<hash H6.4+H6.5>` — H6.4+H6.5 (orquestador al runner + Zod extendido)
+
+**Verificación en producción:**
+- 405 localidades evaluadas con `evaluarMultiamenaza`.
+- Zod `VERCEL_BLOB_ACTUALIZADO`.
+- 116/116 tests, CI en verde.
+- Semáforo real: N4=11, N3=1, N2=268, N1=125.
+
+**Subhitos pendientes (opcionales, no bloqueantes):**
+- **H6.6** — Conectar campos nuevos al frontend (dashboards multiamenaza). Deuda aceptada.
+- **H6.7** — Reescribir 26 mocks de Etapa 4 (actualmente con datos sintéticos, no realidad de producción). Deuda aceptada.
+
+**Hallazgos adicionales documentados durante H6:**
+- H-E4-01: Variables E4 verificadas empíricamente con scripts PowerShell.
+- H-ORQ-02: `windEvaluator` sin clamp en `nivelContinuo`.
+- H-ORQ-03: `mapearANivel` desalineado con el diseño de los módulos.
+- H-TEST-06: Tests nuevos deben verificar aritmética del escenario antes de asumir bugs.
+- H-TEST-07: Módulos que emiten continuos deben documentar su rango [min, max] explícitamente.
+
 **Fin del backlog.**
