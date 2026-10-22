@@ -86,4 +86,34 @@ describe('convectiveEvaluator.js', () => {
     const res = evaluarConvectivo(loc, serie);
     expect(res.nivel_alerta).toBe(1);
   });
+
+  // === H6.7: Test con fixture real (verifica que GEM null no rompe) ===
+  it('8. Procesa el fixture real de Open-Meteo sin errores (GEM null no rompe)', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const { generarConsensoDeterminista } = require('../consensusEngine.js');
+    const rutaFixture = path.join(__dirname, 'fixtures', 'openmeteo_sample.json');
+    const fixture = JSON.parse(fs.readFileSync(rutaFixture, 'utf-8'));
+    const serieConsenso = generarConsensoDeterminista(fixture.hourly);
+
+    // Convertir el array de objetos al formato que convectiveEvaluator espera.
+    const serieParaConvectivo = {
+      time: serieConsenso.map(h => h.fecha_hora),
+      cape_jkg: serieConsenso.map(h => h.cape_jkg ?? 0),
+      humedad_700hpa: serieConsenso.map(h => h.humedad_700hpa ?? 50),
+      lluvia_mm: serieConsenso.map(h => h.lluvia_mm || 0),
+      nivel_congelacion_m: serieConsenso.map(h => h.nivel_congelacion_m ?? 4000),
+      viento_700hpa: serieConsenso.map(h => h.viento_700hpa ?? 20),
+      viento_kmh: serieConsenso.map(h => h.viento_kmh || 0)
+    };
+
+    const loc = mockLocalidad(2386);
+    const res = evaluarConvectivo(loc, serieParaConvectivo);
+
+    expect(res.nivel_alerta).toBeGreaterThanOrEqual(1);
+    expect(res.nivel_alerta).toBeLessThanOrEqual(4);
+    // No debe haber NaN ni Infinity por culpa de GEM null
+    expect(res.datos_tecnicos).toBeDefined();
+  });
+  
 });

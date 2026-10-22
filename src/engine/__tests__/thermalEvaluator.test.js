@@ -91,4 +91,33 @@ describe('thermalEvaluator.js', () => {
     const res = evaluarTermico(loc, serie);
     expect(res.nivel_alerta).toBe(1);
   });
+
+  // === H6.7: Test con fixture real ===
+  it('8. Procesa el fixture real de Open-Meteo sin errores', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const { generarConsensoDeterminista } = require('../consensusEngine.js');
+    const rutaFixture = path.join(__dirname, 'fixtures', 'openmeteo_sample.json');
+    const fixture = JSON.parse(fs.readFileSync(rutaFixture, 'utf-8'));
+    const serieConsenso = generarConsensoDeterminista(fixture.hourly);
+
+    const serieParaTermico = {
+      time: serieConsenso.map(h => h.fecha_hora),
+      temperatura_c: serieConsenso.map(h => h.temperatura_c || 15),
+      sensacion_termica_c: serieConsenso.map(h => h.sensacion_termica_c || 15),
+      cobertura_nubosa_pct: serieConsenso.map(h => h.cobertura_nubosa_pct ?? 50),
+      viento_kmh: serieConsenso.map(h => h.viento_kmh || 0),
+      bulbo_humedo_c: serieConsenso.map(h => h.bulbo_humedo_c ?? 10),
+      lluvia_mm: serieConsenso.map(h => h.lluvia_mm || 0),
+      nivel_congelacion_m: serieConsenso.map(h => h.nivel_congelacion_m ?? 4000)
+    };
+
+    const loc = mockLocalidad(2386);
+    const res = evaluarTermico(loc, serieParaTermico);
+
+    expect(res.nivel_alerta).toBeGreaterThanOrEqual(1);
+    expect(res.nivel_alerta).toBeLessThanOrEqual(4);
+    expect(res.datos_tecnicos).toBeDefined();
+  });
+  
 });

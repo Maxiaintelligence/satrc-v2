@@ -120,4 +120,32 @@ describe('windEvaluator.js', () => {
     expect(res.nivel_alerta_continuo).toBeGreaterThan(2.0);
   });
 
+  // === H6.7: Test con fixture real ===
+  it('11. Procesa el fixture real de Open-Meteo sin errores', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const { generarConsensoDeterminista } = require('../consensusEngine.js');
+    const rutaFixture = path.join(__dirname, 'fixtures', 'openmeteo_sample.json');
+    const fixture = JSON.parse(fs.readFileSync(rutaFixture, 'utf-8'));
+    const serieConsenso = generarConsensoDeterminista(fixture.hourly);
+
+    // Convertir el array de objetos al formato que windEvaluator espera (objeto de arrays).
+    // El orquestador hace esta conversión en producción (ver crossThreatOrchestrator.js).
+    const serieParaViento = {
+      time: serieConsenso.map(h => h.fecha_hora),
+      rafagas_kmh: serieConsenso.map(h => h.rafagas_kmh || 0),
+      viento_kmh: serieConsenso.map(h => h.viento_kmh || 0),
+      presion_hpa: serieConsenso.map(h => h.presion_hpa || 1013),
+      temperatura_c: serieConsenso.map(h => h.temperatura_c || 15)
+    };
+
+    const loc = mockLocalidad(2386, 'MESETA');
+    const res = evaluarViento(loc, serieParaViento);
+
+    expect(res.nivel_alerta).toBeGreaterThanOrEqual(1);
+    expect(res.nivel_alerta).toBeLessThanOrEqual(4);
+    expect(res.datos_tecnicos).toBeDefined();
+    expect(res.datos_tecnicos).toHaveProperty('velocidad_equivalente_kmh');
+  });
+
 });
