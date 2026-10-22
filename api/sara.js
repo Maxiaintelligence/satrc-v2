@@ -3,6 +3,7 @@ import { put, list } from '@vercel/blob';
 import { repararMojibake, repararObjeto } from '../src/lib/compartido/mojibake.js';
 import { EstadoDiocesanoResponseSchema } from '../src/schemas/estadoDiocesanoSchema.js';
 import { generarTituloDictamen } from '../src/lib/compartido/dictamen.js';
+import { generarResumenMultivector } from '../src/lib/compartido/bitacora.js';
 
 const BLOQUE_GENESIS = "0000000000000000000000000000000000000000000000000000000000000000";
 const MAX_REGISTROS_BITACORA = 500;
@@ -256,7 +257,8 @@ Comunidades críticas: ${JSON.stringify(resumenSeveridad?.criticasNombres || [])
       : BLOQUE_GENESIS;
     const nuevoHash = generarHashSHA256(prevHash, dictamenFinal.timestamp, {
       estado: dictamenFinal.estado_situacion,
-      hora: horaMexicoStr
+      hora: horaMexicoStr,
+      resumen: dictamenFinal.comentario_oficial
     });
 
     const nuevoId = siguienteIdBitacora(historialBitacora);

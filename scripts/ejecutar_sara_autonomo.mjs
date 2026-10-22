@@ -10,6 +10,7 @@ import { evaluarLocalidadRunner } from './engine/riskEvaluatorRunner.mjs';
 import { evaluarMultiamenaza } from '../src/engine/crossThreatOrchestrator.js';
 import { EstadoDiocesanoBlobSchema } from '../src/schemas/estadoDiocesanoSchema.js';
 import { generarTituloDictamen } from '../src/lib/compartido/dictamen.js';
+import { generarResumenMultivector } from '../src/lib/compartido/bitacora.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rutaJSON = path.join(__dirname, '../src/data/localidades.json');
@@ -352,10 +353,19 @@ async function registrarCorridaDegradada(horaMexicoStr, fechaDiaMexico, horaExac
       }
     } catch (e) {}
 
+  // H5.3 — Generar resumen multivector para la bitácora
+  const resumenMulti = generarResumenMultivector(evaluaciones);
+
     const prevHash = bitacoraHistorial.length > 0
       ? bitacoraHistorial[bitacoraHistorial.length - 1].hash_completo
       : BLOQUE_GENESIS;
-    const nuevoHash = generarHashSHA256(prevHash, ahora.toISOString(), { tipo: "CORRIDA_DEGRADADA", motivo });
+    const nuevoHash = generarHashSHA256(prevHash, dictamenSARA.timestamp, { 
+      n4, n3, n2, n1, 
+      resumenMulti, 
+      zonaOk: zonasOk.length, 
+      hora: horaMexicoStr, 
+      consenso: "GFS+ICON+GEM" 
+    });
     const nuevoId = siguienteIdBitacora(bitacoraHistorial);
 
     bitacoraHistorial.push({
@@ -367,7 +377,7 @@ async function registrarCorridaDegradada(horaMexicoStr, fechaDiaMexico, horaExac
       origen_evento: "CORRIDA_DEGRADADA",
       estado_situacion: "CORRIDA_DEGRADADA",
       titulo: "Corrida degradada: sin datos meteorológicos de ninguna zona",
-      resumen: `${motivo} a las ${horaMexicoStr}. No se publicó evaluación nueva para evitar alertas falsas.`,
+          resumen: `${resumenMulti} | Zonas OK: ${zonasOk.length}/${Object.keys(nodos).length}. ${dictamenSARA.comentario_oficial}`,
       prev_hash: prevHash.slice(0, 16) + "...",
       hash: nuevoHash.slice(0, 16) + "...",
       hash_completo: nuevoHash
