@@ -194,13 +194,14 @@ export function evaluarMultiamenaza(localidad, serieHoraria, contexto = {}) {
   }
 
   // H5.0.2 — Coherencia nivel/diagnóstico por acoplamiento.
-  // Si el nivel global subió por encima del máximo individual, el diagnóstico
-  // debe decirlo explícitamente. Antes, un N2 por acoplamiento hidro+viento
-  // se reportaba como "Vientos Normales" (título del vector dominante),
-  // contradiciendo el nivel. Ahora se marca como compuesto por acoplamiento.
+  // Si el nivel global supera el nivel DISCRETO del vector top, el nivel
+  // subió por acoplamiento (no por el vector en sí). Usar Math.floor()
+  // evita marcar como "compuesto" los N3 hidro puros (3.03 → floor 3),
+  // donde el nivel global ya era 3 por el propio vector.
   // Ver 04_HISTORIAL_BUGS.md H-ORQ-06.
   const nivelDelVectorTop = Math.max(rH, rV, rT, rC);
-  if (nivelGlobal > nivelDelVectorTop && nivelGlobal > 1) {
+  const nivelDelVectorTopDiscreto = Math.floor(nivelDelVectorTop);
+  if (nivelGlobal > nivelDelVectorTopDiscreto && nivelGlobal > 1) {
     titulo = `Nivel compuesto por acoplamiento (${titulo} + otras amenazas)`;
     causa = `El nivel ${nivelGlobal} se alcanza por acoplamiento entre múltiples amenazas. ${causa}`;
   }
