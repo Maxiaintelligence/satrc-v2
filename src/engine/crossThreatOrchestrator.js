@@ -99,7 +99,7 @@ function generarAcciones(vector, nivel) {
  */
 
 export function evaluarMultiamenaza(localidad, serieHoraria, contexto = {}) {
-  // 1. Convertir el array de objetos a objeto de`` arrays (para los nuevos módulos)
+  // 1. Convertir el array de objetos a objeto de arrays (para los nuevos módulos)
   let serieParaNuevosModulos = serieHoraria;
   
   if (Array.isArray(serieHoraria) && serieHoraria.length > 0) {
@@ -227,6 +227,20 @@ export function evaluarMultiamenaza(localidad, serieHoraria, contexto = {}) {
     causa = `Acoplamiento detectado entre múltiples amenazas. ${causa}`;
   }
 
+  // H-MULTI-02 — Detectar disponibilidad de datos en la serie original
+  const tieneDatos = (campos) => {
+    return Array.isArray(serieHoraria) && 
+           serieHoraria.length > 0 && 
+           serieHoraria.some(h => campos.every(campo => h[campo] !== undefined && h[campo] !== null));
+  };
+
+  const datos_disponibles_por_vector = {
+    hidrologico: tieneDatos(['lluvia_mm']),
+    viento: tieneDatos(['rafagas_kmh']),
+    termico: tieneDatos(['sensacion_termica_c', 'cobertura_nubosa_pct']),
+    convectivo: tieneDatos(['cape_jkg', 'nivel_congelacion_m'])
+  };
+
   // 10. Retornar el objeto multiamenaza
   return {
     localidad_id: localidad.id,
@@ -248,6 +262,8 @@ export function evaluarMultiamenaza(localidad, serieHoraria, contexto = {}) {
       termico: parseFloat(rT.toFixed(2)),
       convectivo: parseFloat(rC.toFixed(2))
     },
+
+    datos_disponibles_por_vector, // 👈 NUEVO (H-MULTI-02)
 
     diagnostico: {
       titulo,

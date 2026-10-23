@@ -34,6 +34,13 @@ export function generarResumenMultivector(evaluaciones) {
     1: { hidro: 0, viento: 0, termico: 0, conv: 0, total: 0 }
   };
 
+  // H-MULTI-02 — Determinar si el vector tuvo datos en alguna evaluación
+  const disp = {
+    hidro: evaluaciones.some(ev => ev.datos_disponibles_por_vector?.hidrologico !== false),
+    viento: evaluaciones.some(ev => ev.datos_disponibles_por_vector?.viento !== false),
+    termico: evaluaciones.some(ev => ev.datos_disponibles_por_vector?.termico !== false),
+    conv: evaluaciones.some(ev => ev.datos_disponibles_por_vector?.convectivo !== false)
+  };
 
   // 3. Acumular
   evaluaciones.forEach(ev => {
@@ -58,23 +65,23 @@ export function generarResumenMultivector(evaluaciones) {
     }
   });
 
-
   // 4. Construir el string
+  const fmt = (val, tieneDatos) => tieneDatos ? val : 'SIN_DATOS';
   const partes = [];
   
-  // Solo mostramos el desglose de N4 y N3 si existen
   if (conteo[4].total > 0) {
-    partes.push(`N4 [hidro:${conteo[4].hidro}, viento:${conteo[4].viento}, termico:${conteo[4].termico}, conv:${conteo[4].conv}]`);
+    partes.push(`N4 [hidro:${fmt(conteo[4].hidro, disp.hidro)}, viento:${fmt(conteo[4].viento, disp.viento)}, termico:${fmt(conteo[4].termico, disp.termico)}, conv:${fmt(conteo[4].conv, disp.conv)}]`);
   } else {
     partes.push('N4: 0');
   }
 
   if (conteo[3].total > 0) {
-    partes.push(`N3 [hidro:${conteo[3].hidro}, viento:${conteo[3].viento}, termico:${conteo[3].termico}, conv:${conteo[3].conv}]`);
+    partes.push(`N3 [hidro:${fmt(conteo[3].hidro, disp.hidro)}, viento:${fmt(conteo[3].viento, disp.viento)}, termico:${fmt(conteo[3].termico, disp.termico)}, conv:${fmt(conteo[3].conv, disp.conv)}]`);
   } else {
     partes.push('N3: 0');
   }
 
+  // 👇 ESTO ES LO QUE SE HABÍA BORRADO EN TU ARCHIVO
   partes.push(`N2: ${conteo[2].total}`);
   partes.push(`N1: ${conteo[1].total}`);
 

@@ -19,6 +19,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { generarConsensoDeterminista } from '../consensusEngine.js';
 import { evaluarMultiamenaza } from '../crossThreatOrchestrator.js';
+import { generarResumenMultivector } from '../../lib/compartido/bitacora.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -201,6 +202,54 @@ describe('Regresión multifactor — H-MULTI-01/02', () => {
     expect(res.niveles_por_vector.convectivo).toBeGreaterThanOrEqual(1.0);
     expect(res.niveles_por_vector.convectivo).toBeLessThan(1.1);
     expect(res.niveles_por_vector.termico).toBe(1.0);
+  });
+
+    it('G. Regresión H-MULTI-02: registra disponibilidad de datos por vector (serie sin E4)', () => {
+    const serieSinE4 = Array.from({ length: 192 }, (_, i) => ({
+      fecha_hora: `2026-10-21T${String(i % 24).padStart(2, '0')}:00`,
+      lluvia_mm: 0,
+      temperatura_c: 15,
+      viento_kmh: 10,
+      rafagas_kmh: 20,
+      humedad_relativa_pct: 60,
+      visibility_km: 10
+      // sin sensacion_termica_c, cobertura_nubosa_pct, cape_jkg, nivel_congelacion_m
+    }));
+
+    const res = evaluarMultiamenaza(mockLocalidadPMN(), serieSinE4);
+    expect(res.datos_disponibles_por_vector).toBeDefined();
+    expect(res.datos_disponibles_por_vector.hidrologico).toBe(true);
+    expect(res.datos_disponibles_por_vector.viento).toBe(true);
+    expect(res.datos_disponibles_por_vector.termico).toBe(false);
+    expect(res.datos_disponibles_por_vector.convectivo).toBe(false);
+  });
+
+  it('H. Regresión H-MULTI-02: serie con E4 marca todos los vectores como disponibles', () => {
+    const fixture = JSON.parse(fs.readFileSync(FIXTURE_PATH, 'utf-8'));
+    const serie = generarConsensoDeterminista(fixture.hourly);
+    const res = evaluarMultiamenaza(mockLocalidadPMN(), serie);
+    expect(res.datos_disponibles_por_vector.termico).toBe(true);
+    expect(res.datos_disponibles_por_vector.convectivo).toBe(true);
+  });
+
+  it('I. Regresión H-MULTI-02: bitácora muestra SIN_DATOS cuando falta el vector', () => {
+    const mockEvaluaciones = [
+      {
+        nivel_alerta: 3,
+        vector_dominante: 'HIDROLOGICO',
+        nombre: 'Pachuca',
+        datos_disponibles_por_vector: {
+          hidrologico: true,
+          viento: true,
+          termico: false,
+          convectivo: false
+        }
+      }
+    ];
+    const resumen = generarResumenMultivector(mockEvaluaciones);
+    expect(resumen).toContain('termico:SIN_DATOS');
+    expect(resumen).toContain('conv:SIN_DATOS');
+    expect(resumen).toContain('hidro:1');
   });
 
 });
