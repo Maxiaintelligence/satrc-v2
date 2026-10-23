@@ -29,7 +29,7 @@ Open-Meteo (GFS, ICON, GEM)     SMN / CONAGUA (avisos)     NOAA GOES-19 (imágen
 │ Runner (GitHub Actions, cada 3 h)                    │            │
 │ 1. Aviso SMN                                         │            │
 │ 2. Series por zona (14 nodos, lotes de 4)            │            │
-│ 3. Consenso determinista (versión local, sin Etapa 4)│            │
+│ 3. Consenso determinista compartido (GFS, ICON, GEM) │            │
 │ 4. Evaluación multiamenaza (405 localidades)         │            │
 │ 5. Validación Zod del paquete                        │            │
 │ 6. Publicación en Blob + bitácora encadenada         │            │
@@ -174,6 +174,7 @@ Si la validación falla, el runner aborta la publicación y la API no entrega el
 - `niveles_por_vector`: `{ hidrologico, viento, termico, convectivo }`.
 - `acciones_operativas`: lista de textos.
 - `diagnosticos_por_vector`: objeto libre.
+- `datos_disponibles_por_vector`: `{ hidrologico, viento, termico, convectivo }` (booleanos).
 
 **Adaptador de forma:** el orquestador devuelve `nivel_alerta_global`, pero el contrato anterior espera `nivel_alerta`. El runner copia el valor global en `nivel_alerta` y conserva los campos nuevos. Sin ese adaptador, Zod rechazaría el paquete (ADR-006).
 
