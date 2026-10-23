@@ -267,7 +267,11 @@ export function evaluarMultiamenaza(localidad, serieHoraria, contexto = {}) {
     donde: resHidro.donde,
     geografia: resHidro.geografia,
     tiempos: resHidro.tiempos,
-    impactoSistemico: resHidro.impactoSistemico,
+    impactoSistemico: {
+      ...resHidro.impactoSistemico,
+      // H5.7b — Inyectar la temperatura mínima calculada por el evaluador térmico
+      tempMinimaC: resTermico.datos_tecnicos?.temp_min_c || null
+    },
     protocolo: "Consulte al coordinador de Cáritas",
     sin_datos_regionales: resHidro.sin_datos_regionales || false
   };
