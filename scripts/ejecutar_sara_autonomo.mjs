@@ -435,6 +435,7 @@ async function ejecutarSARA() {
         nivel_alerta_global: res.nivel_alerta_global,
         riesgo_continuo: res.riesgo_continuo,
         niveles_por_vector: res.niveles_por_vector,
+        datos_disponibles_por_vector: res.datos_disponibles_por_vector,
         acciones_operativas: res.acciones_operativas,
         diagnosticos_por_vector: res.diagnosticos_por_vector
       };
