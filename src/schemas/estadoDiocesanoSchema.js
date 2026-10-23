@@ -20,6 +20,7 @@ const EvaluacionSchema = z.object({
   color_alerta: z.string(),
   estado_alerta: z.string(),
   vector_dominante: z.string().optional(),
+  tipo_amenaza: z.string().optional(),
   sin_datos_regionales: z.boolean().optional(),
   diagnostico: z.object({
     titulo: z.string(),

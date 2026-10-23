@@ -301,6 +301,7 @@ export async function generarReporteDiario({
     acceso: c.impactoSistemico?.accesoVial,
     // H5.4 — Inyección multivectorial para SARA
     vector_dominante: c.vector_dominante,
+    tipo_amenaza: c.tipo_amenaza,
     niveles_por_vector: c.niveles_por_vector,
     diagnosticos_por_vector: c.diagnosticos_por_vector,
     acciones_operativas: c.acciones_operativas,

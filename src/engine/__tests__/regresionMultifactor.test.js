@@ -252,4 +252,22 @@ describe('Regresión multifactor — H-MULTI-01/02', () => {
     expect(resumen).toContain('hidro:1');
   });
 
+  it('J. Expone el subtipo de amenaza estructurado para SARA (H-PROMPT-02)', () => {
+    // Serie con lluvia muy ligera y bulbo húmedo bajo: forzará una Nevada (Térmico N3)
+    // sin activar el vector hidrológico (que requiere >= 8mm para N2).
+    const serieNevada = Array.from({ length: 192 }, (_, i) => ({
+      fecha_hora: `2026-10-21T${String(i % 24).padStart(2, '0')}:00`,
+      lluvia_mm: 0.1, temperatura_c: 1, sensacion_termica_c: -1, // 👈 lluvia_mm cambiado a 0.1
+      rafagas_kmh: 0, viento_kmh: 0, cobertura_nubosa_pct: 90,
+      bulbo_humedo_c: 0.5, cape_jkg: 0, humedad_700hpa: 50,
+      nivel_congelacion_m: 2700, presion_hpa: 1013, viento_700hpa: 20
+    }));
+    
+    const res = evaluarMultiamenaza(mockLocalidadPMN(), serieNevada);
+    
+    // El orquestador debe detectar el subtipo exacto
+    expect(res.tipo_amenaza).toBe('NEVADA');
+    expect(res.vector_dominante).toBe('TERMICO');
+  });
+
 });

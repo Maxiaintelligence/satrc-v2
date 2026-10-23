@@ -241,6 +241,26 @@ export function evaluarMultiamenaza(localidad, serieHoraria, contexto = {}) {
     convectivo: tieneDatos(['cape_jkg', 'nivel_congelacion_m'])
   };
 
+  // H-PROMPT-02 — Extraer el subtipo de amenaza estructurado // 👈 NUEVO
+  let tipo_amenaza = 'SIN_AMENAZA'; // 👈 NUEVO
+  if (nivelGlobal > 1) { // 👈 NUEVO
+    if (vectorDominante === 'HIDROLOGICO') { // 👈 NUEVO
+      tipo_amenaza = resHidro.diagnostico?.tipoAmenaza || 'HIDROLOGICO'; // 👈 NUEVO
+    } else if (vectorDominante === 'VIENTO') { // 👈 NUEVO
+      tipo_amenaza = resViento.vector_dominante; // 👈 NUEVO
+    } else if (vectorDominante === 'TERMICO') { // 👈 NUEVO
+      tipo_amenaza = resTermico.vector_dominante; // 👈 NUEVO
+    } else if (vectorDominante === 'CONVECTIVO') { // 👈 NUEVO
+      tipo_amenaza = resConvectivo.vector_dominante; // 👈 NUEVO
+    } else if (vectorDominante === 'HIDRO_VIENTO') { // 👈 NUEVO
+      tipo_amenaza = `${resHidro.diagnostico?.tipoAmenaza || 'HIDRO'} + ${resViento.vector_dominante}`; // 👈 NUEVO
+    } else if (vectorDominante === 'CONVECTIVO_VIENTO') { // 👈 NUEVO
+      tipo_amenaza = `${resConvectivo.vector_dominante} + ${resViento.vector_dominante}`; // 👈 NUEVO
+    } else if (vectorDominante === 'HIDRO_TERMICO') { // 👈 NUEVO
+      tipo_amenaza = `${resHidro.diagnostico?.tipoAmenaza || 'HIDRO'} + ${resTermico.vector_dominante}`; // 👈 NUEVO
+    } // 👈 NUEVO
+  } // 👈 NUEVO
+
   // 10. Retornar el objeto multiamenaza
   return {
     localidad_id: localidad.id,
@@ -253,6 +273,7 @@ export function evaluarMultiamenaza(localidad, serieHoraria, contexto = {}) {
     nivel_alerta_global: nivelGlobal,
     riesgo_continuo: parseFloat(riesgoContinuo.toFixed(2)),
     vector_dominante: vectorDominante,
+    tipo_amenaza, // 👈 NUEVO
     estado_alerta: ['NORMAL', 'VIGILANCIA', 'ALERTA_TEMPRANA', 'EMERGENCIA'][nivelGlobal - 1],
     color_alerta: ['#10B981', '#F59E0B', '#F97316', '#EF4444'][nivelGlobal - 1],
 
@@ -263,7 +284,7 @@ export function evaluarMultiamenaza(localidad, serieHoraria, contexto = {}) {
       convectivo: parseFloat(rC.toFixed(2))
     },
 
-    datos_disponibles_por_vector, // 👈 NUEVO (H-MULTI-02)
+    datos_disponibles_por_vector,
 
     diagnostico: {
       titulo,
