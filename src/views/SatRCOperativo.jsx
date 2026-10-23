@@ -8,6 +8,7 @@ import RiskMap from '../components/RiskMap.jsx';
 import SatelliteViewer from '../components/SatelliteViewer.jsx';
 import ReporteModalOperativo from '../components/ReporteModalOperativo.jsx';
 import { formatearTimestamp } from '../lib/compartido/fechas.js';
+import VectorBar from '../components/VectorBar.jsx';
 import {
   Radio,
   Power,
@@ -920,6 +921,35 @@ Documento oficial emitido para párrocos, brigadistas y autoridades de auxilio.
                   </div>
                 </div>
               </div>
+
+                            {/* Desglose por Vector (H5.7) */}
+              {comunidadDetalle?.niveles_por_vector && (
+                <div className="bg-slate-900 border border-slate-800 p-3.5 rounded-xl space-y-3">
+                  <p className="text-[10px] font-bold text-cyan-400 uppercase tracking-wider">
+                    Desglose Multiamenaza
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <VectorBar nombre="Hidrológico" valor={comunidadDetalle.niveles_por_vector.hidrologico} />
+                    <VectorBar nombre="Viento" valor={comunidadDetalle.niveles_por_vector.viento} />
+                    <VectorBar nombre="Térmico" valor={comunidadDetalle.niveles_por_vector.termico} />
+                    <VectorBar nombre="Convectivo" valor={comunidadDetalle.niveles_por_vector.convectivo} />
+                  </div>
+                </div>
+              )}
+
+              {/* Acciones Operativas (H5.7) */}
+              {comunidadDetalle?.acciones_operativas && comunidadDetalle.acciones_operativas.length > 0 && (
+                <div className="bg-rose-950/30 border border-rose-900/50 p-3.5 rounded-xl space-y-2">
+                  <p className="text-[10px] font-bold text-rose-400 uppercase tracking-wider">
+                    Acciones Operativas Sugeridas
+                  </p>
+                  <ul className="list-disc pl-4 space-y-1 text-slate-200">
+                    {comunidadDetalle.acciones_operativas.map((accion, idx) => (
+                      <li key={idx} className="text-[11px]">{accion}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
               {/* Protocolo */}
               <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-center">
