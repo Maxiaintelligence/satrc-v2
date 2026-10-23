@@ -425,6 +425,7 @@ async function ejecutarSARA() {
         color_alerta: res.color_alerta,
         estado_alerta: res.estado_alerta,
         vector_dominante: res.vector_dominante,
+        tipo_amenaza: res.tipo_amenaza,
         sin_datos_regionales: res.sin_datos_regionales || false,
         diagnostico: res.diagnostico,
         donde: res.donde,
