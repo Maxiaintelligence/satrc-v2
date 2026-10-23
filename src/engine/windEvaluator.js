@@ -48,8 +48,8 @@ export function evaluarViento(localidad, serieHoraria) {
   const vientoSostenido = ventanaSostenido.reduce((a, b) => a + b, 0) / (ventanaSostenido.length || 1);
 
   // Presión y temperatura media
-  const presion = serieHoraria.presion_hpa ? (serieHoraria.presion_hpa[idxHoy] || 1013) : 1013;
-  const temp = serieHoraria.temperatura_c ? (serieHoraria.temperatura_c[idxHoy] || 15) : 15;
+  const presion = serieHoraria.presion_hpa?.[idxHoy] ?? 1013;
+  const temp = serieHoraria.temperatura_c?.[idxHoy] ?? 15;
 
   // 2. Cálculo de Densidad y Normalización
   const rho = calcularDensidad(presion, temp);

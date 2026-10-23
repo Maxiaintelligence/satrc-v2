@@ -105,18 +105,18 @@ export function evaluarMultiamenaza(localidad, serieHoraria, contexto = {}) {
   if (Array.isArray(serieHoraria) && serieHoraria.length > 0) {
     serieParaNuevosModulos = {
       time: serieHoraria.map(h => h.fecha_hora),
-      lluvia_mm: serieHoraria.map(h => h.lluvia_mm || 0),
-      temperatura_c: serieHoraria.map(h => h.temperatura_c || 15),
-      sensacion_termica_c: serieHoraria.map(h => h.sensacion_termica_c || h.temperatura_c || 15),
-      rafagas_kmh: serieHoraria.map(h => h.rafagas_kmh || 0),
-      viento_kmh: serieHoraria.map(h => h.viento_kmh || 0),
-      cobertura_nubosa_pct: serieHoraria.map(h => h.cobertura_nubosa_pct || 50),
-      bulbo_humedo_c: serieHoraria.map(h => h.bulbo_humedo_c || 10),
-      cape_jkg: serieHoraria.map(h => h.cape_jkg || 0),
-      humedad_700hpa: serieHoraria.map(h => h.humedad_700hpa || 50),
-      nivel_congelacion_m: serieHoraria.map(h => h.nivel_congelacion_m || 4000),
-      presion_hpa: serieHoraria.map(h => h.presion_hpa || 1013),
-      viento_700hpa: serieHoraria.map(h => h.viento_700hpa || 20)
+      lluvia_mm: serieHoraria.map(h => h.lluvia_mm ?? 0),
+      temperatura_c: serieHoraria.map(h => h.temperatura_c ?? 15),
+      sensacion_termica_c: serieHoraria.map(h => h.sensacion_termica_c ?? h.temperatura_c ?? 15),
+      rafagas_kmh: serieHoraria.map(h => h.rafagas_kmh ?? 0),
+      viento_kmh: serieHoraria.map(h => h.viento_kmh ?? 0),
+      cobertura_nubosa_pct: serieHoraria.map(h => h.cobertura_nubosa_pct ?? 50),
+      bulbo_humedo_c: serieHoraria.map(h => h.bulbo_humedo_c ?? 10),
+      cape_jkg: serieHoraria.map(h => h.cape_jkg ?? 0),
+      humedad_700hpa: serieHoraria.map(h => h.humedad_700hpa ?? 50),
+      nivel_congelacion_m: serieHoraria.map(h => h.nivel_congelacion_m ?? 4000),
+      presion_hpa: serieHoraria.map(h => h.presion_hpa ?? 1013),
+      viento_700hpa: serieHoraria.map(h => h.viento_700hpa ?? 20)
     };
   }
 

@@ -80,7 +80,8 @@ export function evaluarTermico(localidad, serieHoraria) {
   const vientoProm = vientos.reduce((a, b) => a + b, 0) / vientos.length;
   const bulboMin = Math.min(...bulboHumedo);
   const lluviaTotal = lluvia.reduce((a, b) => a + b, 0);
-  const nivelCongelacionMin = Math.min(...nivelesCongelacion.filter(n => n != null));
+  const nivelesValidos = nivelesCongelacion.filter(n => n != null);
+  const nivelCongelacionMin = nivelesValidos.length ? Math.min(...nivelesValidos) : null;
 
   // 3. Evaluación de Riesgos por Frío
   let nivelFrio = 1;

@@ -146,4 +146,61 @@ describe('Regresión multifactor — H-MULTI-01/02', () => {
     // Con CAPE 3500, el convectivo debe superar la línea base N1.
     expect(res.niveles_por_vector.convectivo).toBeGreaterThan(1.0);
   });
+
+   it('E. Regresión H-MULTI-04: distingue 0 reales de ausentes con ??', () => {
+    // Serie con 0 reales (helada radiativa perfecta: despejado, sin viento, 0°C)
+    const serieCeroReal = Array.from({ length: 192 }, (_, i) => ({
+      fecha_hora: `2026-10-21T${String(i % 24).padStart(2, '0')}:00`,
+      lluvia_mm: 0,
+      temperatura_c: 0,        // 0 °C real
+      sensacion_termica_c: 0,  // 0 °C real
+      rafagas_kmh: 0,          // Sin viento real
+      viento_kmh: 0,
+      cobertura_nubosa_pct: 0, // Cielo totalmente despejado (real)
+      bulbo_humedo_c: 0,       // 0 °C real
+      cape_jkg: 0,
+      humedad_700hpa: 50,
+      nivel_congelacion_m: 4000,
+      presion_hpa: 1013,
+      viento_700hpa: 20
+    }));
+
+    const res = evaluarMultiamenaza(mockLocalidadPMN(), serieCeroReal);
+
+    // Con `||`, el orquestador convertiría temperatura_c:0 en 15 y la helada
+    // radiativa se perdería (nivel térmico = 1.0).
+    // Con `??`, la helada se detecta. El nivel continuo es ~2.64 por H-TERM-01
+    // (bug conocido de la fórmula del continuo térmico, ver 03_MOTOR_RIESGO.md §6.2).
+    // La corrección de H-TERM-01 es deuda separada y no forma parte de este fix.
+    expect(res.niveles_por_vector.termico).toBeGreaterThan(2.0);
+
+    // Confirmar que el diagnóstico es de helada, no "sin datos"
+    expect(res.diagnosticos_por_vector.termico.titulo).toMatch(/Helada|Frío/i);
+  });
+
+  it('F. Bug latente: Math.min(...[]) no debe romper cuando nivel_congelacion_m es null', () => {
+    const serieNulls = Array.from({ length: 192 }, (_, i) => ({
+      fecha_hora: `2026-10-21T${String(i % 24).padStart(2, '0')}:00`,
+      lluvia_mm: 0,
+      temperatura_c: 15,
+      sensacion_termica_c: 15,
+      rafagas_kmh: 20,
+      viento_kmh: 10,
+      cobertura_nubosa_pct: 50,
+      bulbo_humedo_c: 10,
+      cape_jkg: 0, // idéntico al test C para que el continuo sea 1.05
+      humedad_700hpa: 60,
+      nivel_congelacion_m: null, // Todos nulos
+      presion_hpa: 1013,
+      viento_700hpa: 20
+    }));
+
+    const res = evaluarMultiamenaza(mockLocalidadPMN(), serieNulls);
+
+    // No debe devolver Infinity ni romper. El convectivo queda en línea base.
+    expect(res.niveles_por_vector.convectivo).toBeGreaterThanOrEqual(1.0);
+    expect(res.niveles_por_vector.convectivo).toBeLessThan(1.1);
+    expect(res.niveles_por_vector.termico).toBe(1.0);
+  });
+
 });
