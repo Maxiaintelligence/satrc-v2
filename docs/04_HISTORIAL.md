@@ -242,6 +242,28 @@ Objetivo: cerrar deuda, establecer pruebas y documentar. Sin funciones nuevas.
 - **Commit:** `fe85b08`.
 - **Lección:** `H-TEST-09`.
 
+### Corrección Crítica Multifactor (Hotfix 23/10/2026)
+
+#### H-MULTI-01 — El runner no consensuaba las variables E4
+- **Síntoma:** El motor convectivo y térmico (nevada) nunca disparaban en producción. Los niveles por vector quedaban atascados en 1.0.
+- **Causa:** El runner usaba una copia local de `generarConsensoDeterminista` que solo producía 9 variables. Descartaba las 8 variables de Etapa 4 solicitadas a Open-Meteo.
+- **Solución:** Se eliminó la copia local (92 líneas) y se importó el consenso compartido (`src/engine/consensusEngine.js`).
+- **Verificación:** Test de importación (Commit 1) pasó de rojo a verde. 
+- **Commit:** `6a72bdc`.
+
+#### H-MULTI-04 — El orquestador destruía los ceros reales
+- **Síntoma:** Incluso con datos, una temperatura de 0 °C o nubosidad de 0 % se convertían en 15 °C y 50 %.
+- **Causa:** Uso del operador lógico `||` en lugar del operador de coalescencia nula `??` en la normalización del orquestador y `windEvaluator.js`.
+- **Solución:** Cambio a `??` en 13 campos de la serie. Protección de `Math.min` contra arrays vacíos en evaluadores térmico y convectivo.
+- **Verificación:** Test E y F en verde. La helada radiativa ahora se detecta (nivel térmico > 2.0).
+- **Commit:** `50ebc53`.
+
+#### H-MULTI-02 — La bitácora no distinguía "sin riesgo" de "sin datos"
+- **Síntoma:** La bitácora mostraba `termico:0` o `conv:0` aunque el sistema no hubiera recibido datos para esos vectores.
+- **Causa:** Falta de trazabilidad de la disponibilidad de datos.
+- **Solución:** El orquestador ahora inyecta `datos_disponibles_por_vector`. La bitácora muestra `SIN_DATOS` si el vector no tuvo información.
+- **Verificación:** Tests G, H, I en verde.
+- **Commit:** `5c826cd`.
 ---
 
 ### Cierre de Etapa 5

@@ -21,7 +21,6 @@
 - **Estado:** vigente, con una excepción documentada.
 - **Decisión:** calcular la mediana hora por hora entre los tres modelos, con filtro de ceros espurios en la lluvia. En Etapa 4 se agregaron ocho variables con estrategias propias: mediana para las de superficie, máximo para CAPE y viento en 700 hPa, y GFS preferente para la altura de congelación (GEM la devuelve nula).
 - **Consecuencias:** el resultado es reproducible para las mismas entradas. La versión del consenso que usa el proceso autónomo no incluye las ocho variables de Etapa 4. Ver H-MULTI-01 en `06_PENDIENTES.md` y `VERIFICACION_MULTIFACTOR.md`.
-- **Excepción:** la decisión de incluir las variables de Etapa 4 está vigente; la implementación del proceso autónomo no la cumple todavía.
 
 ### ADR-003: Bitácora con encadenamiento criptográfico
 

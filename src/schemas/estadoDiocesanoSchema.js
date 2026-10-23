@@ -58,7 +58,13 @@ const EvaluacionSchema = z.object({
     hidrologico: z.number(),
     viento: z.number(),
     termico: z.number(),
-    convectivo: z.number()
+    convectivo: z.number()    
+  }).optional(),
+  datos_disponibles_por_vector: z.object({ // 👈 NUEVO
+    hidrologico: z.boolean(),
+    viento: z.boolean(),
+    termico: z.boolean(),
+    convectivo: z.boolean()
   }).optional(),
   acciones_operativas: z.array(z.string()).optional(),
   diagnosticos_por_vector: z.record(z.any()).optional()

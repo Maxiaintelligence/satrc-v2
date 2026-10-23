@@ -40,7 +40,7 @@ Severidad: 🔴 crítica · 🟠 alta · 🟡 media · 🟢 baja. El esfuerzo es
 
 | ID | Deuda | Sev. | Esfuerzo | Estado | Fuente |
 |---|---|---|---|---|---|
-| H-TERM-01 | Continuo térmico fuera del rango de su nivel discreto (N3 puede dar continuo de 1.0 a 3.0). Confirmado por código, falta prueba. | 🟠 | Bajo | Abierta, requiere prueba | `03` §6.2 |
+| H-TERM-01 | Continuo térmico fuera del rango de su nivel discreto (N3 puede dar continuo de 2.64). Confirmado por test en `regresionMultifactor.test.js`. | 🟠 | Medio | Abierta, requiere calibración | `03` §6.2 |
 | H-ORQ-07 | Coeficientes γ y mapeo a nivel del orquestador distintos de la especificación original. El código es la referencia. | 🟡 | Bajo | Documental | `03` §9 |
 | H-CONV-01 | Unidades erróneas en la especificación convectiva (umbrales de 50 000 a 150 000). El código usa 100 y 150. | 🟢 | Bajo | Documental | `03` §7.3 |
 | H-VIENTO-01 | Suavizado de 3 h y factor de rugosidad de la especificación original sin confirmar en el código. | 🟡 | Bajo | Pendiente de verificación | `03` §5.4 |
@@ -80,6 +80,7 @@ Severidad: 🔴 crítica · 🟠 alta · 🟡 media · 🟢 baja. El esfuerzo es
 | H-API-02 | `disparar-workflow.js` no registra IP ni agente de usuario de las peticiones. | 🟢 | Bajo | Abierta |
 | H-API-05 | `latest-gif.js` no tiene respaldo si NOAA cambia el patrón de nombres. Hay un `catch` que devuelve 502, pero no un respaldo. | 🟢 | Bajo | Abierta |
 | DEU-19 | Dependencia de planes gratuitos (Groq, Vercel, Open-Meteo, cron-job.org) sin plan de contingencia. | 🟡 | Medio | Sin documentar |
+| DEU-28 | El test de regresión del runner (`regresionMultifactor.test.js`) verifica los imports en código fuente en vez de ejecutar el runner. Requiere refactor (R3) para permitir `dryRun` y test end-to-end. | 🟡 | Medio | Abierta | Este fix |
 
 ### 2.5 Pruebas y calidad
 
@@ -109,10 +110,7 @@ Detalle y evidencia por línea en `VERIFICACION_MULTIFACTOR.md`.
 
 | ID | Deuda | Sev. | Esfuerzo | Estado | Fuente |
 |---|---|---|---|---|---|
-| H-MULTI-01 | **Demostrado** (22/10/2026, HEAD `890ba6e`, zona PMN): el runner entrega 0/240 horas para los ocho campos de Etapa 4; el consenso compartido entrega 240/240. El orquestador recibe valores por defecto. | 🟠 | Medio | Demostrada, abierta | Verificación §2.1, §2.3 |
-| H-MULTI-02 | Los valores por defecto anulan los vectores convectivo y térmico (nevada y helada) sin dejar rastro en la bitácora. Se necesita registrar disponibilidad de datos por vector. | 🟠 | Bajo | Abierta | Verificación §2.4, §5 |
 | H-MULTI-03 | Dos implementaciones de consenso (runner e interfaz) con resultados que pueden diferir. | 🟡 | Medio | Abierta | Verificación §2.6 |
-| H-MULTI-04 | Valores cero tratados como ausentes (`valor \|\| default`) en el orquestador y en el evaluador de viento. Afecta el umbral de 0 °C de las heladas. | 🟡 | Bajo | Abierta | Verificación §2.5 |
 | H-MULTI-05 | El runner pide variables de Etapa 4 a la API y no las usa. | 🟢 | Bajo | Abierta | Verificación §2.2 |
 | H-MULTI-06 | El respaldo en vivo de la Sala Operativa usa solo el motor hidrológico. | 🟡 | Medio | Abierta | Verificación §2.7 |
 

@@ -98,8 +98,6 @@ El runner no importa el motor de la interfaz. Usa una copia (`riskEvaluatorRunne
 
 ## 4. Consenso de modelos
 
-> **Aviso (verificación del 22/10/2026):** la descripción de este apartado aplica al consenso compartido (`src/engine/consensusEngine.js`), que usan la interfaz y los reportes regionales. **El runner de producción no usa este consenso.** Tiene una función local (`generarConsensoDeterminista` en `scripts/ejecutar_sara_autonomo.mjs`) que no produce las variables de Etapa 4. Ver `VERIFICACION_MULTIFACTOR.md` y H-MULTI-01 en `06_PENDIENTES.md`.
-
 **Archivos:** `src/engine/meteoFetcher.js` (descarga) y `src/engine/consensusEngine.js` (consenso).
 
 ### 4.1 Variables pedidas
@@ -360,7 +358,7 @@ Cada campo nuevo que se publica debe tener una prueba que verifique su valor y s
 
 | ID | Descripción | Estado |
 |---|---|---|
-| H-TERM-01 | Continuo térmico fuera del rango del nivel discreto (§6.2) | Confirmado por código, pendiente de prueba |
+| H-TERM-01 | Continuo térmico fuera del rango del nivel discreto (§6.2) | Confirmado por test `regresionMultifactor.test.js` (N3 da 2.64) |
 | H-CONV-01 | Unidades erróneas en la especificación convectiva (§7.3) | Documental |
 | H-ORQ-07 | Coeficientes γ y mapeo del orquestador distintos de la especificación (§9.2, §9.3) | Documental; el código es la referencia |
 | H-VIENTO-01 | Suavizado y rugosidad de la especificación no confirmados en el código (§5.4) | Pendiente de verificación |

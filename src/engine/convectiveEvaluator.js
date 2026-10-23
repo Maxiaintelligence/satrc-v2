@@ -58,7 +58,8 @@ export function evaluarConvectivo(localidad, serieHoraria) {
   const capeMax = Math.max(...capes, 0);
   const humedadMin = Math.min(...humedades, 100);
   const lluviaTotal = lluvias.reduce((a, b) => a + b, 0);
-  const nivelCongelacionMin = Math.min(...nivelesCongelacion.filter(n => n != null));
+  const nivelesValidos = nivelesCongelacion.filter(n => n != null);
+  const nivelCongelacionMin = nivelesValidos.length ? Math.min(...nivelesValidos) : null;
 
   // 3. Cálculo del Espesor de la Capa de Fusión (Granizo)
   // El granizo llega intacto si la capa cálida entre el nivel de congelación y el suelo es delgada.
