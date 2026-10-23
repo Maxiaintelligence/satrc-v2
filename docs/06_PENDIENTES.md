@@ -1,266 +1,165 @@
-# SatRC V2.0 — Backlog de Pendientes (Post-Etapa 3)
+# SatRC V2.0 — Pendientes, deuda técnica y riesgos
 
-**Última actualización:** Octubre 2026 (Etapa 3 Finalizada).
-**Estado:** H0 a H9 cerrados y verificados en producción. Backlog limpio.
-
-> Este documento lista lo que queda pendiente DESPUÉS de la Etapa 3.
-> Lo que ya se cerró se documenta en `04_HISTORIAL_BUGS.md`.
+> **Versión del documento:** 2.4 (22/10/2026)
+> **Propósito:** registro único de lo que falta, lo que se aceptó como deuda y los riesgos abiertos. Es la única lista vigente. Un ítem cerrado sale de aquí y pasa a `04_HISTORIAL.md`.
+> **Regla:** cada ítem tiene identificador, severidad, estado y fuente. Ningún otro documento mantiene una lista paralela.
 
 ---
 
-## 1. Etapa 3 — Completada
+## 1. Riesgos activos
 
-Todos los hitos de la Etapa 3 han sido cerrados, testeados y verificados en producción.
+Son problemas en producción o en el repositorio que requieren acción fuera de la documentación. Tienen prioridad sobre cualquier otro ítem.
 
-- **H0-H3:** Documentación base, resiliencia del runner (lotes de 4), limpieza de backend (SMN, glm.js) y expansión del fallback frontend a 14 nodos.
-- **H4:** Extracción del gemelo del motor (`riskEvaluatorRunner.mjs`) para eliminar el código inline del runner.
-- **H5:** Blindaje de la lectura de visibilidad (N18) y documentación de la deuda de seguridad (H-SEG-01).
-- **H6:** Refactor DRY. Extracción de 7 funciones duplicadas a `src/lib/compartido/`.
-- **H7a/H7b:** Suite completa de Vitest (79 tests passing), extracción del parser NOAA (`noaa.js`) y validación de rangos (H-UI-19).
-- **H8:** Validación estricta de datos con Zod. Doble esquema (`Blob` y `Response`) activo en el runner y en `/api/sara`.
-- **H9:** Cierre documental y tag `etapa-3-cerrada`.
+| ID | Riesgo | Dónde | Acción requerida | Responsable |
+|---|---|---|---|---|
+| R-01 | Claves de operador en texto plano en el código público | `api/reporte-ondemand.js` | Rotar las claves, moverlas a variables de entorno, retirarlas del código. Las claves que quedaron en el historial de Git se consideran comprometidas. | Coordinación técnica |
+| R-02 | Token de la consola de reportes incluido en el código del navegador mediante una variable `VITE_` | `src/views/SatRCOperativo.jsx` | Mover la validación completa al servidor y retirar el token del frontend. Requiere cambio de código. | Coordinación técnica |
+| R-03 | `GET /api/sara` devuelve bitácora y evaluaciones sin autenticación | `api/sara.js` | Restringir la respuesta o exigir autenticación. Requiere cambio de código. | Coordinación técnica |
+| R-04 | Clave de acceso a la Sala Operativa en el código del frontend | `src/App.jsx` | Sustituir por autenticación en servidor. Está ligado a R-02 y a la autenticación de V3.0. | Coordinación técnica |
 
-*(Ver `04_HISTORIAL_BUGS.md` para el detalle técnico de cada fix y `08_ETAPA3_PLAN.md` para el roadmap completo).*
+**Estado de la documentación:** los valores de claves y los nombres personales fueron retirados de todos los documentos propuestos. Eso no elimina los valores del historial de Git ni del código; R-01 y R-04 siguen abiertos hasta rotarlos.
 
----
-
-## 2. Deuda técnica aceptada (para Versión 3.0)
-
-### N22/N27 — Causa raíz del mojibake
-
-- **Estado:** ⏸️ Aceptado para V3.0.
-- **Causa:** `@vercel/blob` en GitHub Actions guarda strings con doble encoding UTF-8.
-- **Fix actual:** parche defensivo en lectura (`repararMojibake` + `repararObjeto`), ahora en `src/lib/compartido/mojibake.js` (H6.4).
-- **Fix futuro (V3.0):** diagnosticar por qué `@vercel/blob` hace doble encoding y corregir el `put()` en el origen.
-
-### H-MOTOR-05 / H-DIAG-04 — Sobreclasificación N2 en zonas húmedas
-
-- **Estado:** ⏸️ Aceptado para V3.0.
-- **Síntoma:** XIC (61.9%), HUA (52.4%), ZAC (45.2%) pasan más de la mitad del tiempo en N2 por saturación.
-- **Causa:** umbral de 30mm para N2 demasiado bajo para zonas de 600+ mm en 90 días.
-- **Fix futuro (V3.0):** re-auditoría de 90 días con umbrales calibrados por zona.
-
-### H-SEG-01 — `/api/sara` sin token expone bitácora y evaluaciones
-
-- **Estado:** ⏸️ Aceptado para V3.0.
-- **Síntoma:** `GET /api/sara` sin `?forzar=true` devuelve `bitacora` y `evaluaciones` completas. Cualquiera puede consumirlo.
-- **Fix futuro (V3.0):** rediseño de contrato con autenticación real (JWT/sesiones).
-
-### H-MOTOR-01 (unificación total del motor)
-
-- **Estado:** ⏸️ Aceptado para V3.0.
-- **Nota:** en Etapa 3 se resuelve parcialmente (gemelo separado en H4). La unificación total (frontend + runner con un solo archivo) va a V3.0.
-
-### H-MOTOR-03 — Reporte diario exige 216h, runner filtra 192h
-
-- **Estado:** ⏸️ Aceptado para V3.0.
-- **Síntoma:** `reporteDiario.mjs` exige `serie >= 216h` para usar una zona. El runner ya filtró a `MIN_HORAS_REQUERIDAS = 192`. Una zona con 200h se descarta del reporte diario aunque el semáforo la haya usado.
-- **Fix futuro:** ajustar el criterio a 216h coherente con 192h, o documentar la divergencia.
-
-### Validación Zod para `reporteDiario.mjs`
-
-- **Estado:** ⏸️ Aceptado para V3.0.
-- **Nota:** En H8 se validó el `paqueteMaestro` del runner y la respuesta de `/api/sara`. El contrato específico del reporte diario (que es distinto) quedó pendiente para no forzar un schema incorrecto.
+**Decisión tomada (22/10/2026):** el repositorio sigue público. Motivos: las corridas automáticas y el despliegue funcionan igual con repositorio privado, pero el presupuesto es cero y el plan gratuito de GitHub cubre 2 000 minutos al mes para repositorios privados. Condiciones: (a) rotar las claves de R-01 antes de publicar cambios de documentación; (b) confirmar que la duración de las corridas de `sara_cron.yml` mantiene el uso por debajo de ese límite; (c) R-02 y R-04 se atienden en código, porque su exposición ya existe en el sitio desplegado independientemente de la visibilidad del repositorio.
 
 ---
 
-## 3. Roadmap Versión 3.0 (Sistema Experto)
+## 2. Deuda técnica activa
 
-> Estos ítems NO van en Etapa 3. Son features nuevas o requieren rediseño.
+Severidad: 🔴 crítica · 🟠 alta · 🟡 media · 🟢 baja. El esfuerzo es una estimación.
 
-### Autenticación real
+### 2.1 Seguridad y exposición
 
-- **Estado:** ⏸️ V3.0.
-- **Alcance:** reemplazar la clave hardcodeada (`emergencia` en `App.jsx`) y las claves de operador (`Antonio2026`, etc. en `api/reporte-ondemand.js`) por un sistema de login real (JWT/sesiones + base de datos de usuarios).
+| ID | Deuda | Sev. | Esfuerzo | Estado |
+|---|---|---|---|---|
+| DEU-01 | Credenciales en código fuente (ver R-01 y R-04) | 🔴 | Bajo | Abierta |
+| DEU-02 | Bitácora pública en `GET /api/sara` (ver R-03) | 🟠 | Medio | Abierta; aceptada para V3.0 |
+| DEU-23 | Token de administración en variable `VITE_` (ver R-02) | 🔴 | Medio | Abierta |
+| DEU-21 | Nombres personales de terceros en el código público | 🟡 | Bajo | Documentación saneada; código pendiente |
 
-### Vectores de riesgo faltantes
+### 2.2 Motor y datos
 
-- **Estado:** ⏸️ V3.0.
-- **Alcance:**
-  - **Temperatura:** olas de calor / heladas.
-  - **Viento:** sistemas ciclónicos / nortes.
-  - **Convección:** tormentas severas con GLM.
-  - **Incendios:** índice de sequía + combustibilidad.
+| ID | Deuda | Sev. | Esfuerzo | Estado | Fuente |
+|---|---|---|---|---|---|
+| H-TERM-01 | Continuo térmico fuera del rango de su nivel discreto (N3 puede dar continuo de 1.0 a 3.0). Confirmado por código, falta prueba. | 🟠 | Bajo | Abierta, requiere prueba | `03` §6.2 |
+| H-ORQ-07 | Coeficientes γ y mapeo a nivel del orquestador distintos de la especificación original. El código es la referencia. | 🟡 | Bajo | Documental | `03` §9 |
+| H-CONV-01 | Unidades erróneas en la especificación convectiva (umbrales de 50 000 a 150 000). El código usa 100 y 150. | 🟢 | Bajo | Documental | `03` §7.3 |
+| H-VIENTO-01 | Suavizado de 3 h y factor de rugosidad de la especificación original sin confirmar en el código. | 🟡 | Bajo | Pendiente de verificación | `03` §5.4 |
+| H-MOTOR-05 | Sobreclasificación de N2 en zonas húmedas (XIC 61.9 %, HUA 52.4 %, ZAC 45.2 %). Requiere re-auditoría de 90 días. | 🟡 | Alto | Abierta, V3.0 | Etapa 3 |
+| H-MOTOR-03 | El reporte diario exige 216 h de serie; el runner usa 192 h. | 🟢 | Bajo | Abierta | `03` §3 |
+| H-MOTOR-01 | Gemelo del runner distinto del motor canónico. | 🟡 | Alto | Abierta, V3.0 | `03` §3 |
+| H-DIAG-04 | Motor no calibrado para XIC, HUA y ZAC. Se trata junto con H-MOTOR-05. | 🟡 | Alto | Abierta, V3.0 | Etapa 3 |
+| N22/N27 | Causa raíz del doble encoding UTF-8 en `@vercel/blob`. El parche de lectura funciona. | 🟡 | Medio | Abierta, V3.0 | `02` §9 |
+| H-SMN-WS | El scraping del SMN depende del HTML de la página oficial, que puede cambiar sin aviso. Migrar al servicio oficial de CONAGUA. | 🟠 | Medio | Abierta | `03` §2.4 |
 
-### Percentiles históricos
+### 2.3 Interfaz
 
-- **Estado:** ⏸️ V3.0.
-- **Alcance:** calcular umbrales dinámicos basados en los últimos 30 años (no números estáticos como 65mm de saturación). Requiere re-auditoría completa.
+| ID | Deuda | Sev. | Esfuerzo | Estado |
+|---|---|---|---|---|
+| H6.6 | La interfaz no consume `nivel_alerta_global`, `niveles_por_vector` ni `acciones_operativas` en el Monitor Climático. | 🟡 | 2–3 h | Abierta, V3.0 |
+| H-UI-01 | El Monitor Climático no evalúa riesgo ni muestra el semáforo N1 a N4. | 🟡 | Medio | Abierta, decisión de diseño |
+| H-UI-02 | El diagnóstico SARA en el Monitor Climático usa `if/else` en vez del motor. | 🟡 | Medio | Abierta |
+| H-UI-03 | El público general no ve el semáforo. Se trata junto con H-UI-01. | 🟡 | Medio | Abierta, decisión de diseño |
+| H-UI-22 | El disclaimer menciona ECMWF y el gráfico lee un campo `ecmwf` que el motor no consulta. Verificar el origen de ese campo. | 🟡 | Bajo | Pendiente de verificación |
+| H-UI-07 | Las secciones I a VI no tienen guardas para contenido vacío. | 🟢 | Bajo | Abierta |
+| H-UI-08 | El borde de la sección 0 siempre se muestra en verde. | 🟢 | Bajo | Abierta |
+| H-UI-09 | `TextoEnriquecido` no maneja todo el markdown. | 🟢 | Bajo | Abierta |
+| H-UI-11 | Estilos de impresión del modal operativo incompletos. | 🟢 | Bajo | Abierta |
+| H-UI-13 | El banner del SMN no se actualiza solo. | 🟢 | Bajo | Abierta |
+| H-UI-14 | El banner del SMN no tiene respaldo si `/api/smn` falla. | 🟢 | Bajo | Abierta |
+| H-UI-23 | `DisclaimerModal` tiene una rama que nunca se ejecuta (`abierto === undefined`). | 🟢 | Bajo | Abierta |
+| H-UI-24 | El Monitor Climático no replica la interfaz multiamenaza. Se trata junto con H6.6. | 🟡 | — | Unificada con H6.6 |
 
-### H-UI-01/02/03 — Monitor Público evalúa riesgo
+### 2.4 Arquitectura y operación
 
-- **Estado:** ⏸️ V3.0 (decisión de diseño).
-- **Alcance:** decidir si el Monitor Público debe mostrar el semáforo N1-N4 de cada localidad, o si sigue siendo solo pronóstico + reporte vigente.
+| ID | Deuda | Sev. | Esfuerzo | Estado | Fuente |
+|---|---|---|---|---|---|
+| DEU-22 | Constante `TAMANO_LOTE = 4` declarada en tres archivos. | 🟢 | Bajo | Abierta | `02` §4 |
+| H-ARCH-01 | Agregar un quinto evaluador exige tocar siete archivos. Propuesta: registro declarativo. | 🟡 | Medio | Abierta, V3.0 | `02` §10 |
+| H-INFRA-01 | No existe `vercel.json`; el despliegue usa detección automática. | 🟢 | Bajo | Abierta, V3.0 | `02` §10 |
+| H-NOM-01 | `procesar_datos.cjs` escribe `version: "3.0"`, y `package.json` se llama `satrc-v3`. | 🟢 | Bajo | Abierta | Revisión documental |
+| H-API-02 | `disparar-workflow.js` no registra IP ni agente de usuario de las peticiones. | 🟢 | Bajo | Abierta |
+| H-API-05 | `latest-gif.js` no tiene respaldo si NOAA cambia el patrón de nombres. Hay un `catch` que devuelve 502, pero no un respaldo. | 🟢 | Bajo | Abierta |
+| DEU-19 | Dependencia de planes gratuitos (Groq, Vercel, Open-Meteo, cron-job.org) sin plan de contingencia. | 🟡 | Medio | Sin documentar |
 
-### Panel histórico / nuevas vistas
+### 2.5 Pruebas y calidad
 
-- **Estado:** ⏸️ V3.0 (feature nueva).
-- **Alcance:** vista que lea del Blob el histórico de bitácora + reportes y grafique evolución.
-
-### Robot de monitoreo con cuenta Groq separada
-
-- **Estado:** ⏸️ V3.0 (feature nueva).
-- **Alcance:** workflow que evalúe el estado cada 3h usando una API Key de Groq distinta para no saturar la cuenta principal.
-
-### H-UI-13/14/22 — Mejoras de UI
-
-- **Estado:** ⏸️ V3.0.
-- **Alcance:**
-  - H-UI-13: banner SMN con auto-refresh.
-  - H-UI-14: banner SMN con fallback si `/api/smn` falla.
-  - H-UI-22: corregir disclaimer (menciona ECMWF que no se usa) + gráfico de temperatura (duplica línea).
-
-### H-INFRA-01 — `vercel.json` explícito
-
-- **Estado:** ⏸️ V3.0.
-- **Alcance:** agregar `vercel.json` con configuración explícita (región, memoria, timeout) en vez de depender de autodetección.
-
-### H-UI-07/09/11/23 — Mejoras cosméticas
-
-- **Estado:** ⏸️ V3.0.
-- **Alcance:**
-  - H-UI-07: guard de contenido en secciones I-VI.
-  - H-UI-09: `TextoEnriquecido` con markdown completo.
-  - H-UI-11: print CSS del modal operativo.
-  - H-UI-23: eliminar código muerto en `DisclaimerModal`.
-
-### H-API-02/05 — Mejoras de backend
-
-- **Estado:** ⏸️ V3.0.
-- **Alcance:**
-  - H-API-02: `disparar-workflow.js` con log de IP/UA.
-  - H-API-05: `latest-gif.js` con fallback si NOAA cambia el patrón.
-
-### H-NOM-01 — `procesar_datos.cjs` escribe `version: "3.0"`
-
-- **Estado:** ⏸️ V3.0.
-- **Alcance:** cambiar a `"2.0"` o `"2.1"` (confunde con "Etapa 3 ≠ V3.0").
+| ID | Deuda | Sev. | Esfuerzo | Estado |
+|---|---|---|---|---|
+| DEU-16 | La regla de `node --check` antes del commit no se aplica en CI. | 🟡 | Bajo | Abierta |
+| DEU-17 | `tests.yml` solo ejecuta Vitest; no valida `api/` ni `scripts/*.mjs`. | 🟡 | Bajo | Abierta |
+| DEU-18 | Conteo de pruebas inconsistente entre documentos. Se resuelve documentando el conteo oficial al ejecutar `npm test`. | 🟢 | Bajo | Documental |
+| H-TEST-06 | Las pruebas nuevas deben verificar la aritmética del escenario antes de asumir un error de código. La especificación del adaptador tenía un ejemplo que no cuadraba. | 🟢 | — | Lección |
+| H-TEST-07 | Los módulos que emiten valores continuos deben documentar su rango `[mín, máx]`. La deuda de H-TERM-01 viene de no cumplirlo. | 🟡 | — | Lección, aplicar en H-TERM-01 |
 
 ---
 
-## 4. Estado de la Etapa 3 (resumen)
+### 2.6 Prompts de SARA
 
-### Cerrados ✅ (Todos los hitos)
+| ID | Deuda | Sev. | Esfuerzo | Estado | Fuente |
+|---|---|---|---|---|---|
+| H-PROMPT-01 | El dictamen del runner no usa reglas multivectoriales y sus ejemplos de título son de lluvia. | 🟡 | Bajo | Abierta | `05` §5 |
+| H-PROMPT-02 | Los subtipos de amenaza (helada, nevada, granizo, downburst, supercélula) no son dato estructurado para SARA. | 🟡 | Medio | Abierta | `05` §6.2 |
+| H-PROMPT-03 | No hay pruebas automáticas de los prompts (campos recibidos y cumplimiento de reglas). | 🟡 | Medio | Abierta | `05` §8 |
 
-| Hito | Descripción |
-|---|---|
-| H0 | Docs: línea base + 35 hallazgos |
-| H1 | N26: lotes de 4 en runner |
-| H2a | Parser SMN del runner |
-| H2b | Eliminar `api/glm.js` |
-| H2c | Fix lluvia efectiva solo a estados afectados |
-| H3 | Fallback frontend con 14 nodos |
-| H4 | Motor unificado (gemelo separado) |
-| H5 | N18 (visibilidad blindada) + H-SEG-01 |
-| H6 | DRY (5 módulos compartidos, 14 copias eliminadas) |
-| H7a | Vitest bloqueante (36 tests, CI en GitHub Actions) |
-| H7b | Vitest resto (79 tests totales) + extracción NOAA |
-| H8 | Zod activo (Blob y Response) + Hotfix H8.5 |
-| H9 | Cierre documental |
+---
+
+### 2.7 Motor multifactor (verificación del 22/10/2026)
+
+Detalle y evidencia por línea en `VERIFICACION_MULTIFACTOR.md`.
+
+| ID | Deuda | Sev. | Esfuerzo | Estado | Fuente |
+|---|---|---|---|---|---|
+| H-MULTI-01 | **Demostrado** (22/10/2026, HEAD `890ba6e`, zona PMN): el runner entrega 0/240 horas para los ocho campos de Etapa 4; el consenso compartido entrega 240/240. El orquestador recibe valores por defecto. | 🟠 | Medio | Demostrada, abierta | Verificación §2.1, §2.3 |
+| H-MULTI-02 | Los valores por defecto anulan los vectores convectivo y térmico (nevada y helada) sin dejar rastro en la bitácora. Se necesita registrar disponibilidad de datos por vector. | 🟠 | Bajo | Abierta | Verificación §2.4, §5 |
+| H-MULTI-03 | Dos implementaciones de consenso (runner e interfaz) con resultados que pueden diferir. | 🟡 | Medio | Abierta | Verificación §2.6 |
+| H-MULTI-04 | Valores cero tratados como ausentes (`valor \|\| default`) en el orquestador y en el evaluador de viento. Afecta el umbral de 0 °C de las heladas. | 🟡 | Bajo | Abierta | Verificación §2.5 |
+| H-MULTI-05 | El runner pide variables de Etapa 4 a la API y no las usa. | 🟢 | Bajo | Abierta | Verificación §2.2 |
+| H-MULTI-06 | El respaldo en vivo de la Sala Operativa usa solo el motor hidrológico. | 🟡 | Medio | Abierta | Verificación §2.7 |
+
+---
+
+### 2.8 Calidad del código (verificación local del 22/10/2026)
+
+| ID | Deuda | Sev. | Esfuerzo | Estado | Fuente |
+|---|---|---|---|---|---|
+| DEU-24 | `npm run lint` reporta 50 advertencias y 0 errores. Hay imports y variables sin uso, incluidos `altitud` y `esMarginacionAlta` en `riskEvaluator.js`, y `esModoEmergencia` en `reporte-ondemand.js` (la protección del reporte vigente sí está en el backend: `esParcialReal`). | 🟢 | Bajo | Abierta | Lint local |
+| DEU-25 | Código muerto en `reportesRegionales.js`: `TIMEOUT_FETCH_MS` y `STAGGER_MS` sin uso. Revisar si la lógica que debían controlar falta o sobra. | 🟡 | Bajo | Abierta | Lint local |
+
+**Resultados confirmados:** `npm test` pasa 143 de 143 pruebas en 16 archivos. `node --check api/sara.js` no reporta errores.
+
+**Advertencia sobre la revisión de secretos:** `git ls-files | Select-String` revisa solo nombres de archivo, no contenido. La revisión de contenido debe hacerse con `git grep` buscando los valores de las claves de operador, la clave de la Sala Operativa y los prefijos de tokens (`gsk_`, `vercel_blob_rw_`, `Bearer`). La lista exacta se entrega aparte, fuera de la documentación. Pendiente.
+
+---
+
+## 3. Cerrados recientes
+
+Los siguientes se cerraron y su detalle está en `04_HISTORIAL.md`. No se mantienen aquí.
+
+- **Etapa 3** (H0 a H9): cerrada.
+- **Etapa 4** (H6.1 a H6.7): cerrada a nivel funcional. Quedan abiertos H6.6, H7 y H-ARCH-01 (ver §2).
+- **Etapa 5** (H5.0 a H5.8): cerrada.
+- **H-E4-01** (variables E4 en Open-Meteo): cerrado.
+- **H-ORQ-05 y H-ORQ-06** (N1 como `SIN_AMENAZA` y acoplamiento por vector): cerrados.
+- **H-SMN (falso positivo por comunicados de prensa):** corregido; sigue abierto el riesgo de H-SMN-WS.
+
+---
+
+## 4. Prioridades propuestas
+
+Estas prioridades están propuestas, no aprobadas. Se confirman antes de comenzar el trabajo.
+
+1. **Inmediato (sin código):** rotar claves (R-01) y retirar valores de cualquier documento o archivo. Ya saneado en la documentación.
+2. **Corto plazo (requiere código):** R-02 y R-03, luego R-04. Son los riesgos de exposición activa.
+3. **Corto plazo (requiere código):** H-TERM-01, con una prueba que reproduzca el caso de nevada antes de corregir.
+4. **Mediano plazo:** H-SMN-WS (fuente oficial del aviso), H6.6 (desglose en el Monitor Climático), DEU-19 (plan de contingencia).
+5. **V3.0:** autenticación real, H-MOTOR-01, H-MOTOR-05, H-ARCH-01, nuevos vectores (incendios) y percentiles históricos.
 
 ---
 
 ## 5. Reglas para agregar pendientes
 
-1. **Todo bug nuevo va a `04_HISTORIAL_BUGS.md`, no acá.** Este documento es para pendientes de implementación.
-2. **Cada ítem debe tener:** estado, alcance, prioridad (alta/media/baja), y si va a Etapa 3 o V3.0.
-3. **Si se cierra un ítem, se borra de acá y se documenta en `04_HISTORIAL_BUGS.md`.**
-
-
-### H-E4-01 — Verificación empírica de variables E4 en Open-Meteo
-
-- **Estado:** ✅ **RESUELTO** (21/10/2026).
-- **Contexto:** Los scripts `diagnostico_calibracion.ps1`, `simulacion_nodos.ps1` y `simulacion_nodos_v2.ps1` solo verificaron `precipitation`, `temperature_2m`, `wind_speed_10m`, `wind_gusts_10m`. Las 8 variables E4 nunca se verificaron empíricamente.
-- **Verificación ejecutada:** `scripts/diagnostico/verificar_variables_e4.ps1` (nivel 1) + `scripts/diagnostico/verificar_variables_e4_nivel2.ps1` (nivel 2) sobre las 14 zonas.
-- **Resultado nivel 1:** 0/8 variables con datos. Causa aparente: ausencia.
-- **Resultado nivel 2:** ✅ las 8 variables **sí existen** y devuelven datos reales.
-  - **V1-V3 (individuales con GFS puro):** ✅ OK.
-  - **V4 (8 variables con GFS puro):** ✅ 8/8 OK, 48/48 no-null.
-  - **V5 (8 variables con ICON puro):** ✅ 8/8 OK.
-  - **V6 (8 variables con GEM puro):** ⚠️ 7/8 OK. `freezing_level_height` devuelve `null` en todas las horas.
-  - **V7 (superficie sin `models=`):** ✅ OK con nombres planos.
-  - **V8 (superficie con 3 modelos):** ⚠️ las variables llegan con sufijo `_gfs_seamless`, `_icon_seamless`, `_gem_seamless`.
-- **Causa raíz del falso negativo:** cuando se consulta con `models=gfs_seamless,icon_seamless,gem_seamless`, Open-Meteo **agrega el sufijo `_modelo`** al nombre de cada variable. El script de nivel 1 buscaba nombres planos y por eso encontró 0/8.
-- **Veredicto:** las 8 variables E4 **existen y devuelven datos reales**. H6 puede proceder.
-- **Impacto en H6:**
-  1. `meteoFetcher.js` debe pedir las 8 variables con los 3 modelos (con sufijos).
-  2. `consensusEngine.js` debe consensuar cada variable E4 (mediana con filtro, con `max` para `cape_jkg` y `wind_speed_700hPa`).
-  3. `freezing_level_height` requiere fallback a GFS cuando GEM devuelve `null`.
-  4. El shape de la serie consenso debe exponer las variables sin sufijo (`presion_hpa`, `sensacion_termica_c`, `cape_jkg`, etc.) para el orquestador.
-- **Scripts de verificación:** quedan en `scripts/diagnostico/verificar_variables_e4.ps1` y `verificar_variables_e4_nivel2.ps1` como evidencia reproducible.
-- **Output:** `diagnostico_variables_e4.json` (nivel 1) + `verificacion_e4_nivel2_output.txt` (nivel 2). Ambos deben agregarse a `.gitignore` en H6 (son artefactos de diagnóstico).
-
-### H6.4 — Auditoría de divergencia baseline vs multiamenaza (21/10/2026)
-
-- **Script:** `scripts/diagnostico/auditoria_h6_4.mjs` (one-shot, no commiteado).
-- **Cambio total:** XX registros de 405 (X.X%).
-- **Matriz de confusión:** N1→N2: X, N2→N1: X, N2→N3: X, N3→N2: X, N3→N4: X, N4→N3: X.
-- **Veredicto:** 🟢/🟡/🔴.
-- **Top cambios:** [resumen de los 3 principales].
-- **Decisión:** aplicar H6.4 con GAMMAS actuales / ajustar GAMMAS a XX / revisar caso por caso.
-
-
-### H-TEST-05 — Campos nuevos sin cobertura de tests
-
-- **Estado:** 📝 Documentación de lección (no es deuda activa).
-- **Contexto:** H-ORQ-02 detectó que `nivel_alerta_continuo` se agregó en Etapa 4 sin ningún test que verificara su rango. El bug existió en producción hasta H6.4a.
-- **Regla nueva:** todo campo nuevo en un shape debe tener al menos un test que verifique su valor esperado.
-- **Aplicable a:** futuros desarrollos que agreguen campos a `evaluaciones`, `paqueteMaestro`, o `estado_diocesano.json`.
----
-
-### Cierre de Etapa 4 (H6) — 21/10/2026
-
-**Estado:** ✅ COMPLETADO.
-
-**Commits del cierre:**
-- `43c1024` — H6.1 (meteoFetcher + 8 variables E4)
-- `1cd4bbe` — H6.2 (runner consultarZonaUnaVez + 8 variables E4)
-- `91d0f4c` — H6.3 (consensusEngine consensúa 8 variables E4)
-- `74504c2` — H6.4a (windEvaluator umbral dinámico + clamp)
-- `<hash H6.4+H6.5>` — H6.4+H6.5 (orquestador al runner + Zod extendido)
-
-**Verificación en producción:**
-- 405 localidades evaluadas con `evaluarMultiamenaza`.
-- Zod `VERCEL_BLOB_ACTUALIZADO`.
-- 116/116 tests, CI en verde.
-- Semáforo real: N4=11, N3=1, N2=268, N1=125.
-
-**Subhitos pendientes (opcionales, no bloqueantes):**
-- **H6.6** — Conectar campos nuevos al frontend (dashboards multiamenaza). Deuda aceptada.
-- **H6.7** — Reescribir 26 mocks de Etapa 4 (actualmente con datos sintéticos, no realidad de producción). Deuda aceptada.
-
-**Hallazgos adicionales documentados durante H6:**
-- H-E4-01: Variables E4 verificadas empíricamente con scripts PowerShell.
-- H-ORQ-02: `windEvaluator` sin clamp en `nivelContinuo`.
-- H-ORQ-03: `mapearANivel` desalineado con el diseño de los módulos.
-- H-TEST-06: Tests nuevos deben verificar aritmética del escenario antes de asumir bugs.
-- H-TEST-07: Módulos que emiten continuos deben documentar su rango [min, max] explícitamente.
-
-# SatRC V2.0 — Backlog de Pendientes
-
-**Última actualización:** Octubre 2026 (Etapa 5 Finalizada).
-**Estado:** H5.0 a H5.8 cerrados. El sistema es 100% multivectorial (Motor, Bitácora, Prompts y UI Operativa).
-
-### H-SMN-WS — Migrar scraper del SMN a Web Service Oficial
-- **Estado:** ⏸️ Aceptado para V3.0.
-- **Contexto:** Se corrigió el falso positivo (que leía los "Comunicados de Prensa" de todo México y alertaba erróneamente sobre Veracruz). Ahora el scraper (`api/smn.js`) lee estrictamente el recuadro de alerta activa del HTML.
-- **Deuda:** El HTML del SMN puede cambiar sin previo aviso. 
-- **Fix futuro:** Consumir el Web Service oficial de CONAGUA (formato XML o GZIP estructurado) para eliminar la dependencia del scraping.
-
-### H-UI-24 — Replicar UI Multiamenaza en el Monitor Público
-- **Estado:** ⏸️ V3.0.
-- **Contexto:** En la Etapa 5 se agregaron las barras de `niveles_por_vector` y el desglose en la Sala Operativa (`SatRCOperativo.jsx`). El Monitor Público (`MonitorPublico.jsx`) sigue mostrando solo pronóstico base.
-- **Alcance:** Decidir si el público general debe ver el desglose multivectorial o si se mantiene reservado para los operadores.
-
-### Vectores de riesgo faltantes (Incendios)
-- **Estado:** ⏸️ V3.0.
-- **Contexto:** Ya contamos con Hidrología, Viento, Térmico y Convectivo (Etapa 4 y 5). Falta integrar el vector de Incendios Forestales al orquestador.
-
-### H-TEST-09 — `node --check` obligatorio para APIs y Scripts
-- **Estado:** 📝 Documentación de lección.
-- **Contexto:** `npm test` (Vitest) solo valida `src/` y `scripts/engine/`. No valida `api/*.js` ni `scripts/*.mjs`. Un error de sintaxis en esos archivos pasa el CI verde, pero rompe Vercel en producción.
-- **Regla nueva:** Antes de hacer commit de archivos en `api/` o `scripts/`, es obligatorio ejecutar `node --check <archivo>`.
-
-
-
-**Fin del backlog.**
+1. Un ítem nuevo entra aquí con identificador, severidad, estado y fuente.
+2. Un bug resuelto no entra aquí: va a `04_HISTORIAL.md`.
+3. Una decisión de diseño no entra aquí: va a `08_DECISIONES.md`.
+4. Si un ítem depende de una decisión que no ha tomado la coordinación, se marca "Abierta, decisión de diseño" y no se trabaja sin confirmación.
+5. Si un identificador se refiere a un hito de una etapa, se escribe la etapa cuando haya riesgo de confusión (por ejemplo, "E3-H5" frente a "E5-H5.0").

@@ -1,183 +1,173 @@
-# SatRC V2.0 — Ingeniería de Prompts (Agente SARA)
+# SatRC V2.0 — Ingeniería de prompts (SARA)
 
-> **Versión:** 2.3.0 (Cierre de Etapa 4)
-> **Última actualización:** 22 de octubre de 2026.
-> **Estado:** los prompts actuales son de Etapa 3 (solo hidrología). La Etapa 4 agregó 3 evaluadores más (viento, térmico, convectivo) y el orquestador. **Los prompts todavía no se adaptaron a multiamenaza** (deuda H7, V3.0). Ver [§5](#5-prompts-multiamenaza-pendiente-h7).
-
-El sistema usa **Groq** (`openai/gpt-oss-120b`) para redactar los reportes. Hay dos prompts distintos.
+> **Versión del documento:** 2.4 (22/10/2026)
+> **Propósito:** describir los prompts que usa SARA, las reglas que contienen, cómo se alimentan con datos y qué falta por adaptar.
+> **Fuente de verdad:** el código de los archivos citados. Si este documento y el código no coinciden, prevalece el código.
 
 ---
 
-## 1. Prompt del Reporte Diario / On-Demand
+## 1. Qué es SARA
 
-- **Ubicación:** `scripts/reportes/reporteDiario.mjs` y `api/reporte-ondemand.js`.
-- **Estructura:** devuelve un JSON estricto con 7 secciones (`seccion_0_decision` a `seccion_VI_deslinde`).
-- **Límite de tokens:** `max_completion_tokens: 4096` (Hotfix H8.5). *Sin este límite, el LLM cortaba el JSON a la mitad y Groq devolvía error 400.*
+SARA es el agente que redacta los textos de la situación meteorológica a partir de datos que el sistema ya calculó. Se llama **Sistema de Alerta y Respuesta Automatizada**.
 
-### 1.1 System Prompt (extracto de las Reglas de Oro)
+**Principio:** SARA redacta; no decide. El nivel de cada localidad, el vector dominante y las acciones operativas los calcula el motor (ver `03_MOTOR_RIESGO.md`). SARA convierte esos datos en texto para brigadas y coordinadores.
 
-El System Prompt instruye a SARA a actuar como una Oficial Meteoróloga, con las siguientes reglas obligatorias:
-
-1. **USA NOMBRES RECONOCIBLES:** refiérete a las zonas por su nombre común (Altiplano Tula-Actopan, Pachuca Norte, Tulancingo). NUNCA uses claves técnicas (ACT, APN, HUA, etc.).
-2. **SECCIÓN 0 (DECISIÓN OPERATIVA):** es la más importante. Debe contener qué debe hacer la red de brigadas, en qué zonas y con qué prioridad. Máximo 3 líneas.
-3. **SECCIÓN I (SÍNTESIS):** menciona SOLO las 2-3 zonas con mayor actividad. Agrupa el resto en una frase ("las demás zonas permanecen en condiciones normales"). NO enumeres las 14 zonas.
-4. **SECCIÓN II (FOCO):** para las 3 zonas más críticas del día, incluye: (a) zona, (b) dato reportado, (c) qué hacer. Si hay N3/N4, esas van primero.
-5. **SECCIÓN III (EVOLUCIÓN):** describe qué cambió respecto a AYER. ¿Qué zonas empeoraron? ¿Qué mejoró?
-6. **SECCIÓN IV (CICLO 48H):** dividida en 3 viñetas: "Ayer", "Hoy", "Mañana". Incluye el aviso SMN vigente.
-7. **SECCIÓN V (CHECKLIST):** recomendaciones por MOMENTO: (a) antes de salir, (b) durante la actividad, (c) si empeora, (d) para reanudar.
-8. **SECCIÓN VI (DESLINDE):** texto formal breve de subordinación a Protección Civil y CONAGUA.
-9. **TRADUCCIÓN A DECISIONES:** N1 = continuar; N2 = reforzar precauciones; N3 = restringir actividades específicas; N4 = suspender actividades expuestas.
-10. **CLASIFICACIÓN DE VIENTO:** ráfagas < 40 = suaves; 40-59 = moderadas; ≥ 60 = fuertes. (Contextualizar zonas altas).
-11. **ANTI-ALUCINACIÓN:** usa EXCLUSIVAMENTE los datos del bloque "DATOS REGIONALES" y del "AVISO OFICIAL". PROHIBIDO inventar sistemas sinópticos (frentes, ciclones) si los datos no lo dicen.
-12. **COHERENCIA INTER-SECCIONES:** verifica que ninguna sección contradiga a otra.
-    - **12.bis — COHERENCIA SECCIÓN 0 ↔ SECCIÓN II (CRÍTICO):** las zonas mencionadas en la Sección 0 DEBEN ser EXACTAMENTE las mismas de la Sección II. No puede haber divergencia.
-13. **VOCABULARIO:** usa "localidades" (no "municipios" ni "comunidades").
-14. **FORMATO:** usa viñetas en las secciones 0, II, III, IV y V.
-
-### 1.2 User Prompt (estructura de datos)
-
-Se le inyectan los siguientes bloques a SARA:
-
-- Fecha y hora de emisión.
-- Tipo de reporte (DIARIO AUTOMÁTICO o ON-DEMAND).
-- Bloque SMN: (Aviso Oficial o "Sin aviso extraordinario").
-- Bloque Regional: (datos de las 14 zonas, ventana de 72 h).
-- Semáforo Diocesano (N4, N3, N2, N1).
-- Comunidades críticas bajo tensión (JSON).
-
-> **Nota de Etapa 4:** desde H6.4, el `paqueteMaestro` incluye también `vector_dominante` y `niveles_por_vector` en cada evaluación. **Pero SARA todavía no los usa en el prompt.** El User Prompt actual solo inyecta los conteos del semáforo (N4/N3/N2/N1) y los focos críticos como `{nombre, municipio, nivel, causa, pendiente, acceso}`. Los campos nuevos están disponibles para H7 (ver §5).
+**Modelo:** `openai/gpt-oss-120b` a través de Groq.
 
 ---
 
-## 2. Prompt del Dictamen (Runner cada 3 horas)
+## 2. Prompts vigentes
 
-- **Ubicación:** `scripts/ejecutar_sara_autonomo.mjs`.
-- **Estructura:** devuelve un JSON corto (`estado_situacion`, `color`, `titulo`, `comentario_oficial`).
-- **Límite de tokens:** `max_completion_tokens: 4096` (Hotfix H8.5).
+| Prompt | Archivo | Salida | Frecuencia |
+|---|---|---|---|
+| Reporte diario | `scripts/reportes/reporteDiario.mjs` | Reporte de 7 secciones (JSON) | Diario, 06:00 hora de México |
+| Reporte bajo demanda | `api/reporte-ondemand.js` | Reporte de 7 secciones (JSON) | Cuando un operador lo solicita |
+| Dictamen del runner | `scripts/ejecutar_sara_autonomo.mjs` | Dictamen corto: estado, color, título y comentario | Cada 3 horas |
 
-### 2.1 Regla crítica de coherencia (N34)
+Los dos reportes comparten las mismas reglas base y las mismas reglas multivectoriales. El dictamen del runner tiene su propio prompt, más breve (ver §5).
 
-El System Prompt del runner es **determinista** para evitar alucinaciones:
+**Límite de salida:** `max_completion_tokens: 4096` en los tres. Sin este límite, el modelo cortaba el JSON a la mitad y Groq devolvía error 400 (ver §7).
 
-| Condición | Título | Color |
+---
+
+## 3. Reglas base de los reportes
+
+El prompt de los reportes contiene reglas numeradas. Su contenido vigente es:
+
+| # | Regla |
+|---|---|
+| 1 | Usar los nombres reconocibles de las zonas (por ejemplo, "Pachuca Norte"). Nunca usar claves técnicas. |
+| 2 | Sección 0 (decisión operativa): qué debe hacer la red de brigadas, en qué zonas y con qué prioridad. Máximo tres líneas. |
+| 3 | Sección I (síntesis): mencionar solo las dos o tres zonas con más actividad. El resto se agrupa en una frase. |
+| 4 | Sección II (foco): para las tres zonas más críticas, indicar zona, dato reportado y qué hacer. Las de nivel 3 y 4 van primero. |
+| 5 | Sección III (evolución): qué cambió respecto al día anterior. |
+| 6 | Sección IV (ciclo de 48 horas): tres viñetas, "Ayer", "Hoy" y "Mañana". Incluye el aviso del SMN vigente. |
+| 7 | Sección V (recomendaciones): por momento: antes de salir, durante la actividad, si empeora y para reanudar. |
+| 8 | Sección VI (deslinde): texto breve de subordinación a Protección Civil y CONAGUA. |
+| 9 | Traducción a decisiones: nivel 1 continuar; nivel 2 reforzar precauciones; nivel 3 restringir actividades específicas; nivel 4 suspender actividades expuestas. |
+| 10 | Clasificación del viento: ráfagas menores a 40 km/h son suaves; de 40 a 59 son moderadas; de 60 en adelante son fuertes. |
+| 11 | Anti-alucinación: usar solo los datos del bloque regional y del aviso oficial. No inventar sistemas sinópticos. |
+| 12 | Coherencia entre secciones. La regla 12.bis exige que las zonas de la Sección 0 sean exactamente las de la Sección II. |
+| 13 | Vocabulario: "localidades", no "municipios" ni "comunidades". |
+| 14 | Formato: viñetas en las secciones 0, II, III, IV y V. |
+
+> **Nota de numeración:** las reglas 15 y 16 no existen. Las multivectoriales empiezan en 17, como están en el código.
+
+---
+
+## 4. Reglas multivectoriales (Etapa 5)
+
+**Archivo:** `src/lib/compartido/promptsMultivector.js` (constante `REGLAS_MULTIVECTOR`)
+**Se inyectan en:** `api/reporte-ondemand.js` y `scripts/reportes/reporteDiario.mjs`
+
+| # | Regla | Qué pide a SARA |
 |---|---|---|
-| N4 > 0 | **Emergencia** | `#EF4444` |
-| N4 = 0 y N3 > 0 | **Alerta** | `#F97316` |
-| N4 = 0 y N3 = 0 | **Normal** | `#10B981` |
+| 17 | Leer el vector dominante y redactar según su lenguaje | Cada foco trae `vector_dominante` y `niveles_por_vector`. Hidrológico habla de lluvias; viento, de ráfagas y daños a techos (sin mencionar lluvias si el viento es puro); térmico, de frío, heladas, nevadas o calor; convectivo, de granizo y downbursts; los compuestos combinan ambos lenguajes. |
+| 18 | Traducir el vector a acciones operativas | Usar el arreglo `acciones_operativas` del foco en la Sección 0 y en la Sección II. No inventar acciones genéricas. |
+| 19 | Sección V condicional | Si un foco tiene un vector distinto de hidrológico, agregar una viñeta específica para ese vector. |
 
-> **El LLM no puede decidir el nivel**, solo redactar basándose en los números que le da el sistema. El prompt incluye la instrucción textual: *"Esta regla es determinista. NO puedes declarar 'Normal' si hay N4 > 0 o N3 > 0".*
-
-> **Nota de Etapa 4:** desde H6.4, los conteos N4/N3/N2/N1 que recibe SARA reflejan el semáforo multiamamenaza (no solo hidrológico). Pero el prompt **sigue redactando como "experta en lluvia"** (ver §5).
+**Verificado:** las reglas se inyectan en los dos prompts de reporte (líneas 230 y 196 respectivamente).
 
 ---
 
-## 3. Manejo de Errores y Fallbacks
+## 5. Dictamen del runner
 
-### 3.1 Groq HTTP 400 (JSON truncado)
+**Archivo:** `scripts/ejecutar_sara_autonomo.mjs`
+**Salida:** `estado_situacion`, `color`, `titulo` y `comentario_oficial`.
 
-- **Problema:** el modelo se quedaba sin tokens antes de cerrar el JSON.
-- **Solución (H8.5):** se agregó `max_completion_tokens: 4096`. Si Groq sigue fallando, el backend usa un fallback de plantilla segura (sin IA).
+El título y el color no los decide el modelo. Se fijan según el conteo de niveles:
 
-### 3.2 Groq HTTP 429 (Rate Limit)
+| Condición | Estado | Color | Título |
+|---|---|---|---|
+| Hay al menos una localidad en N4 | `SITUACION_CRITICA` | `#EF4444` | Emergencia |
+| No hay N4, pero hay N3 | `SITUACION_GRAVE` | `#F97316` | Alerta temprana |
+| Solo hay N1 y N2 | `SITUACION_NORMAL` | `#10B981` | Sereno |
 
-- **Problema:** muchas peticiones en poco tiempo.
-- **Solución:** el código captura el error y devuelve una plantilla estática para que la app no se rompa.
+El prompt indica que la regla es determinista y que el conteo de niveles es la fuente de verdad.
 
-### 3.3 Mojibake en los textos (N27)
-
-- **Problema:** Groq devuelve el texto con doble encoding UTF-8.
-- **Solución:** el runner y la API pasan todas las respuestas por `repararMojibake()` y `repararObjeto()` antes de guardar en el Blob o enviar al frontend.
-
----
-
-## 4. Validación de Respuestas
-
-La respuesta de Groq es validada antes de ser aceptada:
-
-1. **Si es JSON:** se intenta parsear con `JSON.parse()`.
-2. **Si falla el parseo:** se loguea el error (`Groq devolvió formato inválido`) y se usa el fallback estático.
-3. **Validación de campos:** se verifica que `titulo` y `comentario_oficial` no estén vacíos y sean strings válidos antes de aceptar la respuesta del LLM.
+> **Brecha pendiente:** el dictamen **no** importa `REGLAS_MULTIVECTOR`. Sus ejemplos de título siguen siendo de lluvia ("Emergencia por Lluvias Torrenciales en la Región"), aunque la emergencia sea de viento o de convección. Ver H-PROMPT-01 en `06_PENDIENTES.md`.
 
 ---
 
-## 5. Prompts Multiamenaza (pendiente H7)
+## 6. Datos que recibe SARA
 
-### 5.1 Diagnóstico: SARA sigue redactando como "experta en lluvia"
+### 6.1 Reportes
 
-**Estado actual (post-Etapa 4):** el motor evalúa 4 vectores de riesgo (hidrología, viento, térmico, convectivo). El `paqueteMaestro` incluye `vector_dominante` y `niveles_por_vector` por cada localidad.
+Cada reporte recibe, en el mensaje del usuario:
 
-**Pero los prompts de SARA no lo reflejan.** El System Prompt sigue diciendo:
+- Fecha y hora de emisión, y tipo de reporte (diario automático o bajo demanda).
+- Bloque del SMN: aviso oficial o "sin aviso extraordinario".
+- Bloque regional: datos de las 14 zonas, con ventana de 72 horas.
+- Semáforo: conteo de localidades en N4, N3, N2 y N1.
+- Focos críticos: localidades en N3 y N4.
 
-> *"Eres SARA, Oficial Meteoróloga de Cáritas Pastoral Social... Tu misión es redactar el REPORTE OPERATIVO DE SITUACIÓN METEOROLÓGICA para brigadistas y coordinadores pastorales."*
+Cada foco crítico incluye, en el reporte diario:
 
-Y las reglas de las secciones describen solo lluvia (lluvias torrenciales, deslaves, inundaciones). **No mencionan viento, frío, calor, granizo ni downbursts.**
+| Campo | Origen |
+|---|---|
+| `nombre`, `municipio`, `nivel`, `causa`, `pendiente`, `acceso` | Motor hidrológico y catálogo de localidades |
+| `vector_dominante` | Orquestador (Etapa 4 y 5) |
+| `niveles_por_vector` | Orquestador |
+| `acciones_operativas` | Orquestador |
 
-**Consecuencia:** si una localidad es N4 por un downburst (convectivo + viento), SARA va a redactar "Emergencia por lluvias torrenciales" (aunque no haya lluvia). **Confunde a los operadores.**
+### 6.2 Vectores posibles
 
-### 5.2 Qué falta adaptar
+Los valores de `vector_dominante` vienen del orquestador. Son siete, en tres grupos:
 
-#### En el System Prompt del reporte diario / on-demand
+| Valor | Tipo |
+|---|---|
+| `HIDROLOGICO`, `VIENTO`, `TERMICO`, `CONVECTIVO` | Simples |
+| `HIDRO_VIENTO`, `CONVECTIVO_VIENTO`, `HIDRO_TERMICO` | Compuestos |
+| `SIN_AMENAZA` | Cuando el nivel global es N1 (Etapa 5) |
 
-Agregar una regla 15 (o similar) que instruya a SARA a leer `vector_dominante` de cada foco crítico y redactar según el vector:
-
-| Vector | Lenguaje sugerido | Acción operativa sugerida |
-|---|---|---|
-| `HIDROLOGICO` | Lluvias, deslaves, inundaciones | Restringir caminos, evacuar riberas |
-| `VIENTO` | Ráfagas fuertes, caída de árboles, techos | Asegurar láminas, evitar actividades al aire libre |
-| `TERMICO` (FRIO_EXTREMO / HELADA_AGRICOLA / NEVADA) | Frío extremo, heladas, nevadas | Abrigo, proteger cultivos, cerrar accesos |
-| `TERMICO` (CALOR_EXTREMO) | Golpe de calor, estrés térmico | Hidratación, evitar sol |
-| `CONVECTIVO` (GRANIZO / DOWNBURST / SUPERCELL) | Granizo, ráfagas descendentes, supercélula | Resguardo de vehículos, evacuación preventiva |
-| `HIDRO_VIENTO` | Lluvia + viento = árboles caídos | Restringir circulación, reportar caídas |
-| `CONVECTIVO_VIENTO` | Downburst (tormenta + viento) | Refugio en estructuras sólidas |
-
-#### En el User Prompt
-
-Inyectar el `vector_dominante` y `niveles_por_vector` de cada foco crítico:
-
-```js
-// Antes:
-focosCriticos: [
-  { nombre, municipio, nivel, causa, pendiente, acceso }
-]
-
-// Después (H7):
-focosCriticos: [
-  {
-    nombre, municipio, nivel, causa, pendiente, acceso,
-    vector_dominante,           // "VIENTO", "HIDROLOGICO", etc.
-    niveles_por_vector,         // { hidrologico, viento, termico, convectivo }
-    acoplamiento                // 0.0 a 1.0
-  }
-]
-```
-
-#### En la Sección 0 (Decisión Operativa)
-
-Si el `vector_dominante` no es hidrológico, SARA debe redactar la decisión con el lenguaje del vector. Ejemplo:
-
-> "Alerta por vientos fuertes en Pachuca Norte. Acción: asegurar techos y láminas, evitar actividades al aire libre. Brigadas de Pachuca: revisar caída de árboles en caminos de terracería."
-
-#### En la Sección II (Foco)
-
-Describir el vector dominante de cada foco:
-
-> "Pachuca Metropolitana Norte — Viento N4 (vEq 95 km/h) + acoplamiento hidro-viento (0.35). Causa: ráfagas huracanadas con suelo saturado. Acción: evacuación preventiva de estructuras ligeras."
-
-### 5.3 Estado actual y decisión
-
-**Estado:** deuda aceptada para V3.0. No se implementó en Etapa 4 porque:
-
-1. El motor multiamenaza se validó primero (Etapa 4).
-2. Los prompts actuales describen correctamente el 90 % de los casos (lluvia en Sierra).
-3. La adaptación de prompts requiere re-evaluación de 90 días con eventos reales de viento, frío y granizo para calibrar el lenguaje.
-4. Requiere cambios en `reporte-ondemand.js` y `reporteDiario.mjs` (dos archivos separados, con prompts ligeramente distintos).
-
-**Trabajo estimado para H7:** 1-2 h. **Riesgo:** bajo (solo strings). No toca el motor.
-
-**Mitigación actual:** mientras tanto, SARA incluye `comentario_oficial` con los conteos reales (N4=11, N3=1, etc.). El operador puede ver que hay 11 N4 aunque SARA diga "lluvias torrenciales". El semáforo de la UI muestra el nivel correcto. El problema es de narrativa, no de datos.
-
-Documentado en `06_PENDIENTES.md` como H7. Se implementará en V3.0 junto con los prompts de los nuevos vectores (heladas, incendios, etc.).
+Los subtipos de los evaluadores (helada agrícola, nevada, granizo, downburst, supercélula) no son valores de `vector_dominante`. Aparecen solo en el título y la causa del diagnóstico. Eso significa que SARA recibe "TERMICO" y no sabe si es helada o nevada, salvo por el texto del diagnóstico. Ver H-PROMPT-02 en `06_PENDIENTES.md`.
 
 ---
 
-*Fin del documento de prompts. SatRC V2.0 — Cáritas Pastoral Social • Arquidiócesis de Tulancingo.*
+## 7. Validación y respaldos
+
+1. **Parseo:** la respuesta se convierte con `JSON.parse`. Si falla, se registra el error y se usa una plantilla estática.
+2. **Campos obligatorios:** `titulo` y `comentario_oficial` deben existir y no estar vacíos. Si no, se usa la plantilla.
+3. **HTTP 400 (JSON truncado):** se corrigió con `max_completion_tokens: 4096` (H8.5). Si vuelve a ocurrir, la plantilla estática evita que la aplicación falle.
+4. **HTTP 429 (límite de uso):** se devuelve la plantilla estática.
+5. **Codificación:** toda respuesta pasa por `repararMojibake` antes de guardarse o enviarse.
+
+**Principio:** si SARA falla, la aplicación sigue funcionando con texto fijo. Un reporte sin redacción de IA no debe bloquear a los operadores.
+
+---
+
+## 8. Estado de la adaptación multivectorial (H7)
+
+| Parte | Estado |
+|---|---|
+| Reglas 17 a 19 en los dos prompts de reporte | ✅ Hecho |
+| Campos `vector_dominante`, `niveles_por_vector` y `acciones_operativas` en los focos | ✅ Hecho |
+| Sección 0 y Sección II redactadas con las acciones del motor | ✅ Hecho (por regla 18) |
+| Dictamen del runner con lenguaje multivectorial | ❌ Pendiente (H-PROMPT-01) |
+| Subtipos de amenaza disponibles para SARA | ❌ Pendiente (H-PROMPT-02) |
+| Pruebas automáticas de los prompts | ❌ No existen (H-PROMPT-03) |
+
+**Verificación empírica registrada:** en la sesión del 22/10/2026, SARA agregó en la Sección V una viñeta específica para un hidrólogo, tras la adaptación. Esta verificación fue manual y no se repite en pruebas automáticas.
+
+---
+
+## 9. Reglas para editar los prompts
+
+1. **Cambiar el texto del prompt no es un cambio menor.** Afecta lo que lee cada operador. Verificar con una corrida real antes de dar el cambio por bueno.
+2. **Las reglas 17 a 19 viven en un solo archivo** (`promptsMultivector.js`) y se reutilizan en los dos reportes. No copiarlas a mano.
+3. **La numeración de reglas es la del código.** Si se agrega una regla, usar el siguiente número libre y actualizar la tabla de este documento.
+4. **No incluir valores de claves ni datos personales** en el texto de los prompts ni en la documentación.
+5. **El dictamen del runner y los reportes tienen prompts separados.** Un cambio en uno no se propaga al otro; hay que revisar ambos.
+6. **El límite de salida (4096) es parte del diseño.** Subirlo sin revisar la longitud de los reportes puede volver a cortar el JSON.
+
+---
+
+## 10. Deuda de prompts
+
+| ID | Deuda | Sev. | Referencia |
+|---|---|---|---|
+| H-PROMPT-01 | El dictamen del runner no usa reglas multivectoriales y sus ejemplos son de lluvia. | 🟡 | §5 |
+| H-PROMPT-02 | Los subtipos de amenaza solo aparecen en el texto del diagnóstico, no como dato estructurado para SARA. | 🟡 | §6.2 |
+| H-PROMPT-03 | No hay pruebas automáticas que verifiquen que los prompts reciben los campos esperados y que la salida cumple las reglas. | 🟡 | §8 |
+
+Los tres se registran en `06_PENDIENTES.md`.

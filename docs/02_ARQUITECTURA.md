@@ -1,235 +1,198 @@
-# SatRC V2.0 — Arquitectura y Frontend (Nivel Ingeniería)
+# SatRC V2.0 — Arquitectura
 
-> **Versión:** 2.3.0 (Cierre de Etapa 4)
-> **Última actualización:** 22 de octubre de 2026.
-> **Nota:** este documento describe la arquitectura **del frontend y de los módulos compartidos**. Para la arquitectura del motor multiamamenaza (Etapa 4), ver `08_MOTOR_MULTIAMENAZA.md`. Para el estado global del proyecto, ver `09_HANDOVER.md`.
-
-## Índice
-
-1. [El estado en el frontend](#1-el-estado-en-el-frontend)
-2. [Módulos compartidos (H6) y Extracciones (H4, H7b)](#2-módulos-compartidos-y-extracciones)
-3. [Vistas principales](#3-vistas-principales)
-4. [El motor de reportes regionales](#4-el-motor-de-reportes-regionales)
-5. [Modales (refactor Octubre 2026)](#5-modales-refactor-octubre-2026)
-6. [El problema del encoding UTF-8 (N27)](#6-el-problema-del-encoding-utf-8-n27)
-7. [Validación de contratos con Zod (H8 + H6.5)](#7-validación-de-contratos-con-zod-h8--h65)
-8. [Motor Multiamenaza (Etapa 4)](#8-motor-multiamenaza-etapa-4)
-9. [Adaptador de Shape del Runner (H6.4 + H6.5)](#9-adaptador-de-shape-del-runner-h64--h65)
+> **Versión del documento:** 2.4 (22/10/2026)
+> **Alcance:** componentes, flujo de datos, endpoints, almacenamiento y contratos. El detalle de las reglas de riesgo está en `03_MOTOR_RIESGO.md`. Las decisiones que originaron esta arquitectura están en `08_DECISIONES.md`.
 
 ---
 
-## 1. El estado en el frontend
+## 1. Capas y responsabilidades
 
-El frontend **no calcula riesgo complejo en tiempo real**. Su única fuente de verdad es el Blob (`estado_diocesano.json`).
+| Capa | Responsabilidad | Dónde vive |
+|---|---|---|
+| Runner autónomo | Consulta modelos y avisos, evalúa las 405 localidades y publica el estado | `scripts/ejecutar_sara_autonomo.mjs` (GitHub Actions, cada 3 h) |
+| Funciones serverless | Entregan el estado, generan reportes bajo demanda y reciben disparos externos | `api/` (Vercel Functions, Node 22) |
+| Almacenamiento | Guarda el estado vigente, la bitácora y el último reporte | Vercel Blob |
+| Interfaz | Muestra el semáforo, los reportes y los mapas | `src/` (React 19, Vite 8, Tailwind 3) |
+| Módulos compartidos | Lógica común entre frontend y backend, sin duplicados | `src/lib/compartido/` |
 
-Si el Blob falla, el frontend tiene un **fallback en vivo** que evalúa en el navegador (con los 14 nodos regionales, ver H-MOTOR-04). El fallback usa `evaluarLocalidad` (motor hidrológico, Etapa 3). **No usa el orquestador multiamenaza todavía** (H6.6 diferido a V3.0).
+**Principio:** el frontend no calcula riesgo en condiciones normales. Su única fuente de verdad es el estado publicado en el Blob. El cálculo en el navegador existe solo como respaldo cuando el Blob no está disponible (ver §5).
 
 ---
 
-## 2. Módulos compartidos y Extracciones
+## 2. Flujo de datos
 
-A partir de la Etapa 3, se extrajeron las funciones duplicadas a `src/lib/compartido/` para mantener una única fuente de verdad (H6), y se aislaron los motores para que sean testeables (H4, H7b).
+```text
+Open-Meteo (GFS, ICON, GEM)     SMN / CONAGUA (avisos)     NOAA GOES-19 (imágenes)
+            │                            │                          │
+            ▼                            ▼                          │
+┌──────────────────────────────────────────────────────┐            │
+│ Runner (GitHub Actions, cada 3 h)                    │            │
+│ 1. Aviso SMN                                         │            │
+│ 2. Series por zona (14 nodos, lotes de 4)            │            │
+│ 3. Consenso determinista (versión local, sin Etapa 4)│            │
+│ 4. Evaluación multiamenaza (405 localidades)         │            │
+│ 5. Validación Zod del paquete                        │            │
+│ 6. Publicación en Blob + bitácora encadenada         │            │
+└───────────────────────┬──────────────────────────────┘            │
+                        ▼                                           │
+          Vercel Blob: estado_diocesano.json                        │
+                        │  bitacora_sara.json                       │
+                        │  reporte_diocesano_vigente.json           │
+                        ▼                                           │
+┌──────────────────────────────────────────────────────┐            │
+│ /api/sara: lee, repara codificación, valida con Zod  │            │
+└───────────────────────┬──────────────────────────────┘            │
+                        ▼                                           ▼
+     Interfaz (MonitorPublico, SatRCOperativo)  ◄──── /api/latest-gif
+```
 
-### 2.1 Módulos Compartidos (H6)
+Si `/api/sara` no puede validar el Blob, la interfaz cae al cálculo en vivo (ver §5). El operador debe ver siempre un dato, aunque no sea el publicado.
 
-| Archivo | Exporta |
+---
+
+## 3. Interfaz
+
+### 3.1 Vistas
+
+| Archivo | Función | Acceso |
+|---|---|---|
+| `MonitorPublico.jsx` | Monitor Climático: selector zona → municipio → localidad, pronóstico y gráficas | Abierto |
+| `SatRCOperativo.jsx` | Sala Operativa: semáforo de 4 niveles, generación de reportes, auditoría | Clave de operador |
+| `App.jsx` | Enrutamiento entre vistas y pantalla de acceso | — |
+
+**Estado actual de la interfaz respecto al motor:**
+- El Monitor Climático muestra solo el pronóstico hidrológico. No muestra el semáforo N1 a N4 ni el desglose por vector. Pendiente en `06_PENDIENTES.md` (H-UI-01 a H-UI-03).
+- La Sala Operativa muestra el desglose por vector (barras de `VectorBar.jsx`) y las acciones operativas, desde Etapa 5.
+
+### 3.2 Componentes
+
+| Archivo | Descripción |
 |---|---|
-| `fechas.js` | `formatearTimestamp` |
-| `markdown.jsx` | `TextoEnriquecido` (viñetas y negritas) |
-| `nodos.js` | `seleccionarNodosRegionales` |
-| `mojibake.js` | `repararMojibake` y `repararObjeto` |
-| `regionales.js` | `normalizarDatosRegionales` y `construirBloqueRegional` |
-| `noaa.js` | `parseNoaaStamp` y `compararNoaaStamps` (H7b) |
+| `components/ReporteCuerpo.jsx` | Renderiza las 7 secciones del reporte. Es la base de los dos modales. |
+| `components/ReporteModalOperativo.jsx` | Modal de la Sala Operativa: incluye compartir, descargar e imprimir. |
+| `components/ReporteModalPublico.jsx` | Modal del Monitor Climático: solo lectura. |
+| `components/VectorBar.jsx` | Barras de riesgo por vector (Etapa 5). |
+| `components/RiskMap.jsx` | Mapa Leaflet con las 405 localidades. |
+| `components/SatelliteViewer.jsx` | Visor de animaciones GOES-19 con 5 canales. |
+| `components/OfficialAlertBanner.jsx` | Banner superior con el aviso oficial del SMN. |
+| `components/DisclaimerModal.jsx` | Aviso de subordinación a Protección Civil y CONAGUA. |
+| `components/TextoEnriquecido` (en `lib/compartido/markdown.jsx`) | Viñetas y negritas en los textos de los reportes. |
 
-### 2.2 Motores Aislados (H4 + Etapa 4)
+---
 
-| Archivo | Descripción | Etapa |
+## 4. Módulos compartidos (`src/lib/compartido/`)
+
+Funciones que antes estaban duplicadas y que ahora tienen una sola fuente (ADR-004).
+
+| Archivo | Exporta | Uso |
 |---|---|---|
-| `src/engine/riskEvaluator.js` | Motor canónico del frontend (las 6 reglas hidrológicas). | Etapa 3 |
-| `scripts/engine/riskEvaluatorRunner.mjs` | Gemelo del motor hidrológico para el runner de GitHub Actions (H4). | Etapa 3 |
-| `src/engine/hydroAdapter.js` | Adaptador continuo del motor hidrológico (añade `nivel_alerta_continuo`). | Etapa 4 (H4-E4) |
-| `src/engine/windEvaluator.js` | Evaluador de viento con densidad del aire y umbral dinámico por altitud. | Etapa 4 (H1-E4 + H6.4a) |
-| `src/engine/thermalEvaluator.js` | Evaluador térmico con sigmoides, Grass Minimum y Bulbo Húmedo. | Etapa 4 (H2-E4) |
-| `src/engine/convectiveEvaluator.js` | Evaluador convectivo con CAPE, Δh de fusión y Downburst. | Etapa 4 (H3-E4) |
-| `src/engine/crossThreatOrchestrator.js` | Orquestador multiamamenaza con acoplamiento de Richardson. | Etapa 4 (H6.4 + H6.5) |
+| `fechas.js` | `formatearTimestamp` | Interfaz y reportes |
+| `markdown.jsx` | `TextoEnriquecido` | Interfaz |
+| `nodos.js` | `seleccionarNodosRegionales` | Runner e interfaz |
+| `mojibake.js` | `repararMojibake`, `repararObjeto` | API y reportes |
+| `regionales.js` | `normalizarDatosRegionales`, `construirBloqueRegional` | Reportes |
+| `noaa.js` | `parseNoaaStamp`, `compararNoaaStamps` | Visor satelital |
+| `dictamen.js` | Tabla de 7 vectores para el banner dinámico | Interfaz (Etapa 5) |
+| `bitacora.js` | Resumen multivector de la bitácora | Runner (Etapa 5) |
+| `promptsMultivector.js` | Reglas `REGLAS_MULTIVECTOR` para los prompts de SARA | Reportes (Etapa 5) |
 
-> **Nota:** el motor hidrológico (`riskEvaluator.js`) **es intocable desde Etapa 3**. El orquestador lo envuelve a través de `hydroAdapter.js`. Ver `08_MOTOR_MULTIAMENAZA.md` para el flujo completo.
-
----
-
-## 3. Vistas principales
-
-### `MonitorPublico.jsx`
-
-- Vista pública.
-- Selector de **Zona → Municipio → Localidad**.
-- Usa Open-Meteo para las gráficas.
-- No tiene botones de exportación.
-- **No consume los campos nuevos de Etapa 4** (`nivel_alerta_global`, `niveles_por_vector`). Sigue mostrando solo el pronóstico (deuda H-UI-01/02/03).
-
-### `SatRCOperativo.jsx`
-
-- Sala de mando (protegida por clave).
-- Semáforo de 4 niveles (lee `nivel_alerta` del Blob).
-- Botón de On-Demand.
-- Si el Blob falla, cae a `ejecutarEvaluacionRealEnVivo()` usando 14 nodos.
-- **No muestra todavía** el desglose por vector (`niveles_por_vector`) ni `acciones_operativas` (deuda H6.6).
+> **Nota:** la constante de tamaño de lote (`TAMANO_LOTE = 4`) aparece declarada en tres lugares: el runner, `reportesRegionales.js` y `SatRCOperativo.jsx`. Es una violación del principio DRY. Ver DEU-22 en `06_PENDIENTES.md`.
 
 ---
 
-## 4. El motor de reportes regionales
+## 5. Motores
 
-**Archivo:** `src/engine/reportesRegionales.js`
-
-- **`seleccionarNodosRegionales()`:** importado desde `src/lib/compartido/nodos.js`.
-- **`construirResumenesRegionales()`:** *crítico*. Hace 14 fetches a Open-Meteo con límite de lotes concurrentes (`TAMANO_LOTE = 4`).
-
-  > ⚠️ **Advertencia:** si se hacen más de 4 peticiones concurrentes, el navegador colapsa por límite de conexiones.
-
-- **`invalidarCache()`:** borra la caché de 30 minutos. Se usa cuando el operador reintenta.
-
----
-
-## 5. Modales (refactor Octubre 2026)
-
-Antes había un solo modal gigante en `SatRCOperativo.jsx`. Se dividió en 3:
-
-| Componente | Descripción | Uso |
+| Archivo | Rol | Detalle en |
 |---|---|---|
-| `ReporteCuerpo.jsx` | El HTML de las 7 secciones. 100% reutilizable. | Base de los otros dos. |
-| `ReporteModalOperativo.jsx` | Cuerpo + botones (WhatsApp, Descargar, Imprimir). | Solo operadores. |
-| `ReporteModalPublico.jsx` | Cuerpo, sin botones. | Solo el Monitor Público. |
+| `engine/riskEvaluator.js` | Motor hidrológico canónico (6 reglas) | `03` §2 |
+| `scripts/engine/riskEvaluatorRunner.mjs` | Gemelo del anterior para el runner | `03` §3 |
+| `engine/hydroAdapter.js` | Añade el nivel continuo al motor hidrológico | `03` §8 |
+| `engine/windEvaluator.js` | Viento con densidad del aire y umbral por altitud | `03` §5 |
+| `engine/thermalEvaluator.js` | Frío, heladas, nevadas y calor | `03` §6 |
+| `engine/convectiveEvaluator.js` | Granizo, downbursts y supercélulas | `03` §7 |
+| `engine/crossThreatOrchestrator.js` | Combina los cuatro vectores con acoplamiento | `03` §9 |
+| `engine/consensusEngine.js` | Consenso por variable entre modelos | `03` §4 |
+| `engine/meteoFetcher.js` | Pide 15 variables horarias a Open-Meteo para 3 modelos | `03` §4 |
+| `engine/reportesRegionales.js` | Construye los resúmenes de las 14 zonas con caché de 30 minutos | Este documento §6 |
+
+**Regla de arquitectura:** `riskEvaluator.js` no se modifica desde Etapa 3. Los evaluadores nuevos lo envuelven a través de `hydroAdapter.js`.
+
+### 5.1 Respaldo en vivo
+
+Si el Blob no está disponible o no pasa la validación, la interfaz ejecuta `ejecutarEvaluacionRealEnVivo()`:
+
+- Consulta los 14 nodos regionales con lotes de 4 peticiones.
+- Evalúa con `evaluarLocalidad` (motor hidrológico).
+- No usa el orquestador multiamenaza. Pendiente como H6.6 en `06_PENDIENTES.md`.
+- Sus datos no pasan por Zod.
 
 ---
 
-## 6. El problema del encoding UTF-8 (N27)
+## 6. Endpoints
 
-`@vercel/blob` en el runner guarda strings con **doble encoding** (ej. `ó` se guarda como `Ã³`).
+| Endpoint | Método | Autenticación | Función |
+|---|---|---|---|
+| `/api/sara` | GET | Pública | Estado vigente, bitácora y evaluaciones. Con `?forzar=true` requiere token de administración. |
+| `/api/smn` | GET | Pública | Aviso oficial vigente del SMN (scraping del recuadro de alerta). |
+| `/api/latest-gif` | GET | Pública | Resuelve la animación más reciente de GOES-19. |
+| `/api/reporte-ondemand` | POST | Encabezados `x-admin-token` y `x-user-key` | Genera un reporte bajo demanda con el LLM. |
+| `/api/disparar-workflow` | POST | Encabezado `x-cron-secret` | Dispara el runner en GitHub Actions. Lo invoca el planificador externo. |
 
-**El frontend no tiene la culpa.** El endpoint `/api/sara.js` lee el Blob y ejecuta `repararObjeto()` (importado de `mojibake.js`) antes de enviarlo al frontend.
-
-**Deuda aceptada para V3.0:** la causa raíz (por qué `@vercel/blob` hace doble encoding en GitHub Actions) no está resuelta. El parche defensivo en lectura funciona. Documentado como N22/N27 en `06_PENDIENTES.md`.
+**Riesgos abiertos de este diagrama** (detalle en `06_PENDIENTES.md`, sección "Riesgos activos"):
+- `/api/sara` devuelve la bitácora y las evaluaciones completas en la consulta sin `forzar`. Es información operativa accesible sin autenticación.
+- La interfaz lee el token de administración desde una variable `VITE_`, que se incluye en el código que descarga el navegador.
 
 ---
 
-## 7. Validación de contratos con Zod (H8 + H6.5)
+## 7. Almacenamiento (Vercel Blob)
 
-Para evitar que datos corruptos o incompletos lleguen al frontend, el sistema implementó una validación estricta en los bordes usando **Zod**.
+| Archivo | Contenido | Quién escribe | Quién lee |
+|---|---|---|---|
+| `estado_diocesano.json` | Paquete maestro: semáforo y evaluación de 405 localidades | Runner | `/api/sara` |
+| `bitacora_sara.json` | Registro encadenado con SHA-256 de cada corrida y reporte | Runner y `/api/reporte-ondemand` | `/api/sara` |
+| `reporte_diocesano_vigente.json` | Último reporte oficial (diario o bajo demanda con 14/14 zonas) | Runner y `/api/reporte-ondemand` | `/api/sara` |
+
+**Regla:** un reporte en modo emergencia (zonas incompletas) no reemplaza al vigente.
+
+---
+
+## 8. Contratos de datos (Zod)
 
 **Archivo:** `src/schemas/estadoDiocesanoSchema.js`
 
-Se dividió en dos esquemas para reflejar las distintas capas:
+| Esquema | Valida | Quién lo usa |
+|---|---|---|
+| `EstadoDiocesanoBlobSchema` | Paquete maestro antes de publicarlo | Runner |
+| `EstadoDiocesanoResponseSchema` | Respuesta final de `/api/sara` | API |
 
-1. **`EstadoDiocesanoBlobSchema`:** valida el `paqueteMaestro` generado por el runner antes de publicarlo al Blob. Si el motor produce un error (ej. `nivel_alerta: 5`), el runner aborta.
-2. **`EstadoDiocesanoResponseSchema`:** valida el objeto final que la API `/api/sara` envía al frontend (incluye campos como `bitacora` y `origen`).
+Si la validación falla, el runner aborta la publicación y la API no entrega el Blob al frontend.
 
-**Extensión de Etapa 4 (H6.5):** el `EvaluacionSchema` se extendió con 5 campos opcionales del orquestador:
+**Campos del orquestador** (opcionales, para compatibilidad con Blobs anteriores):
 
-- `nivel_alerta_global: z.number().min(1).max(4).optional()`
-- `riesgo_continuo: z.number().min(1).max(4).optional()`
-- `niveles_por_vector: z.object({ hidrologico, viento, termico, convectivo }).optional()`
-- `acciones_operativas: z.array(z.string()).optional()`
-- `diagnosticos_por_vector: z.record(z.any()).optional()`
+- `nivel_alerta_global`: entero de 1 a 4.
+- `riesgo_continuo`: decimal de 1.0 a 4.0.
+- `niveles_por_vector`: `{ hidrologico, viento, termico, convectivo }`.
+- `acciones_operativas`: lista de textos.
+- `diagnosticos_por_vector`: objeto libre.
 
-Además, el campo `diagnostico` ahora tiene `.passthrough()` para aceptar el campo `acoplamiento` que agrega el orquestador. Los campos nuevos son opcionales para permitir la transición desde Blobs viejos (pre-H6.4).
-
-**Flujo de validación:**
-
-- El Runner valida → publica al Blob.
-- La API lee el Blob → valida → envía al Frontend.
-- Si la API detecta que el Blob no cumple el contrato (ej. por un bug futuro), cae automáticamente al **fallback en vivo** (que no se valida) para asegurar que el operador nunca se quede sin datos.
+**Adaptador de forma:** el orquestador devuelve `nivel_alerta_global`, pero el contrato anterior espera `nivel_alerta`. El runner copia el valor global en `nivel_alerta` y conserva los campos nuevos. Sin ese adaptador, Zod rechazaría el paquete (ADR-006).
 
 ---
 
-## 8. Motor Multiamenaza (Etapa 4)
+## 9. Encodificación de texto
 
-**Ver `08_MOTOR_MULTIAMENAZA.md` para el detalle completo.**
+El runner guarda cadenas con codificación UTF-8 doble (por ejemplo, `ó` queda como `Ã³`). Como solución defensiva, `/api/sara` y `/api/reporte-ondemand` reparan el texto al leerlo, con `repararObjeto`, antes de enviarlo a la interfaz.
 
-Resumen de cómo se integra con la arquitectura existente:
-
-1. **`meteoFetcher.js`** pide 15 variables a Open-Meteo (7 hidrológicas + 8 E4).
-2. **`consensusEngine.js`** consensúa las 15 variables (mediana + max + gfs_preferente) y produce una serie de objetos.
-3. **`crossThreatOrchestrator.js`** (`evaluarMultiamenaza`) recibe la serie + la localidad, y:
-   - Convierte la serie de objetos a objeto de arrays (formato que esperan los 4 evaluadores).
-   - Llama a `hydroAdapter`, `windEvaluator`, `thermalEvaluator`, `convectiveEvaluator`.
-   - Aplica acoplamiento no lineal de Richardson.
-   - Devuelve `nivel_alerta_global` + `niveles_por_vector` + `riesgo_continuo` + `acciones_operativas`.
-4. **`ejecutar_sara_autonomo.mjs`** (runner) usa `evaluarMultiamenaza` para las 405 localidades y publica el `paqueteMaestro` en Vercel Blob.
-
-**Diagrama de flujo:**
-
-```text
-Open-Meteo (15 variables × 3 modelos)
-                  ↓
-         meteoFetcher.js (fetch)
-                  ↓
-   consensusEngine.js (consenso → array de 240 objetos)
-                  ↓
-   crossThreatOrchestrator.js (convierte array → objeto de arrays)
-                  ↓
-┌─────────┬───────────┬───────────┬──────────────┐
-│ hydro   │ wind      │ thermal   │ convective   │
-│ Adapter │ Evaluator │ Evaluator │ Evaluator    │
-└────┬────┴─────┬─────┴─────┬─────┴──────┬───────┘
-     │          │           │            │
-     └──────────┴─────┬─────┴────────────┘
-                      ↓
-        Acoplamiento de Richardson
-                      ↓
-        { nivel_alerta_global,
-          riesgo_continuo,
-          niveles_por_vector,
-          acciones_operativas }
-                      ↓
-        Adaptador de shape (ver §9)
-                      ↓
-        { nivel_alerta, nivel_alerta_global, ... }
-                      ↓
-        paqueteMaestro → Vercel Blob
-                      ↓
-        /api/sara → Zod → Frontend
-```
+La causa en el runner no está resuelta. Pendiente como N22/N27 en `06_PENDIENTES.md`.
 
 ---
 
-## 9. Adaptador de Shape del Runner (H6.4 + H6.5)
+## 10. Deuda de arquitectura
 
-**Problema:** `evaluarMultiamenaza` devuelve `nivel_alerta_global`, pero Zod y el frontend esperan `nivel_alerta`.
-
-**Solución:** el runner (`scripts/ejecutar_sara_autonomo.mjs`) incluye un adaptador de shape que:
-
-1. Mapea `res.nivel_alerta_global` a `nivel_alerta` (compatibilidad).
-2. Mantiene todos los campos del orquestador como aditivos (`nivel_alerta_global`, `riesgo_continuo`, `niveles_por_vector`, `acciones_operativas`, `diagnosticos_por_vector`).
-3. Incluye un `try/catch` con fallback al motor viejo (`evaluarLocalidadRunner`) si el orquestador falla para una localidad puntual.
-
-**Código relevante** (en `ejecutar_sara_autonomo.mjs`, sección 5):
-
-```js
-const evaluaciones = todasLocalidades.map(loc => {
-  const zonaId = loc.zona_id;
-  const serieZona = seriesPorZona[zonaId] || [];
-  const zonaSinDatos = series[zonaId]?.ok === false;
-
-  try {
-    const res = evaluarMultiamenaza(loc, serieZona, { alertaSMN, zonaSinDatos });
-    return {
-      // Campos requeridos por Zod (compatibilidad):
-      localidad_id: res.localidad_id,
-      nombre: res.nombre,
-      // ...
-      nivel_alerta: res.nivel_alerta_global,  // ← mapeo
-      // ...
-      // Campos nuevos (aditivos):
-      nivel_alerta_global: res.nivel_alerta_global,
-      riesgo_continuo: res.riesgo_continuo,
-      niveles_por_vector: res.niveles_por_vector,
-      acciones_operativas: res.acciones_operativas,
-      diagnosticos_por_vector: res.diagnosticos_por_vector
-    };
-  } catch (e) {
-    return evaluarLocalidadRunner(loc, serieZona, { alertaSMN, zonaSinDatos });
-  }
-});
-```
-
-**Consecuencia:** cero regresión en el frontend. Los campos nuevos están disponibles para futuras vistas (H6.6).
+| ID | Deuda | Referencia |
+|---|---|---|
+| H-ARCH-01 | Agregar un quinto evaluador exige tocar siete archivos. Propuesta: registro declarativo de evaluadores. | `06_PENDIENTES.md` |
+| H-MOTOR-01 | El gemelo del motor hidrológico sigue separado del canónico. Unificación prevista para V3.0. | `06_PENDIENTES.md` |
+| H6.6 | La interfaz pública no consume el desglose multiamenaza. | `06_PENDIENTES.md` |
+| DEU-22 | Constante `TAMANO_LOTE` duplicada en tres archivos. | `06_PENDIENTES.md` |
+| H-INFRA-01 | No existe `vercel.json`; el despliegue depende de la detección automática. | `06_PENDIENTES.md` |
