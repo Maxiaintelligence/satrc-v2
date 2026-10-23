@@ -885,7 +885,11 @@ Documento oficial emitido para párrocos, brigadistas y autoridades de auxilio.
                       <Thermometer className="w-3.5 h-3.5 text-amber-400" />
                       <span className="text-[10px] text-slate-400 uppercase font-semibold">Temp Mínima</span>
                     </div>
-                    <span className="text-base font-bold text-white">{comunidadDetalle?.impactoSistemico?.tempMinimaC ?? '--'} °C</span>
+                    <span className="text-base font-bold text-white">
+                      {comunidadDetalle?.impactoSistemico?.tempMinimaC !== undefined 
+                        ? `${comunidadDetalle.impactoSistemico.tempMinimaC} °C` 
+                        : '-- °C'}
+                    </span>
                   </div>
 
                   <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
