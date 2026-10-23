@@ -380,7 +380,11 @@ async function ejecutarSARA() {
     }).catch(() => null);
 
     if (resSMN && resSMN.ok) {
-      const texto = (await resSMN.text()).toLowerCase();
+      const textoOficial = await resSMN.text();
+      // FIX: Extraer SOLO la alerta activa, ignorando comunicados
+      const matchAlerta = textoOficial.match(/<div id="index_AlertaSistemaFrontal_[^"]+"[\s\S]*?<\/div>/i);
+      const textoAlerta = matchAlerta ? matchAlerta[0] : "";
+      const texto = textoAlerta.replace(/<[^>]*>?/gm, ' ').replace(/\s+/g, ' ').toLowerCase();;
 
       const mencionaHidalgo = texto.includes("hidalgo");
       const mencionaPuebla = texto.includes("puebla");

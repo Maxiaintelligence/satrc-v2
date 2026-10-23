@@ -1,16 +1,6 @@
 /**
  * SatRC V2.0 - API Serverless Oficial SMN / CONAGUA (México)
- * N33 — Parser robusto del aviso vigente.
- * 
- * Fuente: https://smn.conagua.gob.mx/es/ (página principal)
- * El webservice method=1 NO contiene los avisos (devuelve pronóstico general).
- * El aviso real está en la página principal, en un bloque <li>.
- * 
- * Estrategia:
- * 1. Consultar la página principal del SMN.
- * 2. Buscar patrones de lluvias (torrenciales/intensas/fuertes).
- * 3. Detectar estados afectados (Hidalgo, Puebla, Veracruz).
- * 4. Asignar nivel según severidad del fenómeno.
+ * Parser estricto: Solo lee el recuadro de "Alerta Activa", ignorando Comunicados de Prensa.
  */
 
 export default async function handler(req, res) {
@@ -29,7 +19,6 @@ export default async function handler(req, res) {
     const controlador = new AbortController();
     const timeoutId = setTimeout(() => controlador.abort(), 10000);
 
-    // N33 — Consultar la página principal del SMN (donde están los avisos)
     const respuesta = await fetch(SMN_AVISOS_URL, {
       signal: controlador.signal,
       headers: { 
@@ -45,15 +34,23 @@ export default async function handler(req, res) {
       textoOficial = await respuesta.text();
     }
 
-    const textoMin = textoOficial.toLowerCase();
+    // FIX CRÍTICO: Extraer SOLO el bloque de alerta activa, ignorando comunicados.
+    let textoAlerta = "";
+    const matchAlerta = textoOficial.match(/<div id="index_AlertaSistemaFrontal_[^"]+"[\s\S]*?<\/div>/i);
+    if (matchAlerta) {
+      textoAlerta = matchAlerta[0];
+    }
 
-    // Detección de entidades de la jurisdicción diocesana
+    // Limpiamos el HTML para quedarnos solo con el texto real
+    const textoMin = textoAlerta.replace(/<[^>]*>?/gm, ' ').replace(/\s+/g, ' ').toLowerCase();
+
+    // Detección de entidades en la alerta activa
     const mencionaHidalgo = textoMin.includes("hidalgo");
     const mencionaPuebla = textoMin.includes("puebla");
     const mencionaVeracruz = textoMin.includes("veracruz");
     const afectaRegion = mencionaHidalgo || mencionaPuebla || mencionaVeracruz;
 
-    // N33 — Detección de fenómenos con patrones REALES del SMN
+    // Detección de fenómenos
     const hayTorrenciales = textoMin.includes("torrenciales");
     const hayIntensas = textoMin.includes("lluvias intensas") || textoMin.includes("lluvias puntuales intensas");
     const hayFuertes = textoMin.includes("lluvias fuertes") || textoMin.includes("lluvias muy fuertes");
@@ -61,7 +58,6 @@ export default async function handler(req, res) {
     const hayFrenteFrio = textoMin.includes("frente frío") || textoMin.includes("masa de aire polar");
     const hayCiclon = textoMin.includes("huracán") || textoMin.includes("tormenta tropical") || textoMin.includes("ciclón");
 
-    // N33 — Construcción del aviso según severidad detectada
     let alerta = null;
 
     if (afectaRegion) {
@@ -71,130 +67,38 @@ export default async function handler(req, res) {
       if (mencionaVeracruz) estados.push("VER");
 
       if (hayTorrenciales) {
-        // Nivel 3 — Severo
-        alerta = {
-          activo: true,
-          nivel: 3,
-          severidad: "Aviso Severo",
-          color: "#EF4444",
-          titulo: "Lluvias Torrenciales en la Región",
-          descripcion: `El SMN reporta lluvias torrenciales para ${estados.join(', ')}. Existe riesgo de inundaciones, deslaves y cortes viales en zonas de montaña.`,
-          estados_afectados: estados,
-          rango_lluvia_min_mm: 75,
-          rango_lluvia_max_mm: 150,
-          enlace_oficial: SMN_AVISOS_URL,
-          fecha_sincronizacion: horaMexicoStr
-        };
+        alerta = { activo: true, nivel: 3, severidad: "Aviso Severo", color: "#EF4444", titulo: "Lluvias Torrenciales en la Región", descripcion: `El SMN reporta lluvias torrenciales para ${estados.join(', ')}.`, estados_afectados: estados, rango_lluvia_min_mm: 75, rango_lluvia_max_mm: 150, enlace_oficial: SMN_AVISOS_URL, fecha_sincronizacion: horaMexicoStr };
       } else if (hayIntensas) {
-        // Nivel 2 — Preventivo
-        alerta = {
-          activo: true,
-          nivel: 2,
-          severidad: "Aviso Preventivo",
-          color: "#F59E0B",
-          titulo: "Lluvias Intensas en la Región",
-          descripcion: `El SMN reporta lluvias intensas para ${estados.join(', ')}. Se recomienda precaución en actividades al aire libre y vigilancia de cauces.`,
-          estados_afectados: estados,
-          rango_lluvia_min_mm: 25,
-          rango_lluvia_max_mm: 75,
-          enlace_oficial: SMN_AVISOS_URL,
-          fecha_sincronizacion: horaMexicoStr
-        };
+        alerta = { activo: true, nivel: 2, severidad: "Aviso Preventivo", color: "#F59E0B", titulo: "Lluvias Intensas en la Región", descripcion: `El SMN reporta lluvias intensas para ${estados.join(', ')}.`, estados_afectados: estados, rango_lluvia_min_mm: 25, rango_lluvia_max_mm: 75, enlace_oficial: SMN_AVISOS_URL, fecha_sincronizacion: horaMexicoStr };
       } else if (hayFuertes || hayChubascos) {
-        // Nivel 2 — Preventivo (menor severidad)
-        alerta = {
-          activo: true,
-          nivel: 2,
-          severidad: "Aviso Preventivo",
-          color: "#F59E0B",
-          titulo: "Lluvias Fuertes en la Región",
-          descripcion: `El SMN reporta lluvias fuertes o chubascos para ${estados.join(', ')}. Se recomienda vigilancia en comunidades de ladera.`,
-          estados_afectados: estados,
-          rango_lluvia_min_mm: 10,
-          rango_lluvia_max_mm: 25,
-          enlace_oficial: SMN_AVISOS_URL,
-          fecha_sincronizacion: horaMexicoStr
-        };
+        alerta = { activo: true, nivel: 2, severidad: "Aviso Preventivo", color: "#F59E0B", titulo: "Lluvias Fuertes en la Región", descripcion: `El SMN reporta lluvias fuertes o chubascos para ${estados.join(', ')}.`, estados_afectados: estados, rango_lluvia_min_mm: 10, rango_lluvia_max_mm: 25, enlace_oficial: SMN_AVISOS_URL, fecha_sincronizacion: horaMexicoStr };
       } else if (hayFrenteFrio) {
-        // Nivel 2 — Preventivo (fenómeno distinto)
-        alerta = {
-          activo: true,
-          nivel: 2,
-          severidad: "Aviso Preventivo",
-          color: "#F59E0B",
-          titulo: "Frente Frío en la Región",
-          descripcion: `El SMN reporta frente frío para ${estados.join(', ')}. Se recomienda precaución por descensos de temperatura y vientos.`,
-          estados_afectados: estados,
-          rango_lluvia_min_mm: 0,
-          rango_lluvia_max_mm: 25,
-          enlace_oficial: SMN_AVISOS_URL,
-          fecha_sincronizacion: horaMexicoStr
-        };
+        alerta = { activo: true, nivel: 2, severidad: "Aviso Preventivo", color: "#F59E0B", titulo: "Frente Frío en la Región", descripcion: `El SMN reporta frente frío para ${estados.join(', ')}.`, estados_afectados: estados, rango_lluvia_min_mm: 0, rango_lluvia_max_mm: 25, enlace_oficial: SMN_AVISOS_URL, fecha_sincronizacion: horaMexicoStr };
       } else if (hayCiclon) {
-        // Nivel 3 — Severo (fenómeno grave)
-        alerta = {
-          activo: true,
-          nivel: 3,
-          severidad: "Aviso Severo",
-          color: "#EF4444",
-          titulo: "Ciclón o Tormenta Tropical en la Región",
-          descripcion: `El SMN reporta un ciclón o tormenta tropical que afecta a ${estados.join(', ')}. Se recomienda precaución extrema.`,
-          estados_afectados: estados,
-          rango_lluvia_min_mm: 50,
-          rango_lluvia_max_mm: 200,
-          enlace_oficial: SMN_AVISOS_URL,
-          fecha_sincronizacion: horaMexicoStr
-        };
+        alerta = { activo: true, nivel: 3, severidad: "Aviso Severo", color: "#EF4444", titulo: "Ciclón o Tormenta Tropical en la Región", descripcion: `El SMN reporta un ciclón o tormenta tropical que afecta a ${estados.join(', ')}.`, estados_afectados: estados, rango_lluvia_min_mm: 50, rango_lluvia_max_mm: 200, enlace_oficial: SMN_AVISOS_URL, fecha_sincronizacion: horaMexicoStr };
       }
     }
 
-    // Si no hay aviso específico para la región, devolver "sin aviso"
     if (!alerta) {
       return res.json({
         exito: true,
         fuente: "Servicio Meteorológico Nacional (SMN / CONAGUA)",
         alerta: {
-          activo: false,
-          nivel: 1,
-          severidad: "Normal",
-          color: "#10B981",
+          activo: false, nivel: 1, severidad: "Normal", color: "#10B981",
           titulo: "Sin aviso meteorológico extraordinario para la región",
           descripcion: `Monitoreo oficial activo al día ${fechaHoyStr}. No se registran avisos de tiempo severo de CONAGUA/SMN para Hidalgo, Puebla o Veracruz en este momento.`,
-          estados_afectados: [],
-          rango_lluvia_min_mm: 0,
-          rango_lluvia_max_mm: 15,
-          enlace_oficial: SMN_AVISOS_URL,
-          fecha_sincronizacion: horaMexicoStr
+          estados_afectados: [], rango_lluvia_min_mm: 0, rango_lluvia_max_mm: 15, enlace_oficial: SMN_AVISOS_URL, fecha_sincronizacion: horaMexicoStr
         }
       });
     }
 
-    return res.json({
-      exito: true,
-      fuente: "Servicio Meteorológico Nacional (SMN / CONAGUA)",
-      alerta
-    });
+    return res.json({ exito: true, fuente: "Servicio Meteorológico Nacional (SMN / CONAGUA)", alerta });
 
   } catch (error) {
     console.error("[SMN] Error consultando el SMN:", error.message);
-
     return res.json({
-      exito: false,
-      fuente: "Servicio Meteorológico Nacional (SMN / CONAGUA)",
-      error: "No se pudo consultar el SMN. Se omite el aviso.",
-      alerta: {
-        activo: false,
-        nivel: 1,
-        severidad: "Normal",
-        color: "#10B981",
-        titulo: "SMN no disponible",
-        descripcion: "No se pudo obtener el aviso oficial. El sistema sigue funcionando con los modelos meteorológicos.",
-        estados_afectados: [],
-        rango_lluvia_min_mm: 0,
-        rango_lluvia_max_mm: 0,
-        enlace_oficial: SMN_AVISOS_URL,
-        fecha_sincronizacion: horaMexicoStr
-      }
+      exito: false, fuente: "Servicio Meteorológico Nacional (SMN / CONAGUA)", error: "No se pudo consultar el SMN. Se omite el aviso.",
+      alerta: { activo: false, nivel: 1, severidad: "Normal", color: "#10B981", titulo: "SMN no disponible", descripcion: "No se pudo obtener el aviso oficial.", estados_afectados: [], rango_lluvia_min_mm: 0, rango_lluvia_max_mm: 0, enlace_oficial: SMN_AVISOS_URL, fecha_sincronizacion: horaMexicoStr }
     });
   }
 }
