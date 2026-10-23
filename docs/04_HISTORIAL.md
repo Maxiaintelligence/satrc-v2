@@ -242,6 +242,12 @@ Objetivo: cerrar deuda, establecer pruebas y documentar. Sin funciones nuevas.
 - **Commit:** `fe85b08`.
 - **Lección:** `H-TEST-09`.
 
+#### H-PROMPT-02 — Subtipos de amenaza estructurados para SARA
+- **Síntoma:** SARA recibía el vector genérico (`TERMICO` o `CONVECTIVO`) y tenía que adivinar si era una nevada, una helada, un granizo o un downburst leyendo el texto del diagnóstico.
+- **Solución:** El orquestador ahora expone el campo `tipo_amenaza` (ej. `NEVADA`, `GRANIZO`, `VIGILANCIA_NORMAL`) y el prompt de SARA lo utiliza en la Regla 17.
+- **Verificación:** Test J en verde. API de producción devuelve el campo correctamente.
+- **Commits:** `0aa00db` y el commit del runner.
+
 ### Corrección Crítica Multifactor (Hotfix 23/10/2026)
 
 #### H-MULTI-01 — El runner no consensuaba las variables E4
