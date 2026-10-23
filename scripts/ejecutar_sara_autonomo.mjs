@@ -27,8 +27,6 @@ const ESPERA_REINTENTO_MS = 3000;
 
 // ============================================================
 // MOTOR DE CONSENSO MULTI-MODELO
-// Replica de consensusEngine.js del frontend.
-// Modelos: GFS (EE.UU.), ICON (Alemania), GEM (Canadá)
 // ============================================================
 
 function calcularMediana(valores) {
@@ -64,7 +62,6 @@ function generarConsensoDeterminista(datosHorarios) {
   const serieConsenso = [];
 
   for (let i = 0; i < horas.length; i++) {
-    // --- Precipitación: mediana con filtro de ceros espurios ---
     const p_gfs = datosHorarios["precipitation_gfs_seamless"]?.[i] ?? datosHorarios["precipitation"]?.[i] ?? 0;
     const p_icon = datosHorarios["precipitation_icon_seamless"]?.[i] ?? 0;
     const p_gem = datosHorarios["precipitation_gem_seamless"]?.[i] ?? 0;
@@ -72,36 +69,30 @@ function generarConsensoDeterminista(datosHorarios) {
     const valoresValidosLluvia = filtrarCerosEspurios(p_gfs, p_icon, p_gem);
     const lluviaConsenso = calcularMediana(valoresValidosLluvia);
 
-    // --- Temperatura: mediana ---
     const t_gfs = datosHorarios["temperature_2m_gfs_seamless"]?.[i] ?? datosHorarios["temperature_2m"]?.[i] ?? 15;
     const t_icon = datosHorarios["temperature_2m_icon_seamless"]?.[i] ?? 15;
     const t_gem = datosHorarios["temperature_2m_gem_seamless"]?.[i] ?? 15;
     const tempConsenso = calcularMediana([t_gfs, t_icon, t_gem]);
 
-    // --- Viento sostenido: mediana ---
     const v_gfs = datosHorarios["wind_speed_10m_gfs_seamless"]?.[i] ?? datosHorarios["wind_speed_10m"]?.[i] ?? 0;
     const v_icon = datosHorarios["wind_speed_10m_icon_seamless"]?.[i] ?? 0;
     const v_gem = datosHorarios["wind_speed_10m_gem_seamless"]?.[i] ?? 0;
     const vientoConsenso = calcularMediana([v_gfs, v_icon, v_gem]);
 
-    // --- Ráfagas: máximo (criterio conservador) ---
     const r_gfs = datosHorarios["wind_gusts_10m_gfs_seamless"]?.[i] ?? datosHorarios["wind_gusts_10m"]?.[i] ?? 0;
     const r_icon = datosHorarios["wind_gusts_10m_icon_seamless"]?.[i] ?? 0;
     const r_gem = datosHorarios["wind_gusts_10m_gem_seamless"]?.[i] ?? 0;
     const rafagaConsenso = Math.max(r_gfs, r_icon, r_gem);
 
-    // --- Humedad relativa: mediana ---
     const h_gfs = datosHorarios["relative_humidity_2m_gfs_seamless"]?.[i] ?? datosHorarios["relative_humidity_2m"]?.[i] ?? 50;
     const h_icon = datosHorarios["relative_humidity_2m_icon_seamless"]?.[i] ?? 50;
     const h_gem = datosHorarios["relative_humidity_2m_gem_seamless"]?.[i] ?? 50;
     const humedadConsenso = calcularMediana([h_gfs, h_icon, h_gem]);
 
-    // --- Visibilidad: solo GFS la provee. ICON y GEM no. ---
     const vis = (datosHorarios["visibility_gfs_seamless"]?.[i]
               ?? datosHorarios["visibility"]?.[i]
               ?? 10000) / 1000;
 
-    // --- Confiabilidad según dispersión inter-modelo ---
     const dispersion = Math.max(p_gfs, p_icon, p_gem) - Math.min(p_gfs, p_icon, p_gem);
     let confiabilidad = "ALTA";
     if (dispersion > 12.0) confiabilidad = "EN_DISPUTA";
@@ -130,11 +121,6 @@ function generarConsensoDeterminista(datosHorarios) {
 // SELECCIÓN DE NODOS REGIONALES
 // ============================================================
 
-/**
- * Wrapper local: pasa `todasLocalidades` a la función compartida.
- * Mantiene la firma `seleccionarNodosRegionales()` sin parámetros
- * para no romper los callers existentes en el runner.
- */
 function seleccionarNodosRegionales() {
   return seleccionarNodosRegionalesShared(todasLocalidades);
 }
@@ -192,10 +178,6 @@ async function cargarSeriesRegionales(nodos) {
   console.log(`\n🌐 Consultando ${zonaIds.length} nodos regionales en lotes de 4 (GFS + ICON + GEM)...`);
 
   const t0 = Date.now();
-
-  // N26 — Lotes de 4 en vuelo simultáneo para no saturar Open-Meteo.
-  // Réplica del patrón usado en src/engine/reportesRegionales.js (frontend).
-  // Cada lote espera a que sus 4 fetches terminen antes de disparar el siguiente.
   const TAMANO_LOTE = 4;
   const DELAY_ENTRE_LOTES_MS = 500;
 
@@ -235,7 +217,6 @@ async function cargarSeriesRegionales(nodos) {
       }
     });
 
-    // Delay entre lotes (excepto después del último)
     if (i + TAMANO_LOTE < zonaIds.length) {
       await new Promise(r => setTimeout(r, DELAY_ENTRE_LOTES_MS));
     }
@@ -282,20 +263,7 @@ function normalizarEstadoSituacion(estadoRaw) {
   return 'SITUACION_NORMAL';
 }
 
-/**
- * N28 — Detección de la ventana del reporte diario.
- * 
- * Reglas:
- * 1. La hora México debe ser >= 06:00.
- * 2. No debe existir una entrada PROGRAMADO_REPORTE_DIARIO con la fecha de hoy.
- * 
- * @param {string} horaMexicoStr - Hora en formato "06:00 a.m."
- * @param {string} fechaDiaMexico - Fecha en formato "16 de octubre de 2026"
- * @param {Array} bitacoraHistorial - Historial de bitácora
- * @returns {boolean} - true si debe generarse el reporte diario
- */
 function debeGenerarReporteDiario(horaMexicoStr, fechaDiaMexico, bitacoraHistorial) {
-  // 1. Parsear la hora: extraer la hora en formato 24h
   const match = horaMexicoStr.match(/(\d{1,2}):(\d{2})\s*(a\.m\.|p\.m\.)/i);
   if (!match) return false;
 
@@ -306,13 +274,11 @@ function debeGenerarReporteDiario(horaMexicoStr, fechaDiaMexico, bitacoraHistori
   if (periodo.startsWith('p') && horas !== 12) horas += 12;
   if (periodo.startsWith('a') && horas === 12) horas = 0;
 
-  // 2. Verificar que la hora >= 6:00 (360 minutos desde medianoche)
   const minutosDesdeMedianoche = horas * 60 + minutos;
   if (minutosDesdeMedianoche < 360) {
-    return false; // aún no son las 6 AM
+    return false;
   }
 
-  // 3. Verificar que no exista un reporte diario hoy
   const yaExiste = bitacoraHistorial.some(entry =>
     entry.origen_evento === 'PROGRAMADO_REPORTE_DIARIO' &&
     entry.fecha_dia_mexico === fechaDiaMexico
@@ -353,20 +319,10 @@ async function registrarCorridaDegradada(horaMexicoStr, fechaDiaMexico, horaExac
       }
     } catch (e) {}
 
-  // H5.3 — Generar resumen multivector para la bitácora
-  const resumenMulti = generarResumenMultivector(evaluaciones);
-  
-
     const prevHash = bitacoraHistorial.length > 0
       ? bitacoraHistorial[bitacoraHistorial.length - 1].hash_completo
       : BLOQUE_GENESIS;
-  const nuevoHash = generarHashSHA256(prevHash, dictamenSARA.timestamp, { 
-    n4, n3, n2, n1, 
-    resumenMulti, 
-    zonaOk: zonasOk.length, 
-    hora: horaMexicoStr, 
-    consenso: "GFS+ICON+GEM" 
-  });
+    const nuevoHash = generarHashSHA256(prevHash, ahora.toISOString(), { tipo: "CORRIDA_DEGRADADA", motivo });
     const nuevoId = siguienteIdBitacora(bitacoraHistorial);
 
     bitacoraHistorial.push({
@@ -378,7 +334,7 @@ async function registrarCorridaDegradada(horaMexicoStr, fechaDiaMexico, horaExac
       origen_evento: "CORRIDA_DEGRADADA",
       estado_situacion: "CORRIDA_DEGRADADA",
       titulo: "Corrida degradada: sin datos meteorológicos de ninguna zona",
-      resumen: `${resumenMulti} | Zonas OK: ${zonasOk.length}/${Object.keys(nodos).length}. ${dictamenSARA.comentario_oficial}`,
+      resumen: `${motivo} a las ${horaMexicoStr}. No se publicó evaluación nueva para evitar alertas falsas.`,
       prev_hash: prevHash.slice(0, 16) + "...",
       hash: nuevoHash.slice(0, 16) + "...",
       hash_completo: nuevoHash
@@ -411,7 +367,7 @@ async function ejecutarSARA() {
   const { fechaDia: fechaDiaMexico, horaExacta: horaExactaMexico, horaCorta: horaMexicoStr } = obtenerFechaHoraMexico(ahora);
   const proximaCorridaStr = obtenerFechaHoraMexico(new Date(ahora.getTime() + 3 * 3600000)).horaCorta;
 
-  // --- 1. Aviso SMN (scraping de la página principal, alineado con api/smn.js) ---
+  // --- 1. Aviso SMN ---
   let alertaSMN = null;
   try {
     const SMN_URL = "https://smn.conagua.gob.mx/es/";
@@ -426,13 +382,11 @@ async function ejecutarSARA() {
     if (resSMN && resSMN.ok) {
       const texto = (await resSMN.text()).toLowerCase();
 
-      // Detección de entidades de la jurisdicción diocesana
       const mencionaHidalgo = texto.includes("hidalgo");
       const mencionaPuebla = texto.includes("puebla");
       const mencionaVeracruz = texto.includes("veracruz");
       const afectaRegion = mencionaHidalgo || mencionaPuebla || mencionaVeracruz;
 
-      // Detección de fenómenos con patrones reales del SMN
       const hayTorrenciales = texto.includes("torrenciales");
       const hayIntensas = texto.includes("lluvias intensas") || texto.includes("lluvias puntuales intensas");
       const hayFuertes = texto.includes("lluvias fuertes") || texto.includes("lluvias muy fuertes");
@@ -539,11 +493,7 @@ async function ejecutarSARA() {
     seriesPorZona[zonaId] = series[zonaId]?.ok ? series[zonaId].serie : [];
   });
 
-  // --- 5. Evaluación por localidad con el orquestador multiamenaza (H6.4) ---
-  // Adaptador de shape: el orquestador devuelve nivel_alerta_global,
-  // pero Zod y el frontend esperan nivel_alerta. Mapeamos nivel_alerta_global → nivel_alerta
-  // y agregamos los campos nuevos como aditivos. Si el orquestador falla para una
-  // localidad puntual, caemos al motor viejo (fallback) para no romper la corrida.
+  // --- 5. Evaluación por localidad con el orquestador multiamenaza ---
   const evaluaciones = todasLocalidades.map(loc => {
     const zonaId = loc.zona_id;
     const serieZona = seriesPorZona[zonaId] || [];
@@ -552,14 +502,13 @@ async function ejecutarSARA() {
     try {
       const res = evaluarMultiamenaza(loc, serieZona, { alertaSMN, zonaSinDatos });
       return {
-        // Campos requeridos por Zod (compatibilidad con frontend):
         localidad_id: res.localidad_id,
         nombre: res.nombre,
         municipio: res.municipio,
         estado: res.estado,
         zona_id: res.zona_id,
         zona_nombre: res.zona_nombre,
-        nivel_alerta: res.nivel_alerta_global,       // ← mapear global → nivel_alerta
+        nivel_alerta: res.nivel_alerta_global,
         color_alerta: res.color_alerta,
         estado_alerta: res.estado_alerta,
         vector_dominante: res.vector_dominante,
@@ -570,7 +519,6 @@ async function ejecutarSARA() {
         tiempos: res.tiempos,
         impactoSistemico: res.impactoSistemico,
         protocolo: res.protocolo,
-        // Campos nuevos del orquestador (aditivos, Zod tolera con .passthrough()):
         nivel_alerta_global: res.nivel_alerta_global,
         riesgo_continuo: res.riesgo_continuo,
         niveles_por_vector: res.niveles_por_vector,
@@ -579,7 +527,6 @@ async function ejecutarSARA() {
       };
     } catch (e) {
       console.error(`[H6.4] Error en orquestador para localidad ${loc.id}: ${e.message}`);
-      // Fallback al motor viejo para esta localidad puntual
       return evaluarLocalidadRunner(loc, serieZona, { alertaSMN, zonaSinDatos });
     }
   });
@@ -596,7 +543,7 @@ async function ejecutarSARA() {
   console.log(`📊 [SARA CONSENSO GFS+ICON+GEM] N4: ${n4} | N3: ${n3} | N2: ${n2} | N1: ${n1} | Sin datos: ${sinDatos}`);
 
   // H5.2 — Título determinista basado en el top-1 (vector dominante)
-  const top1 = evaluaciones[0]; // Ya ordenadas descendentemente por nivel_alerta
+  const top1 = evaluaciones[0];
   const nivelTop = top1 ? top1.nivel_alerta : 1;
   const vectorTop = top1 ? top1.vector_dominante : 'SIN_AMENAZA';
 
@@ -656,7 +603,6 @@ Comunidades críticas bajo tensión: ${JSON.stringify(criticas)}.` }
   dictamenSARA.proxima_evaluacion = proximaCorridaStr;
   dictamenSARA.timestamp = ahora.toISOString();
 
-  // N24 — Reparar mojibake en los textos del dictamen
   if (typeof dictamenSARA.titulo === 'string') dictamenSARA.titulo = repararMojibake(dictamenSARA.titulo);
   if (typeof dictamenSARA.comentario_oficial === 'string') dictamenSARA.comentario_oficial = repararMojibake(dictamenSARA.comentario_oficial);
 
@@ -674,8 +620,19 @@ Comunidades críticas bajo tensión: ${JSON.stringify(criticas)}.` }
     }
   } catch (e) {}
 
+  // H5.3 — Generar resumen multivector para la bitácora
+  const resumenMulti = generarResumenMultivector(evaluaciones);
+
   const prevHash = bitacoraHistorial.length > 0 ? bitacoraHistorial[bitacoraHistorial.length - 1].hash_completo : BLOQUE_GENESIS;
-  const nuevoHash = generarHashSHA256(prevHash, dictamenSARA.timestamp, { n4, n3, n2, n1, zonaOk: zonasOk.length, hora: horaMexicoStr, consenso: "GFS+ICON+GEM" });
+  
+  const nuevoHash = generarHashSHA256(prevHash, dictamenSARA.timestamp, { 
+    n4, n3, n2, n1, 
+    resumenMulti, 
+    zonaOk: zonasOk.length, 
+    hora: horaMexicoStr, 
+    consenso: "GFS+ICON+GEM" 
+  });
+  
   const nuevoId = siguienteIdBitacora(bitacoraHistorial);
 
   bitacoraHistorial.push({
@@ -687,7 +644,7 @@ Comunidades críticas bajo tensión: ${JSON.stringify(criticas)}.` }
     origen_evento: "PROGRAMADO_CRON",
     estado_situacion: dictamenSARA.estado_situacion,
     titulo: dictamenSARA.titulo,
-    resumen: `N4=${n4}, N3=${n3}, N2=${n2}, N1=${n1} | Zonas OK: ${zonasOk.length}/${Object.keys(nodos).length}. ${dictamenSARA.comentario_oficial}`,
+    resumen: `${resumenMulti} | Zonas OK: ${zonasOk.length}/${Object.keys(nodos).length}. ${dictamenSARA.comentario_oficial}`,
     prev_hash: prevHash.slice(0, 16) + "...",
     hash: nuevoHash.slice(0, 16) + "...",
     hash_completo: nuevoHash
@@ -723,7 +680,6 @@ Comunidades críticas bajo tensión: ${JSON.stringify(criticas)}.` }
   };
 
   // --- 7.5. Reporte Diario Automático (6:00 AM) ---
-  // N28: Detectar si toca generar el reporte diario.
   if (apiKeyGroq && debeGenerarReporteDiario(horaMexicoStr, fechaDiaMexico, bitacoraHistorial)) {
     console.log('\n📋 [N28] Es la ventana del reporte diario. Generando...');
     try {
@@ -741,17 +697,15 @@ Comunidades críticas bajo tensión: ${JSON.stringify(criticas)}.` }
       });
       console.log(`📋 [N28] Reporte diario ${resultado.es_parcial ? 'PARCIAL' : 'COMPLETO'} generado.`);
 
-      // Añadir la entrada del reporte diario al historial de bitácora local
       if (resultado.registro_bitacora) {
         bitacoraHistorial.push(resultado.registro_bitacora);
       }
     } catch (e) {
       console.error('❌ [N28] Fallo generando reporte diario:', e.message);
-      // No interrumpir el flujo principal. El estado se publica igual.
     }
   }
 
-    // H8 — Validar el contrato de datos antes de publicar al Blob.
+  // H8 — Validar el contrato de datos antes de publicar al Blob.
   const validacion = EstadoDiocesanoBlobSchema.safeParse(paqueteMaestro);
   if (!validacion.success) {
     console.error("❌ [ZOD] El paqueteMaestro no cumple el schema:", validacion.error.errors);
