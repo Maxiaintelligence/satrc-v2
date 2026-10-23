@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import { put, list } from '@vercel/blob';
 import { repararMojibake } from '../src/lib/compartido/mojibake.js';
 import { normalizarDatosRegionales, construirBloqueRegional } from '../src/lib/compartido/regionales.js';
+import { REGLAS_MULTIVECTOR } from '../src/lib/compartido/promptsMultivector.js';
 
 const BLOQUE_GENESIS = "0000000000000000000000000000000000000000000000000000000000000000";
 const MAX_REGISTROS_BITACORA = 500;
@@ -226,6 +227,7 @@ REGLAS OBLIGATORIAS:
 13. VOCABULARIO: usa "localidades" (no "municipios", no "comunidades", no "pueblos") al referirte a los conteos del semáforo.
 14. Si el bloque "DATOS REGIONALES" menciona ZONAS SIN DATOS, decláralo explícitamente en la sección I.
 15. FORMATO CON VIÑETAS: usa viñetas en las secciones 0, II, III y V. No escribas párrafos densos.
+${REGLAS_MULTIVECTOR}
 16. Responde ÚNICAMENTE un objeto JSON con las 7 secciones exactas. Cada sección debe tener un máximo de 5-7 líneas. Si una sección no tiene contenido relevante, escribe una frase breve en lugar de rellenar.
 
 {
