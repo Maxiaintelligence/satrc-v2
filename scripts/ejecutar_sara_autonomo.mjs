@@ -11,6 +11,7 @@ import { evaluarMultiamenaza } from '../src/engine/crossThreatOrchestrator.js';
 import { EstadoDiocesanoBlobSchema } from '../src/schemas/estadoDiocesanoSchema.js';
 import { generarTituloDictamen } from '../src/lib/compartido/dictamen.js';
 import { generarResumenMultivector } from '../src/lib/compartido/bitacora.js';
+import { REGLAS_MULTIVECTOR } from '../src/lib/compartido/promptsMultivector.js';
 import { generarConsensoDeterminista } from '../src/engine/consensusEngine.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -476,19 +477,25 @@ async function ejecutarSARA() {
           temperature: 0.1,
           response_format: { type: "json_object" },
           messages: [
-            { role: "system", content: `Eres SARA, Oficial Meteoróloga de Cáritas Pastoral Social en la Arquidiócesis de Tulancingo. Hora oficial de México: ${horaMexicoStr}.
-Genera el informe diocesano multimodal en JSON con claves: estado_situacion, color, titulo, comentario_oficial.
-REGLA CRÍTICA DE COHERENCIA (OBLIGATORIA):
-- Si N4 > 0: estado_situacion DEBE ser "SITUACION_CRITICA", color DEBE ser "#EF4444", titulo DEBE mencionar la emergencia (ej. "Emergencia por Lluvias Torrenciales en la Región").
-- Si N4 = 0 y N3 > 0: estado_situacion DEBE ser "SITUACION_GRAVE", color DEBE ser "#F97316", titulo DEBE mencionar alerta (ej. "Alerta Temprana por Lluvias Intensas").
-- Si N4 = 0 y N3 = 0: estado_situacion DEBE ser "SITUACION_NORMAL", color DEBE ser "#10B981", titulo DEBE ser sereno.
-Esta regla es determinista. NO puedes declarar "Normal" si hay N4 > 0 o N3 > 0. El conteo de niveles es la fuente de verdad.
-REGLA: NO menciones conteos numéricos en el comentario_oficial. Se agregarán aparte en la bitácora.` },
-{ role: "user", content: `Hora México: ${horaMexicoStr}. Aviso SMN: ${alertaSMN ? `${alertaSMN.titulo} (Nivel ${alertaSMN.nivel || 'N/D'}, lluvia esperada ${alertaSMN.rango_lluvia_min_mm || 0}-${alertaSMN.rango_lluvia_max_mm || 0} mm)` : 'Sin aviso severo vigente'}.
-Zonas OK: ${zonasOk.length}/${Object.keys(nodos).length}. Zonas sin datos: ${zonasFallidas.join(', ') || 'ninguna'}.
-Consenso: GFS + ICON + GEM.
-Nivel 4: ${n4}, Nivel 3: ${n3}, Nivel 2: ${n2}, Nivel 1: ${n1}.
-Comunidades críticas bajo tensión: ${JSON.stringify(criticas)}.` }
+            { role: "system", content: `Eres SARA, Meteoróloga de Cáritas Pastoral Social en la Arquidiócesis de Tulancingo. Hora oficial de México: ${horaMexicoStr}.
+            Genera el informe diocesano multimodal en JSON con claves: estado_situacion, color, titulo, comentario_oficial.
+            REGLA CRÍTICA DE COHERENCIA (OBLIGATORIA):
+            - Si N4 > 0: estado_situacion DEBE ser "SITUACION_CRITICA", color DEBE ser "#EF4444", titulo DEBE mencionar la emergencia.
+            - Si N4 = 0 y N3 > 0: estado_situacion DEBE ser "SITUACION_GRAVE", color DEBE ser "#F97316", titulo DEBE mencionar alerta.
+            - Si N4 = 0 y N3 = 0: estado_situacion DEBE ser "SITUACION_NORMAL", color DEBE ser "#10B981", titulo DEBE ser sereno.
+            Esta regla es determinista. NO puedes declarar "Normal" si hay N4 > 0 o N3 > 0. El conteo de niveles es la fuente de verdad.
+            REGLA: NO menciones conteos numéricos en el comentario_oficial. Se agregarán aparte en la bitácora.
+
+            ${REGLAS_MULTIVECTOR}
+
+            REGLA 20 (ESPECÍFICA PARA ESTE DICTAMEN CORTO): Usa el campo "tipo_amenaza" del JSON de entrada para redactar el "comentario_oficial". Si el tipo es "NEVADA", habla de frío y nieve; si es "GRANIZO", habla de tormentas y granizo; si es "VIGILANCIA_NORMAL", habla de lluvias o niebla. NO uses la palabra "Lluvias" si el tipo de amenaza es térmico o convectivo.` },
+            { role: "user", content: `Hora México: ${horaMexicoStr}. Aviso SMN: ${alertaSMN ? `${alertaSMN.titulo} (Nivel ${alertaSMN.nivel || 'N/D'}, lluvia esperada ${alertaSMN.rango_lluvia_min_mm || 0}-${alertaSMN.rango_lluvia_max_mm || 0} mm)` : 'Sin aviso severo vigente'}.
+            Zonas OK: ${zonasOk.length}/${Object.keys(nodos).length}. Zonas sin datos: ${zonasFallidas.join(', ') || 'ninguna'}.
+            Consenso: GFS + ICON + GEM.
+            Nivel 4: ${n4}, Nivel 3: ${n3}, Nivel 2: ${n2}, Nivel 1: ${n1}.
+            Vector dominante (Top-1): ${vectorTop}.
+            Tipo de amenaza específico: ${top1?.tipo_amenaza || 'SIN_AMENAZA'}.
+            Comunidades críticas bajo tensión: ${JSON.stringify(criticas)}.` }
           ]
         })
       });
