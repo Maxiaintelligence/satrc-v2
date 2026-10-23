@@ -242,6 +242,12 @@ Objetivo: cerrar deuda, establecer pruebas y documentar. Sin funciones nuevas.
 - **Commit:** `fe85b08`.
 - **Lección:** `H-TEST-09`.
 
+#### H-PROMPT-01 — Dictamen del runner con lenguaje multivectorial y formato optimizado
+- **Síntoma:** El dictamen del runner usaba un prompt genérico sin reglas multivectoriales (sus ejemplos eran solo de lluvia). Además, el resumen de la bitácora mostraba los números antes que el texto, dificultando la lectura rápida.
+- **Solución:** Se importó `REGLAS_MULTIVECTOR` en el runner y se inyectó el `tipo_amenaza` en el prompt. Se reordenó el resumen de la bitácora para seguir la lógica "Qué -> Dónde -> Cuánto" (Texto -> Cobertura -> Conteos).
+- **Verificación:** El dictamen en producción ahora genera textos como "Se mantiene la vigilancia normal... | Zonas OK: 14/14. | N4: 0...".
+- **Commits:** `3f2f672` y el commit de reordenamiento.
+
 #### H-PROMPT-02 — Subtipos de amenaza estructurados para SARA
 - **Síntoma:** SARA recibía el vector genérico (`TERMICO` o `CONVECTIVO`) y tenía que adivinar si era una nevada, una helada, un granizo o un downburst leyendo el texto del diagnóstico.
 - **Solución:** El orquestador ahora expone el campo `tipo_amenaza` (ej. `NEVADA`, `GRANIZO`, `VIGILANCIA_NORMAL`) y el prompt de SARA lo utiliza en la Regla 17.

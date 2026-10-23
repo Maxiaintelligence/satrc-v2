@@ -98,7 +98,6 @@ Severidad: 🔴 crítica · 🟠 alta · 🟡 media · 🟢 baja. El esfuerzo es
 
 | ID | Deuda | Sev. | Esfuerzo | Estado | Fuente |
 |---|---|---|---|---|---|
-| H-PROMPT-01 | El dictamen del runner no usa reglas multivectoriales y sus ejemplos de título son de lluvia. | 🟡 | Bajo | Abierta | `05` §5 |
 | H-PROMPT-02 | Los subtipos de amenaza (helada, nevada, granizo, downburst, supercélula) no son dato estructurado para SARA. | 🟡 | Medio | Abierta | `05` §6.2 |
 | H-PROMPT-03 | No hay pruebas automáticas de los prompts (campos recibidos y cumplimiento de reglas). | 🟡 | Medio | Abierta | `05` §8 |
 
