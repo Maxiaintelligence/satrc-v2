@@ -5,7 +5,6 @@ import { generarConsensoDeterminista } from '../engine/consensusEngine.js';
 import SatelliteViewer from '../components/SatelliteViewer.jsx';
 import DisclaimerModal from '../components/DisclaimerModal.jsx';
 import ReporteModalPublico from '../components/ReporteModalPublico.jsx';
-import VectorBar from '../components/VectorBar.jsx'; // 👈 NUEVO (H6.6)
 import { formatearTimestamp } from '../lib/compartido/fechas.js';
 import {
   CloudRain,
@@ -25,6 +24,38 @@ import {
 } from 'lucide-react';
 
 const INTERVALO_REFRESCO_MS = 30 * 60 * 1000;
+
+// 👈 NUEVO: Componente visual amigable para el público general
+function VectorPublico({ nombre, valor }) {
+  // Mapeo de valores continuos a categorías visuales
+  let texto = "Normal";
+  let colorBg = "bg-emerald-500";
+  let colorText = "text-emerald-400";
+  let colorBorder = "border-emerald-500/30";
+  let ancho = `${Math.min(100, (valor / 4) * 100)}%`;
+
+  if (valor >= 4.0) {
+    texto = "Peligro"; colorBg = "bg-rose-500"; colorText = "text-rose-400"; colorBorder = "border-rose-500/30";
+  } else if (valor >= 3.0) {
+    texto = "Alerta"; colorBg = "bg-orange-500"; colorText = "text-orange-400"; colorBorder = "border-orange-500/30";
+  } else if (valor >= 2.0) {
+    texto = "Precaución"; colorBg = "bg-amber-500"; colorText = "text-amber-400"; colorBorder = "border-amber-500/30";
+  }
+
+  return (
+    <div className={`p-3 rounded-xl border bg-slate-950/50 ${colorBorder} flex flex-col gap-2`}>
+      <div className="flex justify-between items-center">
+        <span className="text-xs font-bold text-slate-300">{nombre}</span>
+        <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded bg-slate-900 ${colorText}`}>
+          {texto}
+        </span>
+      </div>
+      <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+        <div className={`h-2 rounded-full ${colorBg}`} style={{ width: ancho }}></div>
+      </div>
+    </div>
+  );
+}
 
 export default function MonitorPublico() {
   const listaZonas = Object.values(db.indices.zonas);
@@ -103,9 +134,8 @@ export default function MonitorPublico() {
       cancelado = true;
       clearInterval(intervalo);
     };
-  }, [localidadActiva]); // Se vuelve a ejecutar si el usuario cambia de localidad
+  }, [localidadActiva]); 
 
-  // Determinar si el reporte vigente es de hoy y NO es parcial
   const fechaHoy = new Date().toLocaleDateString('es-MX', {
     timeZone: 'America/Mexico_City',
     day: '2-digit',
@@ -200,7 +230,6 @@ export default function MonitorPublico() {
   const tempMinDia = horasMostradas.length > 0 ? Math.min(...horasMostradas.map(h => h.temperatura_c)).toFixed(1) : '--';
   const vientoMaxDia = horasMostradas.length > 0 ? Math.max(...horasMostradas.map(h => h.rafagas_kmh)).toFixed(1) : '--';
 
-  // CAMBIO 5 — Geometría adaptativa para móvil
   const anchoGrafica = 500;
   const altoGrafica = 240;
   const padLeft = 45;
@@ -241,9 +270,7 @@ export default function MonitorPublico() {
     <div className="space-y-6">
       <DisclaimerModal abierto={mostrarDisclaimer} alCerrar={() => setMostrarDisclaimer(false)} />
 
-      {/* ========================================================== */}
-      {/* 0.bis. BLOQUE DE DECISIÓN OPERATIVA DEL DÍA                 */}
-      {/* ========================================================== */}
+      {/* 0.bis. BLOQUE DE DECISIÓN OPERATIVA DEL DÍA */}
       {reporteMostrable && reporteVigente.reporte?.seccion_0_decision && (
         <div className="bg-slate-900 border-2 border-amber-500/40 rounded-2xl p-4 md:p-5 shadow-xl">
           <div className="flex items-start gap-3">
@@ -274,9 +301,7 @@ export default function MonitorPublico() {
         </div>
       )}
 
-      {/* ========================================================== */}
-      {/* 0. BARRA DE ESTADO — N9-Public                              */}
-      {/* ========================================================== */}
+      {/* 0. BARRA DE ESTADO */}
       <div className="flex flex-wrap items-center justify-between gap-3 px-1">
         <div className="flex items-center gap-2 text-xs text-slate-400">
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
@@ -301,9 +326,7 @@ export default function MonitorPublico() {
         </div>
       </div>
 
-      {/* ========================================================== */}
-      {/* 1. SELECTOR EN CASCADA DE 3 NIVELES                        */}
-      {/* ========================================================== */}
+      {/* 1. SELECTOR EN CASCADA DE 3 NIVELES */}
       <div className="bg-slate-900 border-2 border-slate-700 p-5 rounded-2xl shadow-xl">
         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-12 gap-3.5 items-end">
 
@@ -377,13 +400,10 @@ export default function MonitorPublico() {
         </div>
       </div>
 
-      {/* ========================================================== */}
-      {/* 2.bis. SEMÁFORO Y DESGLOSE MULTIAMENAZA (H6.6)             */}
-      {/* ========================================================== */}
+      {/* 2.bis. SEMÁFORO Y DESGLOSE MULTIAMENAZA (H6.6) */}
       {localidadActiva && evaluacionLocal && (
         <div className="bg-slate-900 border-2 border-slate-700 p-5 rounded-2xl shadow-xl space-y-4">
           
-          {/* Semáforo de Nivel Global */}
           <div className="flex items-center justify-between border-b border-slate-800 pb-3">
             <div>
               <h3 className="text-sm font-black text-white uppercase tracking-wider flex items-center gap-2">
@@ -398,27 +418,26 @@ export default function MonitorPublico() {
               className="px-4 py-2 rounded-xl text-center shadow-lg"
               style={{ backgroundColor: evaluacionLocal.color_alerta }}
             >
-              <span className="block text-xs font-bold text-white/80 uppercase">Nivel</span>
-              <span className="block text-2xl font-black text-white">{evaluacionLocal.nivel_alerta}</span>
+              <span className="block text-xs font-bold text-white/80 uppercase">Nivel {evaluacionLocal.nivel_alerta}</span>
+              <span className="block text-lg font-black text-white leading-tight">{evaluacionLocal.estado_alerta}</span>
             </div>
           </div>
 
-          {/* Desglose por Vector */}
           {evaluacionLocal.niveles_por_vector && (
             <div>
               <p className="text-[10px] font-bold text-cyan-400 uppercase tracking-wider mb-2">
                 Desglose por Amenaza
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <VectorBar nombre="Hidrológico" valor={evaluacionLocal.niveles_por_vector.hidrologico} />
-                <VectorBar nombre="Viento" valor={evaluacionLocal.niveles_por_vector.viento} />
-                <VectorBar nombre="Térmico" valor={evaluacionLocal.niveles_por_vector.termico} />
-                <VectorBar nombre="Convectivo" valor={evaluacionLocal.niveles_por_vector.convectivo} />
+                {/* 👈 Usamos el componente público amigable en lugar del VectorBar técnico */}
+                <VectorPublico nombre="Hidrológico (Lluvia/Deslaves)" valor={evaluacionLocal.niveles_por_vector.hidrologico} />
+                <VectorPublico nombre="Viento (Ráfagas)" valor={evaluacionLocal.niveles_por_vector.viento} />
+                <VectorPublico nombre="Térmico (Frío/Calor)" valor={evaluacionLocal.niveles_por_vector.termico} />
+                <VectorPublico nombre="Convectivo (Granizo)" valor={evaluacionLocal.niveles_por_vector.convectivo} />
               </div>
             </div>
           )}
 
-          {/* Acciones Operativas */}
           {evaluacionLocal.acciones_operativas && evaluacionLocal.acciones_operativas.length > 0 && (
             <div className="bg-rose-950/30 border border-rose-900/50 p-3 rounded-xl">
               <p className="text-[10px] font-bold text-rose-400 uppercase tracking-wider mb-1">
@@ -435,9 +454,7 @@ export default function MonitorPublico() {
         </div>
       )}
 
-      {/* ========================================================== */}
-      {/* 2. SÍNTESIS DE SITUACIÓN COMUNITARIA EMITIDA POR SARA      */}
-      {/* ========================================================== */}
+      {/* 2. SÍNTESIS DE SITUACIÓN COMUNITARIA EMITIDA POR SARA */}
       {localidadActiva && (
         <div className="bg-slate-900 border-2 border-slate-800 p-4 rounded-2xl shadow-xl flex items-start gap-3.5">
           <div className="p-2.5 bg-amber-500/10 text-amber-400 border border-amber-500/25 rounded-xl shrink-0 mt-0.5">
@@ -459,9 +476,7 @@ export default function MonitorPublico() {
         </div>
       )}
 
-      {/* ========================================================== */}
-      {/* 3. BOTONES TEMPORALES                                      */}
-      {/* ========================================================== */}
+      {/* 3. BOTONES TEMPORALES */}
       <div className="flex flex-wrap gap-2 border-b border-slate-800 pb-2">
         <button
           onClick={() => setPestanaActiva('hoy')}
@@ -500,9 +515,7 @@ export default function MonitorPublico() {
         </button>
       </div>
 
-      {/* ========================================================== */}
-      {/* 4. RESUMEN MÉTRICO DE LA COMUNIDAD SELECCIONADA            */}
-      {/* ========================================================== */}
+      {/* 4. RESUMEN MÉTRICO DE LA COMUNIDAD SELECCIONADA */}
       {localidadActiva && (
         <div className="bg-gradient-to-r from-slate-900 via-slate-900 to-slate-800 border-2 border-slate-800 p-5 rounded-2xl shadow-xl">
           <div className="flex flex-col lg:flex-row justify-between lg:items-center gap-4">
@@ -559,9 +572,7 @@ export default function MonitorPublico() {
         </div>
       )}
 
-      {/* ========================================================== */}
-      {/* 5. EVOLUCIÓN HORARIA                                       */}
-      {/* ========================================================== */}
+      {/* 5. EVOLUCIÓN HORARIA */}
       <div className="space-y-4 pt-1">
 
         <div className="flex flex-wrap justify-between items-center gap-2 px-1">
@@ -845,16 +856,12 @@ export default function MonitorPublico() {
 
       </div>
 
-      {/* ========================================================== */}
-      {/* 6. SECCIÓN DE SATÉLITE GOES-19                             */}
-      {/* ========================================================== */}
+      {/* 6. SECCIÓN DE SATÉLITE GOES-19 */}
       <div className="pt-2">
         <SatelliteViewer />
       </div>
 
-      {/* ========================================================== */}
-      {/* MODAL DEL REPORTE COMPLETO (vista pública)                 */}
-      {/* ========================================================== */}
+      {/* MODAL DEL REPORTE COMPLETO (vista pública) */}
       <ReporteModalPublico
         abierto={modalReportePublicoAbierto}
         alCerrar={() => setModalReportePublicoAbierto(false)}
