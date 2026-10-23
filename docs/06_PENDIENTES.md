@@ -236,4 +236,31 @@ Todos los hitos de la Etapa 3 han sido cerrados, testeados y verificados en prod
 - H-TEST-06: Tests nuevos deben verificar aritmética del escenario antes de asumir bugs.
 - H-TEST-07: Módulos que emiten continuos deben documentar su rango [min, max] explícitamente.
 
+# SatRC V2.0 — Backlog de Pendientes
+
+**Última actualización:** Octubre 2026 (Etapa 5 Finalizada).
+**Estado:** H5.0 a H5.8 cerrados. El sistema es 100% multivectorial (Motor, Bitácora, Prompts y UI Operativa).
+
+### H-SMN-WS — Migrar scraper del SMN a Web Service Oficial
+- **Estado:** ⏸️ Aceptado para V3.0.
+- **Contexto:** Se corrigió el falso positivo (que leía los "Comunicados de Prensa" de todo México y alertaba erróneamente sobre Veracruz). Ahora el scraper (`api/smn.js`) lee estrictamente el recuadro de alerta activa del HTML.
+- **Deuda:** El HTML del SMN puede cambiar sin previo aviso. 
+- **Fix futuro:** Consumir el Web Service oficial de CONAGUA (formato XML o GZIP estructurado) para eliminar la dependencia del scraping.
+
+### H-UI-24 — Replicar UI Multiamenaza en el Monitor Público
+- **Estado:** ⏸️ V3.0.
+- **Contexto:** En la Etapa 5 se agregaron las barras de `niveles_por_vector` y el desglose en la Sala Operativa (`SatRCOperativo.jsx`). El Monitor Público (`MonitorPublico.jsx`) sigue mostrando solo pronóstico base.
+- **Alcance:** Decidir si el público general debe ver el desglose multivectorial o si se mantiene reservado para los operadores.
+
+### Vectores de riesgo faltantes (Incendios)
+- **Estado:** ⏸️ V3.0.
+- **Contexto:** Ya contamos con Hidrología, Viento, Térmico y Convectivo (Etapa 4 y 5). Falta integrar el vector de Incendios Forestales al orquestador.
+
+### H-TEST-09 — `node --check` obligatorio para APIs y Scripts
+- **Estado:** 📝 Documentación de lección.
+- **Contexto:** `npm test` (Vitest) solo valida `src/` y `scripts/engine/`. No valida `api/*.js` ni `scripts/*.mjs`. Un error de sintaxis en esos archivos pasa el CI verde, pero rompe Vercel en producción.
+- **Regla nueva:** Antes de hacer commit de archivos en `api/` o `scripts/`, es obligatorio ejecutar `node --check <archivo>`.
+
+
+
 **Fin del backlog.**
