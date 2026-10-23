@@ -98,7 +98,6 @@ Severidad: 🔴 crítica · 🟠 alta · 🟡 media · 🟢 baja. El esfuerzo es
 
 | ID | Deuda | Sev. | Esfuerzo | Estado | Fuente |
 |---|---|---|---|---|---|
-| H-PROMPT-02 | Los subtipos de amenaza (helada, nevada, granizo, downburst, supercélula) no son dato estructurado para SARA. | 🟡 | Medio | Abierta | `05` §6.2 |
 | H-PROMPT-03 | No hay pruebas automáticas de los prompts (campos recibidos y cumplimiento de reglas). | 🟡 | Medio | Abierta | `05` §8 |
 
 ---
@@ -109,8 +108,6 @@ Detalle y evidencia por línea en `VERIFICACION_MULTIFACTOR.md`.
 
 | ID | Deuda | Sev. | Esfuerzo | Estado | Fuente |
 |---|---|---|---|---|---|
-| H-MULTI-03 | Dos implementaciones de consenso (runner e interfaz) con resultados que pueden diferir. | 🟡 | Medio | Abierta | Verificación §2.6 |
-| H-MULTI-05 | El runner pide variables de Etapa 4 a la API y no las usa. | 🟢 | Bajo | Abierta | Verificación §2.2 |
 | H-MULTI-06 | El respaldo en vivo de la Sala Operativa usa solo el motor hidrológico. | 🟡 | Medio | Abierta | Verificación §2.7 |
 
 ---
