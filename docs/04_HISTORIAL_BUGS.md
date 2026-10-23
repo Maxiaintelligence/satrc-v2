@@ -221,6 +221,33 @@
   - 30 VIENTO N2 → desaparecieron por cambio de clima (viento bajó de 1.99 a 1.93). Pero el test 10 los cubre artificialmente. ✅
 - **Commits:** `f9845a6` (test), `85a8013` (fix inicial), `c09d1c6` (Math.floor, intento fallido), `e30c266` (fix final H5.0.2b).
 
+## Etapa 5 — Integración Multivectorial (H5.0 - H5.8)
+
+### H5.0 — Coherencia de Vectores
+- **Fix H5.0.1:** N1 se marca como `SIN_AMENAZA` para evitar falsos positivos de CONVECTIVO/VIENTO.
+- **Fix H5.0.2b:** Se implementó el diagnóstico "Acoplamiento X + Y — Nivel N" para cuando el riesgo global sube por sinergia entre vectores.
+
+### H5.1 — Tests Zod
+- Se agregaron 4 tests a `estadoDiocesanoSchema.test.js` para blindar los 5 campos del orquestador multiamenaza.
+
+### H5.2 — Dictamen Dinámico
+- Se creó `dictamen.js` con una tabla de 7 vectores (4 simples + 3 compuestos). El banner de la Sala Operativa ahora refleja la amenaza real (ej. "Alerta por Frío/Calor Extremo" en lugar de "Deslaves" si el vector es TÉRMICO).
+
+### H5.3 — Bitácora Multivectorial
+- Se creó `bitacora.js`. El hash SHA-256 ahora registra el desglose por vector (ej. `N3 [hidro:36, viento:0, termico:0, conv:0]`), garantizando trazabilidad total.
+
+### H5.4 y H5.5 — SARA Multiamenaza
+- El frontend y el reporte diario ahora inyectan `vector_dominante` y `acciones_operativas` en los `focosCriticos`.
+- Se inyectaron las reglas 17, 18 y 19 en los System Prompts. SARA ahora redacta recomendaciones específicas para viento, frío, heladas y convección. (Evidencia empírica: SARA agregó la viñeta "Para hidrólogo..." en la Sección V).
+
+### H5.7 — UI Operativa
+- Se agregó el componente `VectorBar.jsx`.
+- El modal de auditoría ahora muestra el desglose por vector (4 barras) y las acciones operativas sugeridas.
+- Se inyectó `tempMinimaC` desde el orquestador para mostrar la temperatura real en el modal.
+
+### H-TEST-09 — Lección Aprendida
+- `npm test` no valida la sintaxis de `api/*.js` ni `scripts/*.mjs`. Es obligatorio correr `node --check` en esos archivos antes de hacer commit para no romper Vercel.
+
 ### Nota metodológica
 
 El fix de H5.0.2 requirió 3 iteraciones (H5.0.2 → H5.0.2a con Math.floor → H5.0.2b con vectores específicos). **Lección:** antes de proponer un fix, analizar los datos reales de producción (los 11 casos tenían `hidro=2.94`, no 3.03, lo que el primer fix no consideró). Documentado como H-TEST-08.
