@@ -296,7 +296,13 @@ export async function generarReporteDiario({
     nivel: c.nivel_alerta,
     causa: c.diagnostico?.titulo,
     pendiente: `${c.geografia?.pendienteMax}°`,
-    acceso: c.impactoSistemico?.accesoVial
+    acceso: c.impactoSistemico?.accesoVial,
+    // H5.4 — Inyección multivectorial para SARA
+    vector_dominante: c.vector_dominante,
+    niveles_por_vector: c.niveles_por_vector,
+    diagnosticos_por_vector: c.diagnosticos_por_vector,
+    acciones_operativas: c.acciones_operativas,
+    acoplamiento: c.diagnostico?.acoplamiento
   }));
 
   // 4. Construir prompt
