@@ -5,6 +5,7 @@ import { generarConsensoDeterminista } from '../engine/consensusEngine.js';
 import SatelliteViewer from '../components/SatelliteViewer.jsx';
 import DisclaimerModal from '../components/DisclaimerModal.jsx';
 import ReporteModalPublico from '../components/ReporteModalPublico.jsx';
+import VectorBar from '../components/VectorBar.jsx'; // 👈 NUEVO (H6.6)
 import { formatearTimestamp } from '../lib/compartido/fechas.js';
 import {
   CloudRain,
@@ -29,6 +30,8 @@ export default function MonitorPublico() {
   const listaZonas = Object.values(db.indices.zonas);
 
   const [zonaActiva, setZonaActiva] = useState(listaZonas[0] || null);
+  const [evaluacionLocal, setEvaluacionLocal] = useState(null);
+  const [dictamenGlobal, setDictamenGlobal] = useState(null);
   const [municipioActivo, setMunicipioActivo] = useState('');
   const [localidadActiva, setLocalidadActiva] = useState(null);
   const [reporteVigente, setReporteVigente] = useState(null);
@@ -62,33 +65,45 @@ export default function MonitorPublico() {
     }
   }, [zonaActiva]);
 
-    // N28 — Cargar el reporte vigente para mostrar la decisión operativa
+  // N28 / H6.6 — Cargar el reporte vigente y la evaluación de la localidad en una sola llamada
   useEffect(() => {
     let cancelado = false;
 
-    async function cargarReporteVigente() {
+    async function cargarEstadoSara() {
       try {
         const res = await fetch(`/api/sara?t=${Date.now()}`, {
           headers: { 'Cache-Control': 'no-cache' }
         });
         if (!res.ok) return;
         const data = await res.json();
-        if (!cancelado && data.ultimo_reporte_ondemand) {
-          setReporteVigente(data.ultimo_reporte_ondemand);
+        
+        if (!cancelado) {
+          if (data.ultimo_reporte_ondemand) setReporteVigente(data.ultimo_reporte_ondemand);
+          if (data.dictamen) setDictamenGlobal(data.dictamen);
+
+          // Buscar la evaluación específica de la localidad seleccionada
+          if (localidadActiva && data.evaluaciones) {
+            const evaluacionEncontrada = data.evaluaciones.find(
+              (ev) => ev.localidad_id === localidadActiva.id
+            );
+            setEvaluacionLocal(evaluacionEncontrada || null);
+          } else {
+            setEvaluacionLocal(null);
+          }
         }
       } catch (e) {
-        console.warn("[Reporte] No se pudo cargar el reporte vigente:", e.message);
+        console.warn("[SARA] No se pudo cargar el estado en vivo:", e.message);
       }
     }
 
-    cargarReporteVigente();
-    const intervalo = setInterval(cargarReporteVigente, INTERVALO_REFRESCO_MS);
+    cargarEstadoSara();
+    const intervalo = setInterval(cargarEstadoSara, INTERVALO_REFRESCO_MS);
 
     return () => {
       cancelado = true;
       clearInterval(intervalo);
     };
-  }, []);
+  }, [localidadActiva]); // Se vuelve a ejecutar si el usuario cambia de localidad
 
   // Determinar si el reporte vigente es de hoy y NO es parcial
   const fechaHoy = new Date().toLocaleDateString('es-MX', {
@@ -361,6 +376,64 @@ export default function MonitorPublico() {
 
         </div>
       </div>
+
+      {/* ========================================================== */}
+      {/* 2.bis. SEMÁFORO Y DESGLOSE MULTIAMENAZA (H6.6)             */}
+      {/* ========================================================== */}
+      {localidadActiva && evaluacionLocal && (
+        <div className="bg-slate-900 border-2 border-slate-700 p-5 rounded-2xl shadow-xl space-y-4">
+          
+          {/* Semáforo de Nivel Global */}
+          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div>
+              <h3 className="text-sm font-black text-white uppercase tracking-wider flex items-center gap-2">
+                <ShieldCheck className="w-5 h-5 text-amber-400" />
+                Estado de Alerta para {localidadActiva.nombre}
+              </h3>
+              <p className="text-xs text-slate-400 mt-1">
+                {evaluacionLocal.diagnostico?.titulo || 'Evaluación en curso'}
+              </p>
+            </div>
+            <div 
+              className="px-4 py-2 rounded-xl text-center shadow-lg"
+              style={{ backgroundColor: evaluacionLocal.color_alerta }}
+            >
+              <span className="block text-xs font-bold text-white/80 uppercase">Nivel</span>
+              <span className="block text-2xl font-black text-white">{evaluacionLocal.nivel_alerta}</span>
+            </div>
+          </div>
+
+          {/* Desglose por Vector */}
+          {evaluacionLocal.niveles_por_vector && (
+            <div>
+              <p className="text-[10px] font-bold text-cyan-400 uppercase tracking-wider mb-2">
+                Desglose por Amenaza
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <VectorBar nombre="Hidrológico" valor={evaluacionLocal.niveles_por_vector.hidrologico} />
+                <VectorBar nombre="Viento" valor={evaluacionLocal.niveles_por_vector.viento} />
+                <VectorBar nombre="Térmico" valor={evaluacionLocal.niveles_por_vector.termico} />
+                <VectorBar nombre="Convectivo" valor={evaluacionLocal.niveles_por_vector.convectivo} />
+              </div>
+            </div>
+          )}
+
+          {/* Acciones Operativas */}
+          {evaluacionLocal.acciones_operativas && evaluacionLocal.acciones_operativas.length > 0 && (
+            <div className="bg-rose-950/30 border border-rose-900/50 p-3 rounded-xl">
+              <p className="text-[10px] font-bold text-rose-400 uppercase tracking-wider mb-1">
+                Acciones Sugeridas
+              </p>
+              <ul className="list-disc pl-4 space-y-1 text-slate-200 text-xs">
+                {evaluacionLocal.acciones_operativas.map((accion, idx) => (
+                  <li key={idx}>{accion}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+        </div>
+      )}
 
       {/* ========================================================== */}
       {/* 2. SÍNTESIS DE SITUACIÓN COMUNITARIA EMITIDA POR SARA      */}
