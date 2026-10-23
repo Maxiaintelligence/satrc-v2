@@ -566,7 +566,7 @@ async function ejecutarSARA() {
     origen_evento: "PROGRAMADO_CRON",
     estado_situacion: dictamenSARA.estado_situacion,
     titulo: dictamenSARA.titulo,
-    resumen: `${resumenMulti} | Zonas OK: ${zonasOk.length}/${Object.keys(nodos).length}. ${dictamenSARA.comentario_oficial}`,
+    resumen: `${dictamenSARA.comentario_oficial} | Zonas OK: ${zonasOk.length}/${Object.keys(nodos).length}. | ${resumenMulti}`,
     prev_hash: prevHash.slice(0, 16) + "...",
     hash: nuevoHash.slice(0, 16) + "...",
     hash_completo: nuevoHash
