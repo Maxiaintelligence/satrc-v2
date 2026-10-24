@@ -26,6 +26,7 @@ const __dirname = path.dirname(__filename);
 
 const RUNNER_PATH = path.resolve(__dirname, '../../../scripts/ejecutar_sara_autonomo.mjs');
 const FIXTURE_PATH = path.resolve(__dirname, 'fixtures/openmeteo_sample.json');
+const REPORTE_DIARIO_PATH = path.resolve(__dirname, '../../../scripts/reportes/reporteDiario.mjs');
 
 /**
  * Localidad real: nodo de PMN (Pachuca Centro).
@@ -270,5 +271,20 @@ describe('Regresión multifactor — H-MULTI-01/02', () => {
     expect(res.tipo_amenaza).toBe('NEVADA');
     expect(res.vector_dominante).toBe('TERMICO');
   });
+  describe('H-BITACORA-01 / H-REPORTE-01 — blindaje estático', () => {
+    it('K. reporteDiario.mjs NO escribe bitácora (fix H-BITACORA-01)', () => {
+      const codigo = fs.readFileSync(REPORTE_DIARIO_PATH, 'utf-8');
+      expect(codigo).not.toMatch(/put\(\s*['"]bitacora_sara\.json['"]/);
+    });
 
+    it('L. reporteDiario.mjs solo escribe el reporte vigente si NO es parcial (fix H-REPORTE-01)', () => {
+      const codigo = fs.readFileSync(REPORTE_DIARIO_PATH, 'utf-8');
+      expect(codigo).toMatch(/if\s*\(\s*!\s*esParcial\s*\)[\s\S]*?put\(\s*['"]reporte_diocesano_vigente\.json['"]/);
+    });
+
+    it('M. ejecutar_sara_autonomo.mjs pasa bitacoraBase a generarReporteDiario (fix H-BITACORA-01)', () => {
+      const codigo = fs.readFileSync(RUNNER_PATH, 'utf-8');
+      expect(codigo).toMatch(/generarReporteDiario\(\s*\{[\s\S]*?bitacoraBase\s*:/);
+    });
+  });
 });

@@ -20,24 +20,16 @@
  */
 
 import { put, list } from '@vercel/blob';
-import crypto from 'crypto';
 import { repararMojibake } from '../../src/lib/compartido/mojibake.js';
-import { normalizarDatosRegionales, construirBloqueRegional } from '../../src/lib/compartido/regionales.js';
+import { construirBloqueRegional } from '../../src/lib/compartido/regionales.js';
 import { REGLAS_MULTIVECTOR } from '../../src/lib/compartido/promptsMultivector.js';
+import { calcularNuevaEntradaBitacora } from '../../src/lib/compartido/bitacora.js';
 
-const BLOQUE_GENESIS = "0000000000000000000000000000000000000000000000000000000000000000";
-const MAX_REGISTROS_BITACORA = 500;
 const TIMEOUT_GROQ_MS = 45000; // 45s (el reporte es más largo que el on-demand)
 
 // ============================================================
-// HELPERS (duplicados desde api/reporte-ondemand.js)
+// HELPERS
 // ============================================================
-
-function generarHashSHA256(prevHash, timestamp, datos) {
-  return crypto.createHash('sha256')
-    .update(prevHash + timestamp + JSON.stringify(datos))
-    .digest('hex');
-}
 
 function normalizarEstadoSituacion(estadoRaw) {
   if (!estadoRaw || typeof estadoRaw !== 'string') return 'SITUACION_NORMAL';
@@ -46,17 +38,6 @@ function normalizarEstadoSituacion(estadoRaw) {
   if (limpio === 'SITUACION_CRITICA' || limpio === 'CRITICA' || limpio === 'CRÍTICA' || limpio === 'EMERGENCIA') return 'SITUACION_CRITICA';
   if (limpio === 'SITUACION_GRAVE' || limpio === 'GRAVE' || limpio === 'ALERTA') return 'SITUACION_GRAVE';
   return 'SITUACION_NORMAL';
-}
-
-function siguienteIdBitacora(historial) {
-  if (!Array.isArray(historial) || historial.length === 0) return 1;
-  let maxId = 0;
-  for (const entry of historial) {
-    if (!entry?.id) continue;
-    const num = parseInt(String(entry.id).replace('SARA_LOG_', ''), 10);
-    if (Number.isFinite(num) && num > maxId) maxId = num;
-  }
-  return maxId + 1;
 }
 
 // ============================================================
@@ -252,6 +233,7 @@ Devuelve la respuesta en formato JSON estricto.`;
  * @param {string} opciones.horaMexicoStr - "06:00 a.m."
  * @param {string} opciones.apiKeyGroq - GROQ_API_KEY
  * @param {string} opciones.blobToken - BLOB_READ_WRITE_TOKEN
+ * @param {Array|null} opciones.bitacoraBase - Bitácora actual en memoria (para evitar colisiones)
  * @returns {Promise<Object>} { exito, reporte_guardado, registro_bitacora, es_parcial }
  */
 export async function generarReporteDiario({
@@ -264,7 +246,8 @@ export async function generarReporteDiario({
   horaExactaMexico,
   horaMexicoStr,
   apiKeyGroq,
-  blobToken
+  blobToken,
+  bitacoraBase = null
 }) {
   console.log('\n📋 [REPORTE DIARIO] Iniciando generación...');
 
@@ -397,54 +380,56 @@ export async function generarReporteDiario({
     reporte: reporteJSON
   };
 
-  // 8. Publicar en Blob
-  console.log('   Publicando en Blob...');
-  await put('reporte_diocesano_vigente.json', JSON.stringify(reporteCompleto, null, 2), {
-    access: 'public',
-    addRandomSuffix: false,
-    allowOverwrite: true,
-    token: blobToken
-  });
+  // 8. Publicar en Blob (H-REPORTE-01: solo si NO es parcial)
+  if (!esParcial) {
+    console.log('   Publicando en Blob...');
+    await put('reporte_diocesano_vigente.json', JSON.stringify(reporteCompleto, null, 2), {
+      access: 'public',
+      addRandomSuffix: false,
+      allowOverwrite: true,
+      token: blobToken
+    });
+  } else {
+    console.log('   Reporte PARCIAL: NO se publica en Blob (protege el vigente).');
+  }
 
-  // 9. Registrar en bitácora
-  console.log('   Registrando en bitácora...');
+  // 9. Preparar registro en bitácora (H-BITACORA-01: devolver, no escribir)
+  console.log('   Preparando registro de bitácora...');
   let bitacoraHistorial = [];
-  let hashUltimo = BLOQUE_GENESIS;
-  let ultimoDictamenPrevio = null;
 
-  try {
-    const listado = await list();
-    const blobB = listado?.blobs?.find(b => b.pathname.includes('bitacora_sara.json'));
-    if (blobB) {
-      const rB = await fetch(blobB.url, { cache: 'no-store' });
-      if (rB.ok) {
-        const dB = await rB.json();
-        bitacoraHistorial = dB.bitacora || [];
-        ultimoDictamenPrevio = dB.ultimo_dictamen || null;
-        if (bitacoraHistorial.length > 0) {
-          hashUltimo = bitacoraHistorial[bitacoraHistorial.length - 1].hash_completo || BLOQUE_GENESIS;
+  if (bitacoraBase) {
+    bitacoraHistorial = [...bitacoraBase];
+  } else {
+    try {
+      const listado = await list();
+      const blobB = listado?.blobs?.find(b => b.pathname.includes('bitacora_sara.json'));
+      if (blobB) {
+        const rB = await fetch(blobB.url, { cache: 'no-store' });
+        if (rB.ok) {
+          const dB = await rB.json();
+          bitacoraHistorial = dB.bitacora || [];
         }
       }
-    }
-  } catch (e) {}
+    } catch (e) {}
+  }
 
-  const nuevoHash = generarHashSHA256(hashUltimo, timestampIsoUtc, {
+  const estadoCalculado = (semaforo?.totalNivel4 || 0) > 0
+    ? "SITUACION_CRITICA"
+    : ((semaforo?.totalNivel3 || 0) > 0 ? "SITUACION_GRAVE" : "SITUACION_NORMAL");
+
+  const datosHash = {
     tipo: "PROGRAMADO_REPORTE_DIARIO",
     fecha: fechaDiaMexico,
     hora: horaExactaMexico,
     es_parcial: esParcial,
     zonas_ok: datosRegionales.zonas_ok,
     zonas_fallidas: datosRegionales.zonas_fallidas
-  });
+  };
 
-  const estadoCalculado = (semaforo?.totalNivel4 || 0) > 0
-    ? "SITUACION_CRITICA"
-    : ((semaforo?.totalNivel3 || 0) > 0 ? "SITUACION_GRAVE" : "SITUACION_NORMAL");
-
-  const nuevoId = siguienteIdBitacora(bitacoraHistorial);
+  const hashEntry = calcularNuevaEntradaBitacora(bitacoraHistorial, timestampIsoUtc, datosHash);
 
   const entradaBitacora = {
-    id: `SARA_LOG_${nuevoId}`,
+    id: hashEntry.id,
     fecha_dia_mexico: fechaDiaMexico,
     hora_exacta_mexico: horaExactaMexico,
     timestamp_iso_utc: timestampIsoUtc,
@@ -456,26 +441,10 @@ export async function generarReporteDiario({
       ? `Reporte Diario Automático (PARCIAL ${datosRegionales.zonas_ok}/${datosRegionales.zonas_totales})`
       : `Reporte Diario Automático Completo`,
     resumen: reporteJSON.seccion_0_decision || 'Reporte diario generado sin sección 0.',
-    prev_hash: hashUltimo.slice(0, 16) + "...",
-    hash: nuevoHash.slice(0, 16) + "...",
-    hash_completo: nuevoHash
+    prev_hash: hashEntry.prev_hash,
+    hash: hashEntry.hash,
+    hash_completo: hashEntry.hash_completo
   };
-
-  bitacoraHistorial.push(entradaBitacora);
-
-  if (bitacoraHistorial.length > MAX_REGISTROS_BITACORA) {
-    bitacoraHistorial = bitacoraHistorial.slice(-MAX_REGISTROS_BITACORA);
-  }
-
-  const payloadBitacora = { bitacora: bitacoraHistorial };
-  if (ultimoDictamenPrevio) payloadBitacora.ultimo_dictamen = ultimoDictamenPrevio;
-
-  await put('bitacora_sara.json', JSON.stringify(payloadBitacora), {
-    access: 'public',
-    addRandomSuffix: false,
-    allowOverwrite: true,
-    token: blobToken
-  });
 
   console.log(`✅ [REPORTE DIARIO] Generado exitosamente. Parcial: ${esParcial}. Zonas: ${datosRegionales.zonas_ok}/${datosRegionales.zonas_totales}`);
 

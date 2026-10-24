@@ -615,7 +615,8 @@ async function ejecutarSARA() {
         horaExactaMexico,
         horaMexicoStr,
         apiKeyGroq,
-        blobToken: process.env.BLOB_READ_WRITE_TOKEN
+        blobToken: process.env.BLOB_READ_WRITE_TOKEN,
+        bitacoraBase: bitacoraHistorial
       });
       console.log(`📋 [N28] Reporte diario ${resultado.es_parcial ? 'PARCIAL' : 'COMPLETO'} generado.`);
 
