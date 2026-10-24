@@ -309,6 +309,21 @@ Objetivo: cerrar deuda, establecer pruebas y documentar. Sin funciones nuevas.
 - **Verificación:** comando PowerShell documentado en `06_PENDIENTES.md`.
 - **No es regresión de H-TERM-01:** verificado, el fix de H-TERM-01 no tocó `bitacora.js`, `sara.js`, `ejecutar_sara_autonomo.mjs` ni `reporteDiario.mjs`.
 
+### Cierre de H-BITACORA-01 y H-REPORTE-01 (24/10/2026)
+
+- **Síntoma (H-BITACORA-01):** La cadena SHA-256 de la bitácora se rompía en producción. Confirmado en `SARA_LOG_132` (de 264 registros).
+- **Causa:** Colisión de escritura. El runner cargaba `bitacoraHistorial` en memoria, luego llamaba a `generarReporteDiario()`, que hacía su propio `put('bitacora_sara.json')` leyendo una base sin el registro del runner. Al final, el runner volvía a hacer `put` pisando el registro del diario y rompiendo el `prev_hash` del siguiente ciclo.
+- **Síntoma (H-REPORTE-01):** El reporte diario parcial (con <14/14 zonas) sobrescribía el `reporte_diocesano_vigente.json`, violando la regla de negocio.
+- **Solución:** 
+  - Se extrajo la lógica de creación de hash/ID a `calcularNuevaEntradaBitacora` en `src/lib/compartido/bitacora.js`.
+  - `reporteDiario.mjs` ya no hace `put` de la bitácora; en su lugar, recibe `bitacoraBase` por parámetro y devuelve el `registro_bitacora` al runner.
+  - `ejecutar_sara_autonomo.mjs` es el único que hace el `put` final, asegurando que la cadena se mantenga intacta.
+  - Se añadió `if (!esParcial)` antes del `put` del reporte vigente en `reporteDiario.mjs`.
+- **Verificación:** 
+  - 5 tests nuevos (2 en `bitacora.test.js`, 3 estáticos en `regresionMultifactor.test.js`). 164/164 tests en verde (24/10/2026).
+  - En producción, los registros nuevos (`SARA_LOG_255` a `257`) están correctamente encadenados. La ruptura histórica en `SARA_LOG_132` se mantiene, como es de esperar (no se puede reparar retroactivamente).
+- **Commits:** `d3b0c1c`.
+- **Lección:** La centralización de la lógica de escritura de la bitácora previene futuras colisiones (documentada como H-BITACORA-02 para concurrencia).
 
 ## 6. Lecciones consolidadas
 

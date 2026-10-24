@@ -20,6 +20,7 @@ Detalle completo en `01_CONTEXTO.md`.
 | Etapa 5: integración multivectorial (UI, bitácora, prompts) | Cerrada | `04_HISTORIAL.md` |
 | Correcciones post-Etapa 5 | H-MULTI-01..05, H-PROMPT-01/02, H6.6, H-TERM-01 cerrados | `04_HISTORIAL.md` |
 | Versión 3.0 (autenticación real, nuevos vectores, percentiles) | Planeada, no iniciada | `06_PENDIENTES.md` |
+| Correcciones post-Etapa 5 | H-MULTI-01..05, H-PROMPT-01/02, H6.6, H-TERM-01, H-BITACORA-01, H-REPORTE-01 cerrados | `04_HISTORIAL.md` |
 
 **Verificado el 24/10/2026 en el HEAD `9288793`:** 159 pruebas en 17 archivos, todas en verde; `npm run build` verde; lint con 0 errores y 51 advertencias (coinciden con DEU-24 y DEU-25). El consenso del proceso autónomo ya incluye las variables de Etapa 4 (H-MULTI-01 cerrado). Detalle en `VERIFICACION_MULTIFACTOR.md`.
 
@@ -36,8 +37,8 @@ Antes de cualquier cambio, revisa `06_PENDIENTES.md`, sección "Riesgos activos"
 
 Además, hay dos riesgos de integridad de datos recién confirmados en producción (no estaban en la lista anterior):
 
-- **H-BITACORA-01:** la cadena SHA-256 de la bitácora está rota en el registro `SARA_LOG_132` (de 264). Causa probable: colisión de escritura entre `reporteDiario.mjs` y `ejecutar_sara_autonomo.mjs`.
-- **H-REPORTE-01:** `reporteDiario.mjs` puede sobrescribir `reporte_diocesano_vigente.json` con un reporte parcial, violando `02_ARQUITECTURA.md` §7.
+- **H-BITACORA-01:** ✅ Cerrado el 24/10/2026 (commit `d3b0c1c`). La cadena SHA-256 se rompía en `SARA_LOG_132`. Los registros nuevos ya se encadenan correctamente.
+- **H-REPORTE-01:** ✅ Cerrado el 24/10/2026 (commit `d3b0c1c`). El reporte diario ya no sobrescribe el reporte vigente si es parcial.
 
 ## 4. Orden de lectura recomendado
 
