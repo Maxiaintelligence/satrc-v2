@@ -31,3 +31,6 @@ simulacion_nodos_resultado_v2.json
 *.tmp
 
 notas_personales/
+
+# Snapshots de diagnóstico local (contienen datos de producción y nombres de operadores)
+diagnostico_thermal/
