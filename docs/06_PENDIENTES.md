@@ -1,6 +1,6 @@
 # SatRC V2.0 — Pendientes, deuda técnica y riesgos
 
-> **Versión del documento:** 2.4 (22/10/2026)
+> **Versión del documento:** 2.5 (24/10/2026)
 > **Propósito:** registro único de lo que falta, lo que se aceptó como deuda y los riesgos abiertos. Es la única lista vigente. Un ítem cerrado sale de aquí y pasa a `04_HISTORIAL.md`.
 > **Regla:** cada ítem tiene identificador, severidad, estado y fuente. Ningún otro documento mantiene una lista paralela.
 
@@ -35,15 +35,19 @@ Severidad: 🔴 crítica · 🟠 alta · 🟡 media · 🟢 baja. El esfuerzo es
 | DEU-02 | Bitácora pública en `GET /api/sara` (ver R-03) | 🟠 | Medio | Abierta; aceptada para V3.0 |
 | DEU-23 | Token de administración en variable `VITE_` (ver R-02) | 🔴 | Medio | Abierta |
 | DEU-21 | Nombres personales de terceros en el código público | 🟡 | Bajo | Documentación saneada; código pendiente |
+| H-SEC-01 | El modal de clave de operador no valida la clave antes de enviar la petición al backend. Un atacante con el token `VITE_` puede enumerar claves válidas por respuesta 401. | 🟡 | Bajo | Abierta |
 
 ### 2.2 Motor y datos
 
 | ID | Deuda | Sev. | Esfuerzo | Estado | Fuente |
 |---|---|---|---|---|---|
-| H-TERM-01 | Continuo térmico fuera del rango de su nivel discreto (N3 puede dar continuo de 2.64). Confirmado por test en `regresionMultifactor.test.js`. | 🟠 | Medio | Abierta, requiere calibración | `03` §6.2 |
 | H-ORQ-07 | Coeficientes γ y mapeo a nivel del orquestador distintos de la especificación original. El código es la referencia. | 🟡 | Bajo | Documental | `03` §9 |
 | H-CONV-01 | Unidades erróneas en la especificación convectiva (umbrales de 50 000 a 150 000). El código usa 100 y 150. | 🟢 | Bajo | Documental | `03` §7.3 |
-| H-VIENTO-01 | Suavizado de 3 h y factor de rugosidad de la especificación original sin confirmar en el código. | 🟡 | Bajo | Pendiente de verificación | `03` §5.4 |
+| H-CONV-02 | `convectiveEvaluator.js` mide `shearMax` como diferencia escalar de velocidades, sin dirección. Falsos negativos de downburst/supercélula posibles con cambio de dirección. Corregir requiere agregar `wind_direction_10m` y `wind_direction_700hPa` al fetcher y al consenso. | 🟡 | Alto | Abierta | `03` §7.1 |
+| H-MOTOR-07 | `riskEvaluator.js` lee `h.wind_speed_10m` en la Regla 1 (protección del Altiplano), pero el consenso expone el campo como `viento_kmh`. `vientoSostenidoMax` siempre queda en 0 y la condición `viento < 40 km/h` de la Regla 1 siempre se cumple trivialmente. La protección del Altiplano es más laxa de lo diseñado. | 🟡 | Bajo | Abierta | `03` §2.1 |
+| H-BITACORA-01 | **Confirmado en producción (24/10/2026).** La cadena SHA-256 de la bitácora se rompe en el registro `SARA_LOG_132` (de 264). Causa: colisión de escritura entre `reporteDiario.mjs` y `ejecutar_sara_autonomo.mjs`. El runner carga `bitacoraHistorial` al inicio, `generarReporteDiario()` escribe la bitácora desde el módulo, y el runner vuelve a escribir con la copia vieja. Además, `bitacora.js` marca `disponible=true` cuando el campo `datos_disponibles_por_vector` está ausente (Blob viejo), cuando debería marcar `SIN_DATOS`. | 🟠 | Medio | Abierta | `02` §7, `sara.js`, `bitacora.js` |
+| H-REPORTE-01 | `reporteDiario.mjs` sobrescribe `reporte_diocesano_vigente.json` con un reporte parcial, violando `02_ARQUITECTURA.md` §7 ("un reporte parcial no reemplaza al vigente"). Contraste con `api/reporte-ondemand.js` que sí respeta la regla (`esParcialReal`). | 🟠 | Bajo | Abierta | `02` §7 |
+| DEU-29 | Parser SMN duplicado entre `api/smn.js` y `scripts/ejecutar_sara_autonomo.mjs`. ~60 líneas idénticas de scraping y clasificación de fenómenos. Viola DRY (ADR-004). Relacionado con H-SMN-WS. | 🟡 | Medio | Abierta | `api/smn.js` |
 | H-MOTOR-05 | Sobreclasificación de N2 en zonas húmedas (XIC 61.9 %, HUA 52.4 %, ZAC 45.2 %). Requiere re-auditoría de 90 días. | 🟡 | Alto | Abierta, V3.0 | Etapa 3 |
 | H-MOTOR-03 | El reporte diario exige 216 h de serie; el runner usa 192 h. | 🟢 | Bajo | Abierta | `03` §3 |
 | H-MOTOR-01 | Gemelo del runner distinto del motor canónico. | 🟡 | Alto | Abierta, V3.0 | `03` §3 |
@@ -55,10 +59,7 @@ Severidad: 🔴 crítica · 🟠 alta · 🟡 media · 🟢 baja. El esfuerzo es
 
 | ID | Deuda | Sev. | Esfuerzo | Estado |
 |---|---|---|---|---|
-| H6.6 | La interfaz no consume `nivel_alerta_global`, `niveles_por_vector` ni `acciones_operativas` en el Monitor Climático. | 🟡 | 2–3 h | Abierta, V3.0 |
-| H-UI-01 | El Monitor Climático no evalúa riesgo ni muestra el semáforo N1 a N4. | 🟡 | Medio | Abierta, decisión de diseño |
-| H-UI-02 | El diagnóstico SARA en el Monitor Climático usa `if/else` en vez del motor. | 🟡 | Medio | Abierta |
-| H-UI-03 | El público general no ve el semáforo. Se trata junto con H-UI-01. | 🟡 | Medio | Abierta, decisión de diseño |
+| H-UI-02 | El "Diagnóstico de Situación • Agente SARA" en el Monitor Público usa `if/else` hardcodeado (`lluviaTotalDia >= 20`). No consulta el motor. Atribución engañosa. | 🟡 | Bajo | Abierta |
 | H-UI-22 | El disclaimer menciona ECMWF y el gráfico lee un campo `ecmwf` que el motor no consulta. Verificar el origen de ese campo. | 🟡 | Bajo | Pendiente de verificación |
 | H-UI-07 | Las secciones I a VI no tienen guardas para contenido vacío. | 🟢 | Bajo | Abierta |
 | H-UI-08 | El borde de la sección 0 siempre se muestra en verde. | 🟢 | Bajo | Abierta |
@@ -67,7 +68,6 @@ Severidad: 🔴 crítica · 🟠 alta · 🟡 media · 🟢 baja. El esfuerzo es
 | H-UI-13 | El banner del SMN no se actualiza solo. | 🟢 | Bajo | Abierta |
 | H-UI-14 | El banner del SMN no tiene respaldo si `/api/smn` falla. | 🟢 | Bajo | Abierta |
 | H-UI-23 | `DisclaimerModal` tiene una rama que nunca se ejecuta (`abierto === undefined`). | 🟢 | Bajo | Abierta |
-| H-UI-24 | El Monitor Climático no replica la interfaz multiamenaza. Se trata junto con H6.6. | 🟡 | — | Unificada con H6.6 |
 
 ### 2.4 Arquitectura y operación
 
@@ -80,7 +80,10 @@ Severidad: 🔴 crítica · 🟠 alta · 🟡 media · 🟢 baja. El esfuerzo es
 | H-API-02 | `disparar-workflow.js` no registra IP ni agente de usuario de las peticiones. | 🟢 | Bajo | Abierta |
 | H-API-05 | `latest-gif.js` no tiene respaldo si NOAA cambia el patrón de nombres. Hay un `catch` que devuelve 502, pero no un respaldo. | 🟢 | Bajo | Abierta |
 | DEU-19 | Dependencia de planes gratuitos (Groq, Vercel, Open-Meteo, cron-job.org) sin plan de contingencia. | 🟡 | Medio | Sin documentar |
-| DEU-28 | El test de regresión del runner (`regresionMultifactor.test.js`) verifica los imports en código fuente en vez de ejecutar el runner. Requiere refactor (R3) para permitir `dryRun` y test end-to-end. | 🟡 | Medio | Abierta | Este fix |
+| DEU-28 | El test de regresión del runner (`regresionMultifactor.test.js`) verifica los imports en código fuente en vez de ejecutar el runner. Requiere refactor (R3) para permitir `dryRun` y test end-to-end. | 🟡 | Medio | Abierta |
+| DEU-30 | `normalizarDatosRegionales` cae a `14` con `||` si `zonas_totales` es `0` o inválido, ocultando problemas reales del cliente. | 🟢 | Bajo | Abierta |
+| H-CRON-01 | `sara_cron.yml` no tiene un pre-check explícito de `GROQ_API_KEY` y `BLOB_READ_WRITE_TOKEN` antes de ejecutar el runner. Si faltan, el runner falla silenciosamente y usa la plantilla estática. | 🟢 | Bajo | Abierta |
+| H-CI-01 | `tests.yml` no corre `npm run build`. Si se rompe un import en un componente React, `npm test` no lo detecta. | 🟢 | Bajo | Abierta |
 
 ### 2.5 Pruebas y calidad
 
@@ -90,9 +93,10 @@ Severidad: 🔴 crítica · 🟠 alta · 🟡 media · 🟢 baja. El esfuerzo es
 | DEU-17 | `tests.yml` solo ejecuta Vitest; no valida `api/` ni `scripts/*.mjs`. | 🟡 | Bajo | Abierta |
 | DEU-18 | Conteo de pruebas inconsistente entre documentos. Se resuelve documentando el conteo oficial al ejecutar `npm test`. | 🟢 | Bajo | Documental |
 | H-TEST-06 | Las pruebas nuevas deben verificar la aritmética del escenario antes de asumir un error de código. La especificación del adaptador tenía un ejemplo que no cuadraba. | 🟢 | — | Lección |
-| H-TEST-07 | Los módulos que emiten valores continuos deben documentar su rango `[mín, máx]`. La deuda de H-TERM-01 viene de no cumplirlo. | 🟡 | — | Lección, aplicar en H-TERM-01 |
-
----
+| H-TEST-07 | Los módulos que emiten valores continuos deben documentar su rango `[mín, máx]`. La deuda de H-TERM-01 vino de no cumplirlo. | 🟡 | — | Lección; H-TERM-01 ya cerrado aplicándola |
+| H-TEST-11 | `datos_disponibles_por_vector` no tiene cobertura en `estadoDiocesanoSchema.test.js`. Un campo nuevo en el contrato sin test de valor y rango viola H-TEST-05. | 🟡 | Bajo | Abierta |
+| H-ORQ-08 | `determinarVectorDominante()` usa `prioridad.indexOf(a)` sobre un array en mutación durante el `sort`. Funciona por casualidad en V8 moderno, pero es un anti-patrón frágil. | 🟢 | Bajo | Abierta |
+| H-SCHEMA-01 | `EstadoDiocesanoBlobSchema` tiene `schema_version` con `.default("2.1.0")`, pero el runner no emite el campo. Si alguien implementa migraciones basadas en ese campo, no funcionará. | 🟢 | Bajo | Abierta |
 
 ### 2.6 Prompts de SARA
 
@@ -100,28 +104,28 @@ Severidad: 🔴 crítica · 🟠 alta · 🟡 media · 🟢 baja. El esfuerzo es
 |---|---|---|---|---|---|
 | H-PROMPT-03 | No hay pruebas automáticas de los prompts (campos recibidos y cumplimiento de reglas). | 🟡 | Medio | Abierta | `05` §8 |
 
----
-
 ### 2.7 Motor multifactor (verificación del 22/10/2026)
 
-Detalle y evidencia por línea en `VERIFICACION_MULTIFACTOR.md`.
+Detalle y evidencia por línea en `VERIFICACION_MULTIFACTOR.md`. H-MULTI-01 a H-MULTI-05 se cerraron el 22 y 23/10/2026 (commits `6a72bdc`, `5c826cd`, `50ebc53`). Solo queda H-MULTI-06.
 
 | ID | Deuda | Sev. | Esfuerzo | Estado | Fuente |
 |---|---|---|---|---|---|
 | H-MULTI-06 | El respaldo en vivo de la Sala Operativa usa solo el motor hidrológico. | 🟡 | Medio | Abierta | Verificación §2.7 |
 
----
-
-### 2.8 Calidad del código (verificación local del 22/10/2026)
+### 2.8 Calidad del código (verificación del 24/10/2026)
 
 | ID | Deuda | Sev. | Esfuerzo | Estado | Fuente |
 |---|---|---|---|---|---|
-| DEU-24 | `npm run lint` reporta 50 advertencias y 0 errores. Hay imports y variables sin uso, incluidos `altitud` y `esMarginacionAlta` en `riskEvaluator.js`, y `esModoEmergencia` en `reporte-ondemand.js` (la protección del reporte vigente sí está en el backend: `esParcialReal`). | 🟢 | Bajo | Abierta | Lint local |
-| DEU-25 | Código muerto en `reportesRegionales.js`: `TIMEOUT_FETCH_MS` y `STAGGER_MS` sin uso. Revisar si la lógica que debían controlar falta o sobra. | 🟡 | Bajo | Abierta | Lint local |
+| DEU-24 | `npm run lint` reporta 51 advertencias y 0 errores. Hay imports y variables sin uso, incluidos `altitud` y `esMarginacionAlta` en `riskEvaluator.js`, y `esModoEmergencia` en `reporte-ondemand.js`. | 🟢 | Bajo | Abierta | Lint local |
+| DEU-25 | Código muerto en `reportesRegionales.js`: `TIMEOUT_FETCH_MS` y `STAGGER_MS` sin uso. | 🟡 | Bajo | Abierta | Lint local |
 
-**Resultados confirmados:** `npm test` pasa 143 de 143 pruebas en 16 archivos. `node --check api/sara.js` no reporta errores.
+**Resultados confirmados el 24/10/2026:** `npm test` pasa 159 de 159 pruebas en 17 archivos. `npm run build` verde. `node --check api/sara.js` sin errores. Lint: 51 advertencias, 0 errores.
 
-**Advertencia sobre la revisión de secretos:** `git ls-files | Select-String` revisa solo nombres de archivo, no contenido. La revisión de contenido debe hacerse con `git grep` buscando los valores de las claves de operador, la clave de la Sala Operativa y los prefijos de tokens (`gsk_`, `vercel_blob_rw_`, `Bearer`). La lista exacta se entrega aparte, fuera de la documentación. Pendiente.
+### 2.9 Cierre de H-TERM-01 (24/10/2026)
+
+**H-TERM-01 cerrado** (commit `343f80d`). La fórmula del nivel continuo térmico ahora respeta el contrato `[nivel, nivel+0.99]` documentado en ADR-008. Los tests 9 a 14 de `thermalEvaluator.test.js` cubren los casos de nevada, frío N2/N3, calor N2/N3 y frío+calor simultáneos.
+
+**Pendiente de re-auditoría de invierno:** en la verificación del 24/10/2026, las 405 localidades tenían `niveles_por_vector.termico = 1.0` (no hay frío en octubre). El impacto del fix en el semáforo se medirá en la primera corrida de invierno que dispare el térmico. Si la subida de N3 supera el 30 %, evaluar recalibración del peso (commit B2 separado).
 
 ---
 
@@ -130,11 +134,14 @@ Detalle y evidencia por línea en `VERIFICACION_MULTIFACTOR.md`.
 Los siguientes se cerraron y su detalle está en `04_HISTORIAL.md`. No se mantienen aquí.
 
 - **Etapa 3** (H0 a H9): cerrada.
-- **Etapa 4** (H6.1 a H6.7): cerrada a nivel funcional. Quedan abiertos H6.6, H7 y H-ARCH-01 (ver §2).
+- **Etapa 4** (H6.1 a H6.7): cerrada a nivel funcional. Quedan abiertos H6.6 (ya cerrado), H7 (parcial) y H-ARCH-01 (ver §2).
 - **Etapa 5** (H5.0 a H5.8): cerrada.
-- **H-E4-01** (variables E4 en Open-Meteo): cerrado.
-- **H-ORQ-05 y H-ORQ-06** (N1 como `SIN_AMENAZA` y acoplamiento por vector): cerrados.
-- **H-SMN (falso positivo por comunicados de prensa):** corregido; sigue abierto el riesgo de H-SMN-WS.
+- **H-MULTI-01..05**: cerrados el 22-23/10/2026 (commits `6a72bdc`, `5c826cd`, `50ebc53`).
+- **H-PROMPT-01 y H-PROMPT-02**: cerrados el 22/10/2026 (commits `9fc298a`, `62d1fa3`).
+- **H6.6 y H-UI-01, H-UI-03**: cerrados el 24/10/2026 (commits `83d8991`, `955b7aa`). El Monitor Público ya muestra semáforo, desglose por vector y acciones operativas.
+- **H-TERM-01**: cerrado el 24/10/2026 (commit `343f80d`).
+- **H-VIENTO-01**: cerrado como documental. La especificación original incluía suavizado de 3 h y factor de rugosidad; el código nunca los implementó y el principio "el código es la referencia" (DEC-010) aplica.
+- **H-SMN (falso positivo por comunicados de prensa)**: corregido; sigue abierto el riesgo de H-SMN-WS.
 
 ---
 
@@ -144,9 +151,10 @@ Estas prioridades están propuestas, no aprobadas. Se confirman antes de comenza
 
 1. **Inmediato (sin código):** rotar claves (R-01) y retirar valores de cualquier documento o archivo. Ya saneado en la documentación.
 2. **Corto plazo (requiere código):** R-02 y R-03, luego R-04. Son los riesgos de exposición activa.
-3. **Corto plazo (requiere código):** H-TERM-01, con una prueba que reproduzca el caso de nevada antes de corregir.
-4. **Mediano plazo:** H-SMN-WS (fuente oficial del aviso), H6.6 (desglose en el Monitor Climático), DEU-19 (plan de contingencia).
-5. **V3.0:** autenticación real, H-MOTOR-01, H-MOTOR-05, H-ARCH-01, nuevos vectores (incendios) y percentiles históricos.
+3. **Corto plazo (requiere código):** H-BITACORA-01 y H-REPORTE-01 juntos (afectan los mismos archivos y comparten causa raíz). **Próximo commit propuesto.**
+4. **Corto plazo (requiere código):** H-MOTOR-07 (Regla 1 del Altiplano lee el campo equivocado). Cambia comportamiento en producción; conviene re-auditar después.
+5. **Mediano plazo:** H-CONV-02 (requiere expandir el contrato del consenso), H-SMN-WS (fuente oficial del aviso), H-MULTI-06 (respaldo en vivo), DEU-19 (plan de contingencia).
+6. **V3.0:** autenticación real, H-MOTOR-01, H-MOTOR-05, H-ARCH-01, nuevos vectores (incendios) y percentiles históricos.
 
 ---
 

@@ -279,8 +279,36 @@ Objetivo: cerrar deuda, establecer pruebas y documentar. Sin funciones nuevas.
 ---
 
 ### Cierre de Etapa 5
+
 - **Tag:** `etapa-5-cerrada` en el commit `ae67db3`.
 - **Documentación de cierre:** `b213bca` (handover) y `890ba6e` (backlog), HEAD al momento de la verificación.
+
+---
+
+## 5.bis Fixes post-Etapa 5 (octubre de 2026)
+
+### E5-H-TERM-01 — Nivel continuo térmico fuera del contrato [nivel, nivel+0.99]
+
+- **Síntoma:** con sensación térmica de 0 °C y nevada real (nivel discreto 3), `nivel_alerta_continuo` devolvía 2.64, que el orquestador leía como N2. Una nevada (N3) podía degradarse a N2 global.
+- **Causa:** `thermalEvaluator.js` calculaba el continuo con `1.0 + (nivelFrio - 1) * pesoFrio` en lugar de `nivelFinal + peso * 0.99`. Viola ADR-008 y `03_MOTOR_RIESGO.md` §5.3. Además, el cálculo del continuo se hacía antes del desempate frío/calor, así que en el caso patológico de frío N2 + calor N3 en la misma ventana, el continuo podía ser de N1 mientras el discreto era N3.
+- **Solución:** se reordenó el bloque. `nivelFinal` (después del desempate, frío gana empates) se calcula primero, y el continuo después con la fórmula `nivelFinal + peso_dominante * 0.99`. Se aplica el peso del vector dominante, no de `nivelFrio` o `nivelCalor` por separado.
+- **Verificación:**
+  - 6 tests de reproducción nuevos en `thermalEvaluator.test.js` (tests 9 a 14): nevada, frío N2, frío N3, calor N2, calor N3, frío+calor simultáneos. Fallan pre-fix (2.64, 1.89, 2.96, 1.92, 2.98, 1.89), pasan post-fix (3.81, 2.88, 3.97, 2.91, 3.98, 2.88).
+  - Test E en `regresionMultifactor.test.js` endurecido de `> 2.0` a `[3.0, 3.99]` para blindar la regresión.
+  - 159 pruebas en 17 archivos, todas en verde (24/10/2026). `npm run build` verde.
+  - Producción: corrida `40045053119` con semáforo sin cambios (N4=0 | N3=0 | N2=246 | N1=159), 0 localidades con `termico != 1.0`. Esperado: hoy no hay frío en octubre.
+  - Pendiente de re-auditoría de invierno, cuando el térmico dispare por primera vez. Si la subida de N3 supera el 30 %, evaluar recalibración del peso.
+- **Commit:** `343f80d`.
+- **Lección:** H-TEST-05 aplicada (campo nuevo con test de valor y rango).
+
+### Nota — H-BITACORA-01 confirmado en producción (24/10/2026)
+
+- **Síntoma:** la cadena SHA-256 de la bitácora se rompe en el registro `SARA_LOG_132` (de 264). `prev_hash` real (`7c4f60d1c896e129...`) no coincide con el esperado (`fa62b7cb9b571e68...`).
+- **Causa probable:** colisión de escritura entre `reporteDiario.mjs` y `ejecutar_sara_autonomo.mjs`. El runner carga `bitacoraHistorial` al inicio, `generarReporteDiario()` escribe la bitácora desde el módulo, y el runner vuelve a escribir con la copia vieja.
+- **Estado:** pendiente. Próximo commit de código propuesto: H-BITACORA-01 + H-REPORTE-01 juntos (tocan los mismos tres archivos y comparten causa raíz).
+- **Verificación:** comando PowerShell documentado en `06_PENDIENTES.md`.
+- **No es regresión de H-TERM-01:** verificado, el fix de H-TERM-01 no tocó `bitacora.js`, `sara.js`, `ejecutar_sara_autonomo.mjs` ni `reporteDiario.mjs`.
+
 
 ## 6. Lecciones consolidadas
 
