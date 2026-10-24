@@ -170,10 +170,11 @@ describe('Regresión multifactor — H-MULTI-01/02', () => {
 
     // Con `||`, el orquestador convertiría temperatura_c:0 en 15 y la helada
     // radiativa se perdería (nivel térmico = 1.0).
-    // Con `??`, la helada se detecta. El nivel continuo es ~2.64 por H-TERM-01
-    // (bug conocido de la fórmula del continuo térmico, ver 03_MOTOR_RIESGO.md §6.2).
-    // La corrección de H-TERM-01 es deuda separada y no forma parte de este fix.
-    expect(res.niveles_por_vector.termico).toBeGreaterThan(2.0);
+    // Con `??`, la helada se detecta. H-TERM-01 corregido: el continuo
+    // térmico respeta el contrato [nivel, nivel + 0.99]; una helada N3
+    // debe dar continuo entre 3.0 y 3.99 (antes del fix daba 2.64).
+    expect(res.niveles_por_vector.termico).toBeGreaterThanOrEqual(3.0);
+    expect(res.niveles_por_vector.termico).toBeLessThanOrEqual(3.99);
 
     // Confirmar que el diagnóstico es de helada, no "sin datos"
     expect(res.diagnosticos_por_vector.termico.titulo).toMatch(/Helada|Frío/i);

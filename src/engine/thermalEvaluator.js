@@ -131,21 +131,15 @@ export function evaluarTermico(localidad, serieHoraria) {
     causaCalor = `Sensación térmica de ${sensacionMax.toFixed(1)}°C. Estrés térmico en la población.`;
   }
 
-  // 5. Cálculo Continuo con Sigmoides (para el Orquestador)
+  // 5. Pesos de la sigmoide (para el continuo y para datos_tecnicos)
   // Peso del frío: 1 si sensación <= -5, 0 si >= 15
   const pesoFrio = 1 - sigmoide(sensacionMin, 5, 0.3); // Centro en 5°C
   // Peso del calor: 0 si sensación <= 25, 1 si >= 42
   const pesoCalor = sigmoide(sensacionMax, 30, 0.3);   // Centro en 30°C
 
-  // Nivel continuo ponderado
-  let nivelContinuo = 1.0;
-  if (nivelFrio > 1) {
-    nivelContinuo = 1.0 + (nivelFrio - 1) * pesoFrio;
-  } else if (nivelCalor > 1) {
-    nivelContinuo = 1.0 + (nivelCalor - 1) * pesoCalor;
-  }
-
-  // 6. Determinar vector dominante y diagnóstico final
+  // 6. Determinar nivel discreto final y vector dominante
+  // El desempate frío/calor se hace ANTES de calcular el continuo para que
+  // ambos compartan el mismo nivel de referencia (H-TERM-01).
   let nivelFinal = 1;
   let vectorDominante = "TERMICO_NORMAL";
   let titulo = "Condiciones Térmicas Normales";
@@ -162,6 +156,19 @@ export function evaluarTermico(localidad, serieHoraria) {
     vectorDominante = "CALOR_EXTREMO";
     titulo = tituloCalor;
     causa = causaCalor;
+  }
+
+  // 7. Nivel continuo (H-TERM-01: contrato [nivel, nivel + 0.99])
+  // ADR-008 / 03_MOTOR_RIESGO.md §5.3: el continuo debe quedar dentro del
+  // rango del nivel discreto. La fórmula anterior
+  //   1.0 + (nivelFrio - 1) * pesoFrio
+  // violaba el contrato cuando nivelFrio != nivelFinal (ej. Nevada N3 daba
+  // 2.64, que el orquestador leía como N2). Se recalcula con base en
+  // nivelFinal (después del desempate) y el peso del vector dominante.
+  let nivelContinuo = 1.0;
+  if (nivelFinal > 1) {
+    const pesoDominante = (vectorDominante === "CALOR_EXTREMO") ? pesoCalor : pesoFrio;
+    nivelContinuo = nivelFinal + pesoDominante * 0.99;
   }
 
   return {
