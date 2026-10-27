@@ -30,7 +30,7 @@ let cacheSeries = {
 const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutos
 const TIMEOUT_FETCH_MS = 10000;      // 10 segundos máximo por fetch
 const ESPERA_REINTENTO_MS = 1000;    // 1 segundo entre reintentos
-const STAGGER_MS = 200;              // 200 ms entre cada fetch
+const STAGGER_MS = 100;              // 100 ms entre cada fetch
 
 /**
  * Wrapper local: pasa `db.localidades` a la función compartida.

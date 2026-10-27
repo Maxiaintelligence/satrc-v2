@@ -145,10 +145,15 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "Falta configurar GROQ_API_KEY en Vercel" });
   }
 
+  // OPTIMIZACIÓN: Hacemos un solo list() para ahorrar tiempo
   let reporteVigente = null;
+  let blobBitacora = null;
+  
   try {
     const listado = await list();
     const blobRep = listado?.blobs?.find(b => b.pathname.includes('reporte_diocesano_vigente.json'));
+    blobBitacora = listado?.blobs?.find(b => b.pathname.includes('bitacora_sara.json'));
+
     if (blobRep) {
       const rR = await fetch(blobRep.url, { cache: 'no-store' });
       if (rR.ok) reporteVigente = await rR.json();
@@ -341,16 +346,13 @@ Devuelve la respuesta en formato JSON estricto.`;
     console.log("[C2c] Reporte parcial. No se guarda en Blob.");
   }
 
-  let bitacoraHistorial = [];
-  let hashUltimo = BLOQUE_GENESIS;
-  let ultimoDictamenPrevio = null;
+    let bitacoraHistorial = [];
+    let hashUltimo = BLOQUE_GENESIS;
+    let ultimoDictamenPrevio = null;
 
-  try {
-    const listado = await list();
-    const blobB = listado?.blobs?.find(b => b.pathname.includes('bitacora_sara.json'));
-    if (blobB) {
-      const rB = await fetch(blobB.url, { cache: 'no-store' });
-      if (rB.ok) {
+    try {
+      // Usamos el blobBitacora que ya obtuvimos arriba
+      if (blobBitacora) {
         const dB = await rB.json();
         bitacoraHistorial = dB.bitacora || [];
         ultimoDictamenPrevio = dB.ultimo_dictamen || null;
