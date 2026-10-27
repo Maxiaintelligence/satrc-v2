@@ -443,7 +443,15 @@ export default function SatRCOperativo({ alCerrarSesion }) {
       });
 
       if (res.ok) {
-        const data = await res.json();
+        let data;
+        try {
+          data = await res.json();
+        } catch (jsonError) {
+          alert("El servidor tardó demasiado en responder (Timeout de Vercel). Intente de nuevo en unos minutos.");
+          setGenerandoOnDemand(false);
+          return;
+        }
+        
         if (data.reporte_guardado) setReporteVigente(data.reporte_guardado);
         if (data.registro_bitacora) {
           setBitacoraSARA(prev => [...prev, data.registro_bitacora]);

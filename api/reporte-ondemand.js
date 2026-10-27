@@ -257,24 +257,24 @@ Devuelve la respuesta en formato JSON estricto.`;
 
   let reporteJSON;
   try {
-    const respuestaGroq = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      signal: AbortSignal.timeout(TIMEOUT_GROQ_MS),
-      headers: {
-        "Authorization": `Bearer ${apiKeyGroq.trim()}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        model: "openai/gpt-oss-120b",
-        temperature: 0.1,
-        max_completion_tokens: 4096,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt }
-        ]
-      })
-    });
+      const respuestaGroq = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        signal: AbortSignal.timeout(8000), // <-- Bajamos a 8s para no chocar con Vercel
+        headers: {
+          "Authorization": `Bearer ${apiKeyGroq.trim()}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          model: "llama-3.1-8b-instant", // <-- MODELO ULTRA RÁPIDO
+          temperature: 0.1,
+          max_completion_tokens: 2500, // <-- Ajustado para que quepa en el límite de tokens
+          response_format: { type: "json_object" },
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt }
+          ]
+        })
+      });
 
     if (!respuestaGroq.ok) {
       const errorText = await respuestaGroq.text();
