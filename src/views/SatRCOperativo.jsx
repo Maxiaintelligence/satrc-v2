@@ -830,7 +830,7 @@ Documento oficial emitido para párrocos, brigadistas y autoridades de auxilio.
         generandoOnDemand={generandoOnDemand}
         zonasFallidasTemporal={zonasFallidasTemporal}
         onGenerarReporteParcial={generarReporteParcial}
-        onCompartirWhatsApp={compartirWhatsApp}
+        onCompartirWhatsApp={compartirPorWhatsApp}
         onDescargar={descargarDocumentoOficial}
       />
 
