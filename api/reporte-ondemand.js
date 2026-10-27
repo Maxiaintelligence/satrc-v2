@@ -10,8 +10,6 @@ const TIMEOUT_GROQ_MS = 30000;
 const REINTENTO_VENTANA_MS = 30 * 60 * 1000; // 30 minutos
 
 // R-01 / DEU-21: Claves y nombres movidos a variables de entorno
-// El formato esperado en SATRC_OPERADORES_JSON es un string JSON:
-// {"clave1":"Rol 1","clave2":"Rol 2"}
 let USUARIOS_AUTORIZADOS = {};
 try {
   if (process.env.SATRC_OPERADORES_JSON) {
@@ -76,7 +74,6 @@ function normalizarAlertaSMN(alertaRaw) {
 function tokenConsolaValido(req) {
   const esperado = process.env.SARA_ONDEMAND_TOKEN;
   // R-02: Si no hay token configurado en el backend, permitimos el paso 
-  // (la seguridad recae en la clave de operador x-user-key).
   if (!esperado) return true; 
   
   const recibido = req.headers['x-admin-token'];
@@ -97,17 +94,14 @@ function validarClaveOperador(req) {
 export default async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
 
-  // Validar método HTTP
   if (req.method !== 'POST') {
     return res.status(405).json({ error: "Método no permitido. Usar POST." });
   }
 
-  // Validar token de consola
   if (!tokenConsolaValido(req)) {
     return res.status(401).json({ error: "No autorizado (token de consola)" });
   }
 
-  // Validar clave de operador
   const nombreOperador = validarClaveOperador(req);
   if (!nombreOperador) {
     return res.status(401).json({ error: "Clave de operador inválida" });
@@ -151,7 +145,6 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "Falta configurar GROQ_API_KEY en Vercel" });
   }
 
-  // Leer reporte vigente del Blob (para detección de reintento)
   let reporteVigente = null;
   try {
     const listado = await list();
@@ -164,11 +157,8 @@ export default async function handler(req, res) {
     console.warn("Aviso: no se pudo leer el reporte vigente:", e.message);
   }
 
-  // El backend determina SIEMPRE si hay zonas faltantes, sin confiar en el cliente.
   const esParcialReal = datosRegionales && datosRegionales.zonas_ok < datosRegionales.zonas_totales;
 
-  // Determinar origen_evento
-  // Regla de prioridad: fallo de zona domina sobre el tiempo
   let origenEvento = 'ON_DEMAND_OPERADOR';
   if (esParcialReal) {
     origenEvento = 'ON_DEMAND_OPERADOR_PARCIAL';
@@ -179,7 +169,6 @@ export default async function handler(req, res) {
     }
   }
 
-  // Construir bloque SMN
   let bloqueAvisoSMN;
   if (alertaSMN) {
     const estados = alertaSMN.estados_afectados.length > 0
@@ -236,6 +225,7 @@ REGLAS OBLIGATORIAS:
 15. FORMATO CON VIÑETAS: usa viñetas en las secciones 0, II, III y V. No escribas párrafos densos.
 ${REGLAS_MULTIVECTOR}
 16. Responde ÚNICAMENTE un objeto JSON con las 7 secciones exactas. Cada sección debe tener un máximo de 5-7 líneas. Si una sección no tiene contenido relevante, escribe una frase breve en lugar de rellenar.
+17. CONTROL ESTRICTO DE EMERGENCIAS: Si Nivel 4 = 0 y Nivel 3 = 0, BAJO NINGUNA CIRCUNSTANCIA uses "suspender actividades", "evacuar" o "emergencia". Usa lenguaje de precaución y vigilancia.
 
 {
   "seccion_0_decision": "DECISIÓN OPERATIVA del día: fenómeno principal, zonas afectadas, acción inmediata. Máximo 3 líneas.",
@@ -265,6 +255,7 @@ COMUNIDADES CRÍTICAS BAJO TENSIÓN (N3-N4): ${JSON.stringify(focosCriticos || [
 
 Devuelve la respuesta en formato JSON estricto.`;
 
+  let reporteJSON;
   try {
     const respuestaGroq = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
@@ -276,171 +267,158 @@ Devuelve la respuesta en formato JSON estricto.`;
       body: JSON.stringify({
         model: "openai/gpt-oss-120b",
         temperature: 0.1,
-        max_completion_tokens: 4096, // 🔥 FIX H8.5: Evita que el JSON de 7 secciones se corte
+        max_completion_tokens: 4096,
         response_format: { type: "json_object" },
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt }
         ]
       })
-  });
-  
+    });
+
     if (!respuestaGroq.ok) {
       const errorText = await respuestaGroq.text();
-      console.error("❌ [GROQ] Error detallado:", errorText);
       throw new Error(`Groq API HTTP ${respuestaGroq.status}: ${errorText}`);
     }
 
     const data = await respuestaGroq.json();
-
-    let reporteJSON;
-    try {
-      reporteJSON = JSON.parse(data.choices[0].message.content);
-    } catch (parseError) {
-      console.error("Groq devolvió JSON inválido:", data.choices[0].message.content.slice(0, 200));
-      throw new Error("Groq devolvió formato inválido");
-    }
-
-    // N22 — Reparar doble encoding UTF-8 en las 6 secciones
-    const secciones = [
-      'seccion_0_decision',
-      'seccion_I_atmosfera',
-      'seccion_II_focos_sierra',
-      'seccion_III_condiciones_altiplano',
-      'seccion_IV_evolucion',
-      'seccion_V_recomendaciones_pastorales',
-      'seccion_VI_deslinde'
-    ];
+    reporteJSON = JSON.parse(data.choices[0].message.content);
+    
+    // N22 — Reparar mojibake en las 6 secciones
+    const secciones = ['seccion_0_decision', 'seccion_I_atmosfera', 'seccion_II_focos_sierra', 'seccion_III_condiciones_altiplano', 'seccion_IV_evolucion', 'seccion_V_recomendaciones_pastorales', 'seccion_VI_deslinde'];
     for (const clave of secciones) {
       if (typeof reporteJSON[clave] === 'string') {
         reporteJSON[clave] = repararMojibake(reporteJSON[clave]);
       }
     }
-
-    const reporteCompleto = {
-      id_reporte: `REP_ONDEMAND_${ahora.getTime()}`,
-      origen: origenEvento,
-      generado_por: nombreOperador,
-      es_parcial: esParcialReal,
-      fecha_dia_mexico: fechaDiaMexico,
-      hora_exacta_mexico: horaExactaMexico,
-      timestamp_iso_utc: timestampIsoUtc,
-      consenso_modelos: "GFS (EE.UU.) • ICON (Alemania) • GEM (Canadá)",
-      datos_regionales: datosRegionales,
-      aviso_smn_considerado: alertaSMN ? {
-        nivel: alertaSMN.nivel,
-        titulo: alertaSMN.titulo,
-        rango_lluvia_min_mm: alertaSMN.rango_lluvia_min_mm,
-        rango_lluvia_max_mm: alertaSMN.rango_lluvia_max_mm
-      } : null,
-      resumen_severidad: resumenSeveridad,
-      focos_criticos: focosCriticos,
-      reporte: reporteJSON
+    
+  } catch (error) {
+    console.error("❌ [GROQ] Falló la generación. Activando plantilla de respaldo:", error.message);
+    
+    // PLAN B: Plantilla estática si Groq falla (429, 500, etc.)
+    reporteJSON = {
+      seccion_0_decision: "El sistema de redacción IA está temporalmente saturado. Revise el semáforo principal para tomar decisiones.",
+      seccion_I_atmosfera: "No se pudo generar el texto dinámico por límite de la IA. El Semáforo Diocesano sigue siendo la fuente de verdad.",
+      seccion_II_focos_sierra: "Consulte las localidades en Nivel 3 y Nivel 4 en la pantalla de la consola.",
+      seccion_III_condiciones_altiplano: "Sin datos de evolución por fallo de IA.",
+      seccion_IV_evolucion: "Sin datos de perspectiva por fallo de IA.",
+      seccion_V_recomendaciones_pastorales: "Mantenga las precauciones habituales y consulte los avisos oficiales.",
+      seccion_VI_deslinde: "Las determinaciones de Protección Civil y CONAGUA prevalecen."
     };
+  }
 
-    // El backend determina SIEMPRE si el reporte es parcial.
-    // Un reporte parcial NUNCA se guarda en el Blob.
-    let guardadoEnBlob = false;
-    if (!esParcialReal) {
-      await put('reporte_diocesano_vigente.json', JSON.stringify(reporteCompleto, null, 2), {
-        access: 'public',
-        addRandomSuffix: false,
-        allowOverwrite: true,
-        token: process.env.BLOB_READ_WRITE_TOKEN
-      });
-      guardadoEnBlob = true;
-    } else {
-      console.log("[C2c] Reporte parcial. No se guarda en Blob.");
-    }
+  const reporteCompleto = {
+    id_reporte: `REP_ONDEMAND_${ahora.getTime()}`,
+    origen: origenEvento,
+    generado_por: nombreOperador,
+    es_parcial: esParcialReal,
+    fecha_dia_mexico: fechaDiaMexico,
+    hora_exacta_mexico: horaExactaMexico,
+    timestamp_iso_utc: timestampIsoUtc,
+    consenso_modelos: "GFS (EE.UU.) • ICON (Alemania) • GEM (Canadá)",
+    datos_regionales: datosRegionales,
+    aviso_smn_considerado: alertaSMN ? {
+      nivel: alertaSMN.nivel,
+      titulo: alertaSMN.titulo,
+      rango_lluvia_min_mm: alertaSMN.rango_lluvia_min_mm,
+      rango_lluvia_max_mm: alertaSMN.rango_lluvia_max_mm
+    } : null,
+    resumen_severidad: resumenSeveridad,
+    focos_criticos: focosCriticos,
+    reporte: reporteJSON
+  };
 
-    // Bitácora
-    let bitacoraHistorial = [];
-    let hashUltimo = BLOQUE_GENESIS;
-    let ultimoDictamenPrevio = null;
-
-    try {
-      const listado = await list();
-      const blobB = listado?.blobs?.find(b => b.pathname.includes('bitacora_sara.json'));
-      if (blobB) {
-        const rB = await fetch(blobB.url, { cache: 'no-store' });
-        if (rB.ok) {
-          const dB = await rB.json();
-          bitacoraHistorial = dB.bitacora || [];
-          ultimoDictamenPrevio = dB.ultimo_dictamen || null;
-          if (bitacoraHistorial.length > 0) {
-            hashUltimo = bitacoraHistorial[bitacoraHistorial.length - 1].hash_completo || BLOQUE_GENESIS;
-          }
-        }
-      }
-    } catch (e) {}
-
-    const nuevoHash = generarHashSHA256(hashUltimo, timestampIsoUtc, {
-      tipo: origenEvento,
-      fecha: fechaDiaMexico,
-      hora: horaExactaMexico,
-      operador: nombreOperador,
-      zonas_ok: datosRegionales?.zonas_ok || 0,
-      zonas_fallidas: datosRegionales?.zonas_fallidas || []
-    });
-
-    const estadoCalculado = (resumenSeveridad?.totalNivel4 || 0) > 0
-      ? "SITUACION_CRITICA"
-      : ((resumenSeveridad?.totalNivel3 || 0) > 0 ? "SITUACION_GRAVE" : "SITUACION_NORMAL");
-
-    const nuevoId = siguienteIdBitacora(bitacoraHistorial);
-
-    const entradaBitacora = {
-      id: `SARA_LOG_${nuevoId}`,
-      fecha_dia_mexico: fechaDiaMexico,
-      hora_exacta_mexico: horaExactaMexico,
-      timestamp_iso_utc: timestampIsoUtc,
-      timestamp_local: horaCorta,
-      origen_evento: origenEvento,
-      generado_por: nombreOperador,
-      estado_situacion: normalizarEstadoSituacion(estadoCalculado),
-      titulo: esParcialReal
-        ? `Reporte Diocesano Parcial (Modo Emergencia) generado por ${nombreOperador}`
-        : `Reporte Diocesano On-Demand generado por ${nombreOperador}`,
-      resumen: reporteJSON.seccion_I_atmosfera,
-      prev_hash: hashUltimo.slice(0, 16) + "...",
-      hash: nuevoHash.slice(0, 16) + "...",
-      hash_completo: nuevoHash
-    };
-
-    bitacoraHistorial.push(entradaBitacora);
-
-    if (bitacoraHistorial.length > MAX_REGISTROS_BITACORA) {
-      bitacoraHistorial = bitacoraHistorial.slice(-MAX_REGISTROS_BITACORA);
-    }
-
-    const payloadBitacora = { bitacora: bitacoraHistorial };
-    if (ultimoDictamenPrevio) {
-      payloadBitacora.ultimo_dictamen = ultimoDictamenPrevio;
-    }
-
-    await put('bitacora_sara.json', JSON.stringify(payloadBitacora), {
+  let guardadoEnBlob = false;
+  if (!esParcialReal) {
+    await put('reporte_diocesano_vigente.json', JSON.stringify(reporteCompleto, null, 2), {
       access: 'public',
       addRandomSuffix: false,
       allowOverwrite: true,
       token: process.env.BLOB_READ_WRITE_TOKEN
     });
-
-    return res.json({
-      exito: true,
-      reporte_guardado: guardadoEnBlob ? reporteCompleto : null,
-      reporte_generado: reporteCompleto,
-      guardado_en_blob: guardadoEnBlob,
-      es_parcial: esParcialReal,
-      bitacora_actualizada: bitacoraHistorial,
-      registro_bitacora: entradaBitacora
-    });
-
-  } catch (error) {
-    if (error.name === 'TimeoutError' || error.name === 'AbortError') {
-      console.error("Timeout consultando Groq después de", TIMEOUT_GROQ_MS, "ms");
-      return res.status(504).json({ error: "Timeout consultando Groq. Intente de nuevo." });
-    }
-    console.error("Fallo generando reporte On-Demand:", error);
-    return res.status(500).json({ error: "No se pudo generar ni guardar el reporte" });
+    guardadoEnBlob = true;
+  } else {
+    console.log("[C2c] Reporte parcial. No se guarda en Blob.");
   }
+
+  let bitacoraHistorial = [];
+  let hashUltimo = BLOQUE_GENESIS;
+  let ultimoDictamenPrevio = null;
+
+  try {
+    const listado = await list();
+    const blobB = listado?.blobs?.find(b => b.pathname.includes('bitacora_sara.json'));
+    if (blobB) {
+      const rB = await fetch(blobB.url, { cache: 'no-store' });
+      if (rB.ok) {
+        const dB = await rB.json();
+        bitacoraHistorial = dB.bitacora || [];
+        ultimoDictamenPrevio = dB.ultimo_dictamen || null;
+        if (bitacoraHistorial.length > 0) {
+          hashUltimo = bitacoraHistorial[bitacoraHistorial.length - 1].hash_completo || BLOQUE_GENESIS;
+        }
+      }
+    }
+  } catch (e) {}
+
+  const nuevoHash = generarHashSHA256(hashUltimo, timestampIsoUtc, {
+    tipo: origenEvento,
+    fecha: fechaDiaMexico,
+    hora: horaExactaMexico,
+    operador: nombreOperador,
+    zonas_ok: datosRegionales?.zonas_ok || 0,
+    zonas_fallidas: datosRegionales?.zonas_fallidas || []
+  });
+
+  const estadoCalculado = (resumenSeveridad?.totalNivel4 || 0) > 0
+    ? "SITUACION_CRITICA"
+    : ((resumenSeveridad?.totalNivel3 || 0) > 0 ? "SITUACION_GRAVE" : "SITUACION_NORMAL");
+
+  const nuevoId = siguienteIdBitacora(bitacoraHistorial);
+
+  const entradaBitacora = {
+    id: `SARA_LOG_${nuevoId}`,
+    fecha_dia_mexico: fechaDiaMexico,
+    hora_exacta_mexico: horaExactaMexico,
+    timestamp_iso_utc: timestampIsoUtc,
+    timestamp_local: horaCorta,
+    origen_evento: origenEvento,
+    generado_por: nombreOperador,
+    estado_situacion: normalizarEstadoSituacion(estadoCalculado),
+    titulo: esParcialReal
+      ? `Reporte Diocesano Parcial (Modo Emergencia) generado por ${nombreOperador}`
+      : `Reporte Diocesano On-Demand generado por ${nombreOperador}`,
+    resumen: reporteJSON.seccion_I_atmosfera,
+    prev_hash: hashUltimo.slice(0, 16) + "...",
+    hash: nuevoHash.slice(0, 16) + "...",
+    hash_completo: nuevoHash
+  };
+
+  bitacoraHistorial.push(entradaBitacora);
+
+  if (bitacoraHistorial.length > MAX_REGISTROS_BITACORA) {
+    bitacoraHistorial = bitacoraHistorial.slice(-MAX_REGISTROS_BITACORA);
+  }
+
+  const payloadBitacora = { bitacora: bitacoraHistorial };
+  if (ultimoDictamenPrevio) {
+    payloadBitacora.ultimo_dictamen = ultimoDictamenPrevio;
+  }
+
+  await put('bitacora_sara.json', JSON.stringify(payloadBitacora), {
+    access: 'public',
+    addRandomSuffix: false,
+    allowOverwrite: true,
+    token: process.env.BLOB_READ_WRITE_TOKEN
+  });
+
+  return res.json({
+    exito: true,
+    reporte_guardado: guardadoEnBlob ? reporteCompleto : null,
+    reporte_generado: reporteCompleto,
+    guardado_en_blob: guardadoEnBlob,
+    es_parcial: esParcialReal,
+    bitacora_actualizada: bitacoraHistorial,
+    registro_bitacora: entradaBitacora
+  });
 }
