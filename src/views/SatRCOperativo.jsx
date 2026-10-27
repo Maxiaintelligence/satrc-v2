@@ -314,10 +314,6 @@ export default function SatRCOperativo({ alCerrarSesion }) {
   };
 
   const ejecutarGeneracionReporte = async (esModoEmergencia = false) => {
-    if (!ADMIN_TOKEN) {
-      alert("Error de configuración: VITE_SARA_ONDEMAND_TOKEN no está definido. Contacte al administrador.");
-      return;
-    }
     if (!claveOperadorInput.trim()) {
       setErrorClaveOperador(true);
       return;
