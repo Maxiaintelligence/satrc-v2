@@ -19,18 +19,28 @@ export default function App() {
   const [mostrarPassword, setMostrarPassword] = useState(false);
 
   // Clave operativa para Cáritas / Operadores
-  const CLAVE_ACCESO_OPERATIVO = 'emergencia';
-
-  const intentarAccesoAlerta = (e) => {
+  const intentarAccesoAlerta = async (e) => {
     e.preventDefault();
-    if (passwordInput === CLAVE_ACCESO_OPERATIVO) {
-      setAutenticado(true);
-      setErrorPassword(false);
-    } else {
+    
+    try {
+      const res = await fetch('/api/auth-operativo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clave: passwordInput })
+      });
+
+      if (res.ok) {
+        setAutenticado(true);
+        setErrorPassword(false);
+      } else {
+        setErrorPassword(true);
+      }
+    } catch (error) {
+      console.error("Error validando clave:", error);
       setErrorPassword(true);
     }
   };
-
+  
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
       
