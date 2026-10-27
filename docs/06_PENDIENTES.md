@@ -12,10 +12,8 @@ Son problemas en producción o en el repositorio que requieren acción fuera de 
 
 | ID | Riesgo | Dónde | Acción requerida | Responsable |
 |---|---|---|---|---|
-| R-01 | Claves de operador en texto plano en el código público | `api/reporte-ondemand.js` | Rotar las claves, moverlas a variables de entorno, retirarlas del código. Las claves que quedaron en el historial de Git se consideran comprometidas. | Coordinación técnica |
-| R-02 | Token de la consola de reportes incluido en el código del navegador mediante una variable `VITE_` | `src/views/SatRCOperativo.jsx` | Mover la validación completa al servidor y retirar el token del frontend. Requiere cambio de código. | Coordinación técnica |
 | R-03 | `GET /api/sara` devuelve bitácora y evaluaciones sin autenticación | `api/sara.js` | Restringir la respuesta o exigir autenticación. Requiere cambio de código. | Coordinación técnica |
-| R-04 | Clave de acceso a la Sala Operativa en el código del frontend | `src/App.jsx` | Sustituir por autenticación en servidor. Está ligado a R-02 y a la autenticación de V3.0. | Coordinación técnica |
+
 
 **Estado de la documentación:** los valores de claves y los nombres personales fueron retirados de todos los documentos propuestos. Eso no elimina los valores del historial de Git ni del código; R-01 y R-04 siguen abiertos hasta rotarlos.
 

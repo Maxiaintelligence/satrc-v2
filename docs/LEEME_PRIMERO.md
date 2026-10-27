@@ -30,10 +30,7 @@ Detalle completo en `01_CONTEXTO.md`.
 
 Antes de cualquier cambio, revisa `06_PENDIENTES.md`, sección "Riesgos activos". Los riesgos R-01 a R-04 están abiertos y requieren rotación de claves y cambios de código:
 
-- Las claves de operador están en el código público y deben rotarse. Se trasladan a variables de entorno.
-- El token de la consola de reportes se expone en el frontend mediante una variable `VITE_`. Debe retirarse del cliente.
 - El endpoint `GET /api/sara` devuelve la bitácora completa sin autenticación.
-- La clave de acceso a la Sala Operativa está en el código del frontend.
 
 Además, hay dos riesgos de integridad de datos recién confirmados en producción (no estaban en la lista anterior):
 

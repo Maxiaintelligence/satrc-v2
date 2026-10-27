@@ -325,6 +325,18 @@ Objetivo: cerrar deuda, establecer pruebas y documentar. Sin funciones nuevas.
 - **Commits:** `d3b0c1c`.
 - **Lección:** La centralización de la lógica de escritura de la bitácora previene futuras colisiones (documentada como H-BITACORA-02 para concurrencia).
 
+### Cierre de Riesgos de Seguridad (R-01, R-02, R-04) — 27/10/2026
+
+- **Síntoma:** Credenciales y claves de acceso expuestas en el código fuente público y en el bundle del navegador.
+- **Solución:** 
+  - R-01/DEU-21: Se eliminó `USUARIOS_AUTORIZADOS` de `api/reporte-ondemand.js` y se reemplazó por la variable de entorno `SATRC_OPERADORES_JSON` (mapeo de clave a rol).
+  - R-02: Se eliminó el uso de `VITE_SARA_ONDEMAND_TOKEN` en el frontend y la validación por `x-admin-token` en el backend.
+  - R-04: Se eliminó la clave en texto plano de `App.jsx` y se creó el endpoint `api/auth-operativo.js` que valida contra la variable secreta `CLAVE_SALA_OPERATIVA`.
+- **Verificación:** 
+  - `npm run build` y `npm test` (164/164) en verde.
+  - En producción: login de Sala Operativa, generación de reportes on-demand y actualización de bitácora funcionando con las nuevas variables de Vercel.
+- **Commits:** `0110708`, `d3b0c1c` (parcial), y el commit de auth-operativo.
+
 ## 6. Lecciones consolidadas
 
 | ID | Lección | Origen |
@@ -354,3 +366,5 @@ El handover de cada sesión registraba el estado, los pendientes y cómo retomar
 - Los hashes de Etapa 5 y de los cierres de Etapa 4 se verificaron con `git log` el 22/10/2026.
 - Los marcados como "pendientes de confirmar" no aparecieron en las 30 entradas revisadas. Verificar con `git log --oneline | findstr <hash>` antes de citarlos.
 - Los hashes marcados con `<hash>` en versiones anteriores no están disponibles y no se consignan aquí.
+
+
