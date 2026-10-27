@@ -93,7 +93,7 @@ export function evaluarConvectivo(localidad, serieHoraria) {
   }
 
   // Evaluación de downburst (prioritaria si hay aire seco en capas medias)
-  if (potencialDesplome > 100 && shearMax > 15) {
+  if (capeMax > 1000 && potencialDesplome > 100 && shearMax > 15) {
     nivel = 3;
     titulo = "Alerta por Rachas Descendentes (Downburst)";
     causa = `Potencial de desplome de ${potencialDesplome.toFixed(0)} (CAPE ${capeMax.toFixed(0)} con humedad 700hPa del ${humedadMin.toFixed(0)}%). Riesgo de vientos destructivos.`;

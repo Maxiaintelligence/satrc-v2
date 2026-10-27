@@ -62,8 +62,8 @@ export function evaluarLocalidad(localidad, serieHoraria, contexto = {}) {
     if (h.temperatura_c !== undefined && h.temperatura_c < tempMinima) {
       tempMinima = h.temperatura_c;
     }
-    if (h.wind_speed_10m && h.wind_speed_10m > vientoSostenidoMax) {
-      vientoSostenidoMax = h.wind_speed_10m;
+    if (h.viento_kmh && h.viento_kmh > vientoSostenidoMax) {
+      vientoSostenidoMax = h.viento_kmh;
     }
     if (h.rafagas_kmh && h.rafagas_kmh > rafagaMaxima) {
       rafagaMaxima = h.rafagas_kmh;

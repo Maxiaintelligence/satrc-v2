@@ -115,5 +115,31 @@ describe('convectiveEvaluator.js', () => {
     // No debe haber NaN ni Infinity por culpa de GEM null
     expect(res.datos_tecnicos).toBeDefined();
   });
+
+    describe('H-CONV-03 — Calibración de Downburst (CAPE mínimo)', () => {
+    it('No debe disparar Downburst con CAPE bajo (caso Apan: CAPE 560)', () => {
+      const loc = mockLocalidad(2400);
+      // CAPE 560, humedad 58% (potencial desplome 235), shear 20 km/h
+      const serie = mockSerie({ 
+        cape: 560, humedad700: 58, lluvia: 0.1, viento700: 30, viento10: 10 
+      });
+      const res = evaluarConvectivo(loc, serie);
+      
+      // Al no tener energía suficiente (CAPE < 1000), no debe ser N3
+      expect(res.nivel_alerta).toBeLessThan(3);
+      expect(res.vector_dominante).not.toBe('DOWNBURST');
+    });
+
+    it('Sí debe disparar Downburst con CAPE alto (1500) y aire seco', () => {
+      const loc = mockLocalidad(2400);
+      const serie = mockSerie({ 
+        cape: 1500, humedad700: 30, lluvia: 5, viento700: 40, viento10: 10 
+      });
+      const res = evaluarConvectivo(loc, serie);
+      
+      expect(res.nivel_alerta).toBe(3);
+      expect(res.vector_dominante).toBe('DOWNBURST');
+    });
+  });
   
 });

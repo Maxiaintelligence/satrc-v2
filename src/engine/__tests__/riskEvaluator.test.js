@@ -332,4 +332,29 @@ describe('riskEvaluator — Las 6 reglas del motor', () => {
       expect(res.impactoSistemico.lluviaEvento24hMm).toBeGreaterThanOrEqual(75);
     });
   });
+
+  describe('H-MOTOR-07 — Lectura del viento en Regla 1', () => {
+    it('Altiplano con viento sostenido >= 40 km/h debe desactivar la protección', () => {
+      const localidad = mockLocalidad({
+        zona_id: 'ACT',
+        topografia: { altitud_msnm: 2000, pendiente_max_deg: 5, relieve: 'MESETA', twi: 8 }
+      });
+      
+      const serie = mockSerie({ horas: 192, lluvia_mm: 0.2, temperatura_c: 15 }); 
+      
+      // Simulamos la serie REAL (consenso solo expone 'viento_kmh', NO 'wind_speed_10m')
+      serie.forEach(h => { 
+        h.viento_kmh = 45; 
+        delete h.wind_speed_10m; // <-- Forzamos el bug (el motor actual leerá 0)
+      });
+
+      const res = evaluarLocalidad(localidad, serie, {});
+      
+      // Debe dar N1 (Regla 6 no aplica), pero el diagnóstico NO debe mencionar sombra orográfica
+      expect(res.nivel_alerta).toBe(1);
+      expect(res.diagnostico.causa).not.toMatch(/sombra orográfica/i);
+      expect(res.impactoSistemico.vientoSostenidoKmh).toBe(45);
+    });
+  });
+
 });
