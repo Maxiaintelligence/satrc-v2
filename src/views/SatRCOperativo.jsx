@@ -169,16 +169,11 @@ export default function SatRCOperativo({ alCerrarSesion }) {
   }, []);
 
   const ejecutarEvaluacionRealEnVivo = async (alertaParaEvaluar = null) => {
-    // H-MOTOR-04 — Fallback con 14 nodos regionales (uno por zona).
-    // Antes usaba solo el nodo Huauchinango para las 405 localidades (bug ADR-001 reintroducido).
-    // Ahora replica la lógica del runner: 1 fetch por zona, 1 serie por zona, evaluación localidad a localidad.
-
     const nodosRegionales = seleccionarNodosRegionales();
     const zonaIds = Object.keys(nodosRegionales);
 
-    // Construir 14 series en lotes de 4 (misma lógica que reportesRegionales.js)
     const TAMANO_LOTE = 4;
-    const DELAY_ENTRE_LOTES_MS = 500;
+    const DELAY_ENTRE_LOTES_MS = 100; // Optimizado para cargar más rápido
 
     const seriesPorZona = {};
 
@@ -193,9 +188,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
             const serie = generarConsensoDeterminista(resM.datos_horarios);
             return { zonaId, serie, ok: true };
           }
-        } catch (e) {
-          // Zona falla silenciosamente, queda sin datos
-        }
+        } catch (e) {}
         return { zonaId, serie: [], ok: false };
       });
 
@@ -207,13 +200,11 @@ export default function SatRCOperativo({ alCerrarSesion }) {
         }
       });
 
-      // Delay entre lotes (excepto después del último)
       if (i + TAMANO_LOTE < zonaIds.length) {
         await new Promise(r => setTimeout(r, DELAY_ENTRE_LOTES_MS));
       }
     }
 
-    // Evaluar cada localidad con la serie de su zona
     const resEvaluadas = todasLocalidades.map(loc => {
       const zonaId = loc.zona_id;
       const serieZona = seriesPorZona[zonaId] || [];
@@ -323,7 +314,6 @@ export default function SatRCOperativo({ alCerrarSesion }) {
     setGenerandoOnDemand(true);
     setModalReporteOnDemandAbierto(true);
 
-    // Invalidar caché si es un reintento (segunda generación consecutiva)
     if (esModoEmergencia) {
       invalidarCache();
     }
@@ -346,7 +336,6 @@ export default function SatRCOperativo({ alCerrarSesion }) {
       causa: c.diagnostico?.titulo,
       pendiente: `${c.geografia?.pendienteMax}°`,
       acceso: c.impactoSistemico?.accesoVial,
-      // H5.4 — Inyección multivectorial para SARA
       vector_dominante: c.vector_dominante,
       tipo_amenaza: c.tipo_amenaza,
       niveles_por_vector: c.niveles_por_vector,
@@ -369,8 +358,6 @@ export default function SatRCOperativo({ alCerrarSesion }) {
         }
       : null;
 
-    // C2c — Construir los 14 resúmenes regionales
-    // N30 — Reintento automático hasta 2 veces si faltan zonas
     let datosRegionales = null;
     const MAX_INTENTOS = 2;
     let intentoActual = 0;
@@ -394,7 +381,6 @@ export default function SatRCOperativo({ alCerrarSesion }) {
         break;
       }
 
-      // Si es la primera pasada y faltan zonas, invalidar caché y reintentar
       if (!esModoEmergencia && datosRegionales.zonas_ok < datosRegionales.zonas_totales && intentoActual < MAX_INTENTOS) {
         console.log(`[C2c] Cobertura insuficiente (${datosRegionales.zonas_ok}/${datosRegionales.zonas_totales}). Reintentando...`);
         invalidarCache();
@@ -402,7 +388,6 @@ export default function SatRCOperativo({ alCerrarSesion }) {
         continue;
       }
 
-      // Si ya es el último intento o el modo emergencia, aceptar el resultado
       break;
     }
 
@@ -412,14 +397,12 @@ export default function SatRCOperativo({ alCerrarSesion }) {
       return;
     }
 
-    // Caso límite: ninguna zona respondió
     if (datosRegionales.zonas_ok === 0) {
       alert("No se pudo conectar con Open-Meteo. Ninguna zona reportó datos. Verifique su conexión a internet e intente más tarde.");
       setGenerandoOnDemand(false);
       return;
     }
 
-    // Si es modo normal y aún faltan zonas tras los 2 intentos, mostrar error y opción de modo emergencia
     if (!esModoEmergencia && datosRegionales.zonas_ok < datosRegionales.zonas_totales) {
       setZonasFallidasTemporal(datosRegionales.zonas_fallidas);
       setGenerandoOnDemand(false);
@@ -442,6 +425,7 @@ export default function SatRCOperativo({ alCerrarSesion }) {
         })
       });
 
+      // BLINDAJE: Si Vercel da error 500 por timeout, no intentamos leerlo como JSON
       if (res.ok) {
         let data;
         try {
@@ -462,12 +446,15 @@ export default function SatRCOperativo({ alCerrarSesion }) {
         setModalClaveOperadorAbierto(true);
         setModalReporteOnDemandAbierto(false);
       } else {
-        const err = await res.json();
-        alert(`Error: ${err.error || 'No se pudo generar el reporte'}`);
+        const errorTexto = await res.text();
+        console.error("Error del servidor:", errorTexto);
+        alert(`Error del servidor (${res.status}): Es probable que el proceso haya tardado más de 10s. Intente de nuevo.`);
+        setModalReporteOnDemandAbierto(false);
       }
     } catch (e) {
       console.error("Error generando reporte On-Demand:", e);
       alert("Error de red. Verifique su conexión a internet.");
+      setModalReporteOnDemandAbierto(false);
     }
     setGenerandoOnDemand(false);
   };
@@ -843,7 +830,7 @@ Documento oficial emitido para párrocos, brigadistas y autoridades de auxilio.
         generandoOnDemand={generandoOnDemand}
         zonasFallidasTemporal={zonasFallidasTemporal}
         onGenerarReporteParcial={generarReporteParcial}
-        onCompartirWhatsApp={compartirPorWhatsApp}
+        onCompartirWhatsApp={compartirWhatsApp}
         onDescargar={descargarDocumentoOficial}
       />
 

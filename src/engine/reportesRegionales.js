@@ -28,8 +28,8 @@ let cacheSeries = {
 };
 
 const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutos
-const TIMEOUT_FETCH_MS = 20000;      // 20 segundos por fetch
-const ESPERA_REINTENTO_MS = 3000;    // 3 segundos entre reintentos
+const TIMEOUT_FETCH_MS = 10000;      // 10 segundos máximo por fetch
+const ESPERA_REINTENTO_MS = 1000;    // 1 segundo entre reintentos
 const STAGGER_MS = 200;              // 200 ms entre cada fetch
 
 /**
@@ -147,7 +147,7 @@ export async function construirResumenesRegionales() {
   // Procesar en lotes de 4 para no saturar las conexiones del navegador.
   // El navegador limita a ~6 conexiones simultáneas por dominio.
   const TAMANO_LOTE = 4;
-  const DELAY_ENTRE_LOTES_MS = 500;
+  const DELAY_ENTRE_LOTES_MS = 100;
 
   const resultados = [];
 
