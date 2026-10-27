@@ -247,7 +247,7 @@ Valores posibles: `FRIO_EXTREMO`, `HELADA_AGRICOLA`, `NEVADA`, `CALOR_EXTREMO`, 
 | Regla | Condición | Nivel | Vector |
 |---|---|---|---|
 | Granizo | CAPE > 1 000 y espesor de fusión < 1 000 m y lluvia > 5 mm; con CAPE > 1 500 | 3 | GRANIZO |
-| Downburst | Potencial de desplome > 100 y cizalladura > 15 km/h | 3 | DOWNBURST |
+| Downburst | CAPE > 1000 y potencial de desplome > 100 y cizalladura > 15 km/h | 3 | `DOWNBURST` |
 | Supercélula | Potencial de desplome > 150 y cizalladura > 25 km/h y CAPE > 2 500 | 4 | SUPERCELULA |
 | Tormentas dispersas | Ninguna de las anteriores y CAPE > 800 | 2 | CONVECTIVO |
 | Estable | Ninguna de las anteriores | 1 | SIN_AMENAZA |
@@ -367,12 +367,14 @@ Cada campo nuevo que se publica debe tener una prueba que verifique su valor y s
 |---|---|---|
 | **H-CONV-01** | Unidades erróneas en la especificación convectiva (§7.3) | Documental |
 | **H-CONV-02** | Cizalladura escalar en lugar de vectorial (§7.1) | Abierta; requiere expandir el contrato del consenso |
+| H-CONV-03 | Falso positivo de Downburst con CAPE bajo (§7.2) | Cerrado (27/10/2026) |
 | **H-MOTOR-07** | Regla 1 del Altiplano lee `wind_speed_10m` en lugar de `viento_kmh` (§2.1) | Abierta |
 | **H-ORQ-07** | Coeficientes γ y mapeo del orquestador distintos de la especificación (§9.2, §9.3) | Documental; el código es la referencia |
 | **H-ORQ-08** | `determinarVectorDominante` con `indexOf` en `sort` (§9.4) | Abierta, cosmética |
 | **H-MOTOR-01** | Gemelo del runner distinto del canónico (§3) | Abierta, V3.0 |
 | **H-MOTOR-05** | Sobreclasificación de N2 en zonas húmedas (XIC, HUA, ZAC) | Abierta, V3.0 |
 | **H-MOTOR-03** | El reporte diario exige 216 h; el runner usa 192 h | Abierta |
+
 
 **Cerrados en esta versión:** H-TERM-01 (commit `343f80d`), H-VIENTO-01 (documental).
 

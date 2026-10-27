@@ -42,7 +42,6 @@ Severidad: 🔴 crítica · 🟠 alta · 🟡 media · 🟢 baja. El esfuerzo es
 | H-ORQ-07 | Coeficientes γ y mapeo a nivel del orquestador distintos de la especificación original. El código es la referencia. | 🟡 | Bajo | Documental | `03` §9 |
 | H-CONV-01 | Unidades erróneas en la especificación convectiva (umbrales de 50 000 a 150 000). El código usa 100 y 150. | 🟢 | Bajo | Documental | `03` §7.3 |
 | H-CONV-02 | `convectiveEvaluator.js` mide `shearMax` como diferencia escalar de velocidades, sin dirección. Falsos negativos de downburst/supercélula posibles con cambio de dirección. Corregir requiere agregar `wind_direction_10m` y `wind_direction_700hPa` al fetcher y al consenso. | 🟡 | Alto | Abierta | `03` §7.1 |
-| H-MOTOR-07 | `riskEvaluator.js` lee `h.wind_speed_10m` en la Regla 1 (protección del Altiplano), pero el consenso expone el campo como `viento_kmh`. `vientoSostenidoMax` siempre queda en 0 y la condición `viento < 40 km/h` de la Regla 1 siempre se cumple trivialmente. La protección del Altiplano es más laxa de lo diseñado. | 🟡 | Bajo | Abierta | `03` §2.1 |
 | H-BITACORA-02 | Concurrencia entre los cuatro escritores de bitácora (`ejecutar_sara_autonomo.mjs`, `reporteDiario.mjs`, `api/reporte-ondemand.js` y `api/sara.js`). Si dos corren al mismo tiempo, el último en hacer `put` pisa la cadena del otro. Requiere un mecanismo de bloqueo optimista o cola (V3.0). | 🟡 | Alto | Abierta | Análisis de H-BITACORA-01 |
 | DEU-29 | Parser SMN duplicado entre `api/smn.js` y `scripts/ejecutar_sara_autonomo.mjs`. ~60 líneas idénticas de scraping y clasificación de fenómenos. Viola DRY (ADR-004). Relacionado con H-SMN-WS. | 🟡 | Medio | Abierta | `api/smn.js` |
 | H-MOTOR-05 | Sobreclasificación de N2 en zonas húmedas (XIC 61.9 %, HUA 52.4 %, ZAC 45.2 %). Requiere re-auditoría de 90 días. | 🟡 | Alto | Abierta, V3.0 | Etapa 3 |
@@ -140,6 +139,7 @@ Los siguientes se cerraron y su detalle está en `04_HISTORIAL.md`. No se mantie
 - **H-VIENTO-01**: cerrado como documental. La especificación original incluía suavizado de 3 h y factor de rugosidad; el código nunca los implementó y el principio "el código es la referencia" (DEC-010) aplica.
 - **H-SMN (falso positivo por comunicados de prensa)**: corregido; sigue abierto el riesgo de H-SMN-WS.
 - **H-BITACORA-01 y H-REPORTE-01**: cerrados el 24/10/2026 (commit `d3b0c1c`). Se centralizó la creación de entradas de bitácora en `bitacora.js`, se eliminó el `put` duplicado del reporte diario, y se protegió el reporte vigente contra sobrescrituras parciales.
+- **H-MOTOR-07 y H-CONV-03**: cerrados el 27/10/2026 (commit `d248fdb`). Se corrigió la lectura del viento en la Regla 1 y se agregó un mínimo de CAPE (1000 J/kg) para Downburst. Esto eliminó 29 falsos positivos en el Altiplano (Apan y Almoloya pasaron de N3 a N1/N2).
 
 ---
 

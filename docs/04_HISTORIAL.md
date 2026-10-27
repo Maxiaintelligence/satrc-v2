@@ -337,6 +337,16 @@ Objetivo: cerrar deuda, establecer pruebas y documentar. Sin funciones nuevas.
   - En producción: login de Sala Operativa, generación de reportes on-demand y actualización de bitácora funcionando con las nuevas variables de Vercel.
 - **Commits:** `0110708`, `d3b0c1c` (parcial), y el commit de auth-operativo.
 
+### Cierre de H-MOTOR-07 y H-CONV-03 — 27/10/2026
+
+- **Síntoma H-MOTOR-07:** El motor hidrológico leía `wind_speed_10m` en lugar de `viento_kmh`, por lo que la Regla 1 (protección del Altiplano) nunca detectaba vientos > 40 km/h.
+- **Síntoma H-CONV-03:** El motor convectivo disparaba alertas N3 por "Downburst" con valores de CAPE muy bajos (ej. 560 J/kg), generando falsos positivos en localidades como Apan y Almoloya que aparecían en la web con alertas de "vientos destructivos".
+- **Solución:** Se cambió el campo de viento en `riskEvaluator.js` y se agregó la condición `capeMax > 1000` para el downburst en `convectiveEvaluator.js`. Se agregaron 3 tests de regresión.
+- **Verificación:** 
+  - 167 tests en verde.
+  - En producción: Apan bajó de N3 a N1, Almoloya de N3 a N2 (Vigilancia normal por CAPE 860). El total de N2 bajó de 246 a 217 y los N1 subieron de 159 a 188.
+- **Commits:** `d248fdb`.
+
 ## 6. Lecciones consolidadas
 
 | ID | Lección | Origen |
