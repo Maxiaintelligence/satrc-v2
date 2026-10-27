@@ -9,17 +9,19 @@ const MAX_REGISTROS_BITACORA = 500;
 const TIMEOUT_GROQ_MS = 30000;
 const REINTENTO_VENTANA_MS = 30 * 60 * 1000; // 30 minutos
 
-// ============================================================
-// MAPA DE USUARIOS AUTORIZADOS
-// Añadir/eliminar usuarios: editar este objeto.
-// Formato: 'clave': 'Nombre completo para bitácora'
-// ============================================================
-const USUARIOS_AUTORIZADOS = {
-  'Antonio2026': 'Ing. Antonio G. Madrigal',
-  'Roberto2026': 'Padre Roberto López Medina',
-  'Omar2026':    'Padre Omar Martínez Vázquez',
-  'Obispo2026':  'Mons. "Oscar Roberto Domínguez C."'
-};
+// R-01 / DEU-21: Claves y nombres movidos a variables de entorno
+// El formato esperado en SATRC_OPERADORES_JSON es un string JSON:
+// {"clave1":"Rol 1","clave2":"Rol 2"}
+let USUARIOS_AUTORIZADOS = {};
+try {
+  if (process.env.SATRC_OPERADORES_JSON) {
+    USUARIOS_AUTORIZADOS = JSON.parse(process.env.SATRC_OPERADORES_JSON);
+  } else {
+    console.error("[R-01] Falta configurar SATRC_OPERADORES_JSON en Vercel.");
+  }
+} catch (e) {
+  console.error("[R-01] Error parseando SATRC_OPERADORES_JSON:", e.message);
+}
 
 function generarHashSHA256(prevHash, timestamp, datos) {
   return crypto.createHash('sha256')
@@ -73,8 +75,13 @@ function normalizarAlertaSMN(alertaRaw) {
 
 function tokenConsolaValido(req) {
   const esperado = process.env.SARA_ONDEMAND_TOKEN;
+  // R-02: Si no hay token configurado en el backend, permitimos el paso 
+  // (la seguridad recae en la clave de operador x-user-key).
+  if (!esperado) return true; 
+  
   const recibido = req.headers['x-admin-token'];
-  if (!esperado || typeof recibido !== 'string' || recibido.length === 0) return false;
+  if (typeof recibido !== 'string' || recibido.length === 0) return false;
+  
   const a = Buffer.from(recibido);
   const b = Buffer.from(esperado);
   if (a.length !== b.length) return false;

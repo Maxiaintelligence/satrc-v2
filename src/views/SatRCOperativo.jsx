@@ -135,8 +135,6 @@ export default function SatRCOperativo({ alCerrarSesion }) {
   const [errorClaveOperador, setErrorClaveOperador] = useState(false);
   const [zonasFallidasTemporal, setZonasFallidasTemporal] = useState(null);
   
-  const ADMIN_TOKEN = import.meta.env.VITE_SARA_ONDEMAND_TOKEN || "";
-
   const alertaSMNRef = useRef(null);
   useEffect(() => {
     alertaSMNRef.current = alertaSMN;
@@ -437,7 +435,6 @@ export default function SatRCOperativo({ alCerrarSesion }) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-admin-token': ADMIN_TOKEN,
           'x-user-key': claveOperadorInput
         },
         body: JSON.stringify({
