@@ -6,10 +6,9 @@ import { REGLAS_MULTIVECTOR } from '../src/lib/compartido/promptsMultivector.js'
 
 const BLOQUE_GENESIS = "0000000000000000000000000000000000000000000000000000000000000000";
 const MAX_REGISTROS_BITACORA = 500;
-const TIMEOUT_GROQ_MS = 30000;
-const REINTENTO_VENTANA_MS = 30 * 60 * 1000; // 30 minutos
+const TIMEOUT_GROQ_MS = 8000; // Bajado a 8s para evitar Timeout de Vercel (10s)
+const REINTENTO_VENTANA_MS = 30 * 60 * 1000;
 
-// R-01 / DEU-21: Claves y nombres movidos a variables de entorno
 let USUARIOS_AUTORIZADOS = {};
 try {
   if (process.env.SATRC_OPERADORES_JSON) {
@@ -73,7 +72,6 @@ function normalizarAlertaSMN(alertaRaw) {
 
 function tokenConsolaValido(req) {
   const esperado = process.env.SARA_ONDEMAND_TOKEN;
-  // R-02: Si no hay token configurado en el backend, permitimos el paso 
   if (!esperado) return true; 
   
   const recibido = req.headers['x-admin-token'];
@@ -108,25 +106,9 @@ export default async function handler(req, res) {
   }
 
   const ahora = new Date();
-  const fechaDiaMexico = ahora.toLocaleDateString('es-MX', {
-    timeZone: 'America/Mexico_City',
-    day: '2-digit',
-    month: 'long',
-    year: 'numeric'
-  });
-  const horaExactaMexico = ahora.toLocaleTimeString('es-MX', {
-    timeZone: 'America/Mexico_City',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: true
-  });
-  const horaCorta = ahora.toLocaleTimeString('es-MX', {
-    timeZone: 'America/Mexico_City',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: true
-  });
+  const fechaDiaMexico = ahora.toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City', day: '2-digit', month: 'long', year: 'numeric' });
+  const horaExactaMexico = ahora.toLocaleTimeString('es-MX', { timeZone: 'America/Mexico_City', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+  const horaCorta = ahora.toLocaleTimeString('es-MX', { timeZone: 'America/Mexico_City', hour: '2-digit', minute: '2-digit', hour12: true });
   const timestampIsoUtc = ahora.toISOString();
 
   const {
@@ -145,14 +127,18 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "Falta configurar GROQ_API_KEY en Vercel" });
   }
 
-  // OPTIMIZACIÓN: Hacemos un solo list() para ahorrar tiempo
+  // OPTIMIZACIÓN H-VERCEL-01: Búsqueda paralela
   let reporteVigente = null;
   let blobBitacora = null;
   
   try {
-    const listado = await list();
-    const blobRep = listado?.blobs?.find(b => b.pathname.includes('reporte_diocesano_vigente.json'));
-    blobBitacora = listado?.blobs?.find(b => b.pathname.includes('bitacora_sara.json'));
+    const [listadoRep, listadoBit] = await Promise.all([
+      list({ prefix: 'reporte_diocesano_vigente.json' }),
+      list({ prefix: 'bitacora_sara.json' })
+    ]);
+    
+    const blobRep = listadoRep?.blobs?.[0];
+    blobBitacora = listadoBit?.blobs?.[0];
 
     if (blobRep) {
       const rR = await fetch(blobRep.url, { cache: 'no-store' });
@@ -176,12 +162,8 @@ export default async function handler(req, res) {
 
   let bloqueAvisoSMN;
   if (alertaSMN) {
-    const estados = alertaSMN.estados_afectados.length > 0
-      ? alertaSMN.estados_afectados.join(', ')
-      : 'Sin estados especificados';
-    const rangoLluvia = (alertaSMN.rango_lluvia_min_mm !== null && alertaSMN.rango_lluvia_max_mm !== null)
-      ? `${alertaSMN.rango_lluvia_min_mm} a ${alertaSMN.rango_lluvia_max_mm} mm`
-      : 'rango no especificado';
+    const estados = alertaSMN.estados_afectados.length > 0 ? alertaSMN.estados_afectados.join(', ') : 'Sin estados especificados';
+    const rangoLluvia = (alertaSMN.rango_lluvia_min_mm !== null && alertaSMN.rango_lluvia_max_mm !== null) ? `${alertaSMN.rango_lluvia_min_mm} a ${alertaSMN.rango_lluvia_max_mm} mm` : 'rango no especificado';
 
     bloqueAvisoSMN =
       `AVISO OFICIAL VIGENTE (CONAGUA/SMN) — Nivel ${alertaSMN.nivel} (${alertaSMN.severidad})\n` +
@@ -196,51 +178,24 @@ export default async function handler(req, res) {
 
   const bloqueRegional = construirBloqueRegional(datosRegionales);
 
-  const systemPrompt = `Eres SARA (Sistema de Alerta y Respuesta Automatizada), Oficial Meteoróloga de Cáritas Pastoral Social en la Arquidiócesis de Tulancingo (Hidalgo, Sierra Norte de Puebla y Veracruz).
-Tu misión es redactar el "REPORTE OPERATIVO DE SITUACIÓN METEOROLÓGICA" para brigadistas y coordinadores pastorales.
-Voz: Meteoróloga profesional de montaña, rigurosa, serena, objetiva y pastoral.
-Audiencia: Párrocos, brigadistas y coordinadores diocesanos que NO son meteorólogos. El reporte debe ser claro, accionable y útil para tomar decisiones en menos de 1 minuto.
-
-FILOSOFÍA DEL REPORTE:
-- No describe el tiempo, orienta decisiones.
-- No enumera datos, sintetiza peligros.
-- No usa claves técnicas, usa nombres reconocibles.
-- No inventa información, traduce la información real a consecuencias operativas.
-
-REGLAS OBLIGATORIAS:
-1. USA NOMBRES RECONOCIBLES. Refiérete a las zonas por su nombre común (Altiplano Tula-Actopan, Pachuca Norte, Tulancingo) o por el municipio del nodo. NUNCA uses claves técnicas (ACT, APN, PMN, PMS, TIZ, HUA, etc.) ni el formato [XXX].
-2. LA SECCIÓN 0 ES LA MÁS IMPORTANTE. Debe contener la DECISIÓN OPERATIVA del día: qué debe hacer hoy la red de brigadas, en qué zonas y con qué prioridad. Máximo 3 líneas. Estructura: "[Fenómeno principal] en [zonas]. Acción: [instrucción concreta]."
-3. LA SECCIÓN I DEBE SER SÍNTESIS, NO CATÁLOGO. Menciona SOLO las 2-3 zonas con mayor actividad. Agrupa el resto en una sola frase ("las demás zonas permanecen en condiciones normales"). NO enumeres las 14 zonas. Al inicio de la sección I, destaca las 3 métricas más relevantes del día (ej. racha máxima, lluvia acumulada, temperatura extrema).
-4. LA SECCIÓN II ES "ZONAS QUE REQUIEREN ATENCIÓN". Para las 3 zonas más críticas del día, incluye: (a) zona, (b) dato reportado, (c) qué hacer. Si hay N3/N4, esas van primero. Si NO hay N3/N4, usa las zonas con mayor número de localidades en N2. NUNCA digas "no hay localidades bajo tensión" sin más: si no hay N3/N4, di "Hoy no hay localidades en N3-N4. Las zonas con mayor vigilancia son: [lista]".
-5. LA SECCIÓN III ES EVOLUCIÓN, NO COMPARATIVA. Describe qué cambió respecto a AYER. ¿Qué zonas empeoraron? ¿Qué zonas mejoraron? ¿Qué se mantiene igual? NO compares Altiplano vs Sierra. NO uses el término "Altiplano en calma".
-6. LA SECCIÓN IV ES PERSPECTIVA + AVISO OFICIAL. Primera parte: evolución esperada en las próximas 12-24h. Segunda parte: aviso SMN vigente (menciónalo si existe, o declara "sin aviso extraordinario"). Ambas partes en el mismo párrafo.
-7. LA SECCIÓN V ES LISTA DE VERIFICACIÓN. Estructura las recomendaciones por MOMENTO, no por zona: (a) Antes de salir, (b) Durante la actividad, (c) Si empeora, (d) Para reanudar. NO repitas recomendaciones genéricas ("mantener vigilancia", "verificar drenajes"). Traduce datos a consecuencias: si hay ráfagas de 52 km/h, di "revisar techumbres y estructuras ligeras".
-8. LA SECCIÓN VI ES AVISO INSTITUCIONAL. Texto formal breve de subordinación a Protección Civil y CONAGUA.
-9. TRADUCE NIVELES A DECISIONES OPERATIVAS. Cuando menciones el nivel de una zona, aclara qué significa para una brigada: N1 = continuar con actividades normales; N2 = reforzar precauciones; N3 = restringir actividades específicas; N4 = suspender actividades expuestas.
-10. CLASIFICACIÓN DE VIENTO (crítico): No describas como "fuertes" las ráfagas por debajo de 60 km/h. Usa esta escala explícita:
-   - Ráfagas < 40 km/h: suaves, sin mención especial.
-   - Ráfagas 40-59 km/h: moderadas, requieren precaución en actividades expuestas.
-   - Ráfagas ≥ 60 km/h: fuertes, requieren restricción de actividades.
-   Algunas zonas del territorio tienen viento estructuralmente más fuerte por su altitud (Atotonilco-Sierra de Amajac a 2,700 msnm, Pachuca Metropolitana Norte a 2,400 msnm). Si sus ráfagas están por debajo de 60 km/h, descríbelas como "moderadas para esa zona", no como "fuertes".
-11. ANTI-ALUCINACIÓN (crítico): usa EXCLUSIVAMENTE los datos del bloque "DATOS REGIONALES" y del "AVISO OFICIAL". PROHIBIDO mencionar sistemas sinópticos específicos (frentes fríos, ciclones, vaguadas) si no están explícitos en los datos.
-12. COHERENCIA INTER-SECCIONES. Antes de responder, verifica que ninguna sección contradiga a otra. Ejemplo: si en la sección I mencionas ráfagas de 41 km/h, no puedes decir en la sección IV "sin ráfagas extremas".
-12.bis. COHERENCIA SECCIÓN 0 ↔ SECCIÓN II (crítico). Las zonas mencionadas en la sección 0 (Decisión Operativa) deben ser EXACTAMENTE las mismas que las listadas en la sección II (Zonas que Requieren Atención). No puede haber divergencia entre ambas secciones. Si la sección 0 menciona 3 zonas, la sección II debe listar esas 3 zonas (ni más ni menos).
-13. VOCABULARIO: usa "localidades" (no "municipios", no "comunidades", no "pueblos") al referirte a los conteos del semáforo.
-14. Si el bloque "DATOS REGIONALES" menciona ZONAS SIN DATOS, decláralo explícitamente en la sección I.
-15. FORMATO CON VIÑETAS: usa viñetas en las secciones 0, II, III y V. No escribas párrafos densos.
-${REGLAS_MULTIVECTOR}
-16. Responde ÚNICAMENTE un objeto JSON con las 7 secciones exactas. Cada sección debe tener un máximo de 5-7 líneas. Si una sección no tiene contenido relevante, escribe una frase breve en lugar de rellenar.
+  const systemPrompt = `Eres SARA (Sistema de Alerta y Respuesta Automatizada), Oficial Meteoróloga de Cáritas Pastoral Social en la Arquidiócesis de Tulancingo.
+FILOSOFÍA: No describe el tiempo, orienta decisiones. No usa claves técnicas, usa nombres reconocibles.
+REGLAS:
+1. SECCIÓN 0: Decisión operativa. Máximo 3 líneas.
+2. SECCIÓN I: Síntesis de 2-3 zonas activas.
+3. SECCIÓN II: Zonas que requieren atención. (a) zona, (b) dato, (c) qué hacer.
+4. SECCIÓN III: Evolución respecto a ayer.
+5. SECCIÓN IV: Perspectiva 12-24h + aviso SMN.
+6. SECCIÓN V: Lista de verificación por momento.
+7. SECCIÓN VI: Aviso institucional.
+9. NIVELES: N1 = continuar; N2 = reforzar precauciones; N3 = restringir actividades específicas; N4 = suspender actividades expuestas.
+10. VIENTO: < 40 km/h suaves; 40-59 moderadas; ≥ 60 fuertes.
+11. ANTI-ALUCINACIÓN: usa EXCLUSIVAMENTE los datos reales.
 17. CONTROL ESTRICTO DE EMERGENCIAS: Si Nivel 4 = 0 y Nivel 3 = 0, BAJO NINGUNA CIRCUNSTANCIA uses "suspender actividades", "evacuar" o "emergencia". Usa lenguaje de precaución y vigilancia.
 
-{
-  "seccion_0_decision": "DECISIÓN OPERATIVA del día: fenómeno principal, zonas afectadas, acción inmediata. Máximo 3 líneas.",
-  "seccion_I_atmosfera": "Síntesis de 2-3 zonas activas + agrupación del resto. Al inicio, 3 métricas destacadas del día.",
-  "seccion_II_focos_sierra": "Zonas que requieren atención: (a) zona, (b) dato, (c) qué hacer. Solo las 3 más críticas. Si no hay N3-N4, listar las zonas con mayor N2.",
-  "seccion_III_condiciones_altiplano": "Evolución respecto a ayer: qué empeoró, qué mejoró, qué se mantiene igual. Con viñetas.",
-  "seccion_IV_evolucion": "Perspectiva 12-24h + aviso SMN vigente (o declaración de sin aviso). Máximo 4 líneas.",
-  "seccion_V_recomendaciones_pastorales": "Lista de verificación por momento: (a) Antes de salir, (b) Durante, (c) Si empeora, (d) Para reanudar. Con viñetas.",
-  "seccion_VI_deslinde": "Texto formal breve de subordinación a Protección Civil y CONAGUA."
-}`;
+${REGLAS_MULTIVECTOR}
+
+Responde ÚNICAMENTE un objeto JSON con las 7 secciones exactas.`;
 
   const userPrompt = `Fecha y hora de emisión: ${fechaDiaMexico} a las ${horaExactaMexico}.
 Operador: ${nombreOperador}.
@@ -251,10 +206,10 @@ ${bloqueAvisoSMN}
 ${bloqueRegional}
 
 SEMÁFORO DIOCESANO ACTUAL (sobre 405 localidades):
-- Nivel 4 (Emergencia, laderas ≥ 45°): ${resumenSeveridad?.totalNivel4 ?? 0} localidades
-- Nivel 3 (Alerta Temprana, laderas 25°-44°): ${resumenSeveridad?.totalNivel3 ?? 0} localidades
-- Nivel 2 (Vigilancia, valles y niebla): ${resumenSeveridad?.totalNivel2 ?? 0} localidades
-- Nivel 1 (Estables, Altiplano): ${resumenSeveridad?.totalNivel1 ?? 0} localidades
+- Nivel 4 (Emergencia): ${resumenSeveridad?.totalNivel4 ?? 0} localidades
+- Nivel 3 (Alerta Temprana): ${resumenSeveridad?.totalNivel3 ?? 0} localidades
+- Nivel 2 (Vigilancia): ${resumenSeveridad?.totalNivel2 ?? 0} localidades
+- Nivel 1 (Estables): ${resumenSeveridad?.totalNivel1 ?? 0} localidades
 
 COMUNIDADES CRÍTICAS BAJO TENSIÓN (N3-N4): ${JSON.stringify(focosCriticos || [])}.
 
@@ -262,24 +217,24 @@ Devuelve la respuesta en formato JSON estricto.`;
 
   let reporteJSON;
   try {
-      const respuestaGroq = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-        method: "POST",
-        signal: AbortSignal.timeout(8000), // <-- Bajamos a 8s para no chocar con Vercel
-        headers: {
-          "Authorization": `Bearer ${apiKeyGroq.trim()}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          model: "llama-3.1-8b-instant", // <-- MODELO ULTRA RÁPIDO
-          temperature: 0.1,
-          max_completion_tokens: 2500, // <-- Ajustado para que quepa en el límite de tokens
-          response_format: { type: "json_object" },
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: userPrompt }
-          ]
-        })
-      });
+    const respuestaGroq = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      signal: AbortSignal.timeout(TIMEOUT_GROQ_MS),
+      headers: {
+        "Authorization": `Bearer ${apiKeyGroq.trim()}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "llama-3.1-8b-instant",
+        temperature: 0.1,
+        max_completion_tokens: 2500,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt }
+        ]
+      })
+    });
 
     if (!respuestaGroq.ok) {
       const errorText = await respuestaGroq.text();
@@ -289,7 +244,6 @@ Devuelve la respuesta en formato JSON estricto.`;
     const data = await respuestaGroq.json();
     reporteJSON = JSON.parse(data.choices[0].message.content);
     
-    // N22 — Reparar mojibake en las 6 secciones
     const secciones = ['seccion_0_decision', 'seccion_I_atmosfera', 'seccion_II_focos_sierra', 'seccion_III_condiciones_altiplano', 'seccion_IV_evolucion', 'seccion_V_recomendaciones_pastorales', 'seccion_VI_deslinde'];
     for (const clave of secciones) {
       if (typeof reporteJSON[clave] === 'string') {
@@ -300,7 +254,6 @@ Devuelve la respuesta en formato JSON estricto.`;
   } catch (error) {
     console.error("❌ [GROQ] Falló la generación. Activando plantilla de respaldo:", error.message);
     
-    // PLAN B: Plantilla estática si Groq falla (429, 500, etc.)
     reporteJSON = {
       seccion_0_decision: "El sistema de redacción IA está temporalmente saturado. Revise el semáforo principal para tomar decisiones.",
       seccion_I_atmosfera: "No se pudo generar el texto dinámico por límite de la IA. El Semáforo Diocesano sigue siendo la fuente de verdad.",
@@ -320,7 +273,7 @@ Devuelve la respuesta en formato JSON estricto.`;
     fecha_dia_mexico: fechaDiaMexico,
     hora_exacta_mexico: horaExactaMexico,
     timestamp_iso_utc: timestampIsoUtc,
-    consenso_modelos: "GFS (EE.UU.) • ICON (Alemania) • GEM (Canadá)",
+    consenso_modelos: "GFS • ICON • GEM",
     datos_regionales: datosRegionales,
     aviso_smn_considerado: alertaSMN ? {
       nivel: alertaSMN.nivel,
@@ -342,17 +295,16 @@ Devuelve la respuesta en formato JSON estricto.`;
       token: process.env.BLOB_READ_WRITE_TOKEN
     });
     guardadoEnBlob = true;
-  } else {
-    console.log("[C2c] Reporte parcial. No se guarda en Blob.");
   }
 
-    let bitacoraHistorial = [];
-    let hashUltimo = BLOQUE_GENESIS;
-    let ultimoDictamenPrevio = null;
+  let bitacoraHistorial = [];
+  let hashUltimo = BLOQUE_GENESIS;
+  let ultimoDictamenPrevio = null;
 
-    try {
-      // Usamos el blobBitacora que ya obtuvimos arriba
-      if (blobBitacora) {
+  try {
+    if (blobBitacora) {
+      const rB = await fetch(blobBitacora.url, { cache: 'no-store' });
+      if (rB.ok) {
         const dB = await rB.json();
         bitacoraHistorial = dB.bitacora || [];
         ultimoDictamenPrevio = dB.ultimo_dictamen || null;
