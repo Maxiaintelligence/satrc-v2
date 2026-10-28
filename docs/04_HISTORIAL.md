@@ -377,4 +377,10 @@ El handover de cada sesión registraba el estado, los pendientes y cómo retomar
 - Los marcados como "pendientes de confirmar" no aparecieron en las 30 entradas revisadas. Verificar con `git log --oneline | findstr <hash>` antes de citarlos.
 - Los hashes marcados con `<hash>` en versiones anteriores no están disponibles y no se consignan aquí.
 
+### Nota — Error Crítico de Vercel en Reporte On-Demand (27/10/2026)
 
+- **Síntoma:** El botón "Generar Reporte" fallaba con error 500 (Internal Server Error) o congelaba la interfaz.
+- **Causa:** El límite de ejecución de 10 segundos del plan Hobby de Vercel. El backend debe leer el Blob, consultar a Groq y escribir en el Blob; si la IA tarda más de 10s, Vercel corta la ejecución de golpe.
+- **Fix aplicado (parcial):** Se agregó un blindaje en `SatRCOperativo.jsx` para capturar el error y no romper la UI, y se agregó un fallback en `api/reporte-ondemand.js` para errores 429. Se cambió el modelo a `llama-3.1-8b-instant` para intentar acelerar la respuesta.
+- **Estado:** El backend sigue siendo vulnerable a timeouts si el prompt es muy largo o Groq se satura. Documentado como `H-VERCEL-01`.
+- **Lección:** Las Serverless Functions tienen límites estrictos de tiempo. No se debe delegar la generación de documentos largos en una sola petición HTTP si el plan no garantiza el tiempo de ejecución.

@@ -80,6 +80,7 @@ Severidad: 🔴 crítica · 🟠 alta · 🟡 media · 🟢 baja. El esfuerzo es
 | DEU-30 | `normalizarDatosRegionales` cae a `14` con `||` si `zonas_totales` es `0` o inválido, ocultando problemas reales del cliente. | 🟢 | Bajo | Abierta |
 | H-CRON-01 | `sara_cron.yml` no tiene un pre-check explícito de `GROQ_API_KEY` y `BLOB_READ_WRITE_TOKEN` antes de ejecutar el runner. Si faltan, el runner falla silenciosamente y usa la plantilla estática. | 🟢 | Bajo | Abierta |
 | H-CI-01 | `tests.yml` no corre `npm run build`. Si se rompe un import en un componente React, `npm test` no lo detecta. | 🟢 | Bajo | Abierta |
+| H-VERCEL-01 | Timeout de Vercel (Hobby Plan) al generar reportes On-Demand. La función serverless tarda más de 10 segundos (por las llamadas a Groq y Blob) y Vercel la mata, devolviendo un Error 500. | 🟠 | Alto | Abierta; requiere refactor. | Verificación del 27/10/2026 |
 
 ### 2.5 Pruebas y calidad
 

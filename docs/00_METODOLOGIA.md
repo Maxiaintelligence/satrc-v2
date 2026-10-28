@@ -25,6 +25,39 @@
 
 ---
 
+---
+
+## Fase 2.5: Protocolo Estricto de Modificación de Código
+
+> **Regla de oro (aplicable a humanos y a asistentes de IA):** El código de este repositorio está en producción. Una instrucción ambigua o un "reemplaza todo el archivo" es una falla grave de metodología. Toda instrucción de cambio debe ser atómica, verificable y sin márgenes de error.
+
+Cuando se solicite un cambio de código (fix, feature o refactor), la propuesta debe incluir **obligatoriamente** los siguientes 5 puntos:
+
+### 1. Archivo exacto a modificar
+Se debe indicar la ruta completa y exacta desde la raíz del proyecto.
+*Ejemplo:* `api/reporte-ondemand.js`
+
+### 2. Ubicación precisa (referencia)
+Se debe indicar el nombre de la función, variable o bloque lógico que se va a modificar, y una estimación de la línea para encontrarlo rápido.
+*Ejemplo:* "Dentro de la función `handler`, busca la variable `const systemPrompt = ...` (alrededor de la línea 130)."
+
+### 3. Bloque de código de reemplazo (con inicio y fin)
+**Queda estrictamente prohibido decir "reemplaza todo el archivo"** (a menos que el archivo sea nuevo o tenga menos de 50 líneas). 
+Se debe escribir el bloque exacto a reemplazar, indicando explícitamente con comentarios dónde inicia y dónde termina la edición, y garantizando que las llaves de cierre (`}`, `);`) queden intactas.
+*Ejemplo:*
+```javascript
+// --- INICIO DE LA MODIFICACIÓN ---
+const nuevaVariable = "valor";
+// --- FIN DE LA MODIFICACIÓN ---
+
+4. Prueba empírica en PowerShell
+Ningún cambio se da por bueno sin una prueba local. Se debe incluir el comando exacto para validar que el cambio se aplicó correctamente y que no rompió la sintaxis.
+Ejemplo: node --check api/archivo.js o npm run build. Se debe indicar la salida esperada (ej. "No debe devolver ningún texto").
+
+5. Commit atómico
+Cada propuesta debe terminar con el comando exacto de Git para subir el cambio, garantizando que solo se agreguen los archivos afectados.
+Ejemplo: git add api/archivo.js && git commit -m "fix(api): corrige variable X" && git push origin main
+
 ## Fase 3: Verificación local (antes del commit)
 
 | Tipo | Qué hacer |
