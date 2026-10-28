@@ -240,7 +240,7 @@ Un orquestador combina los cuatro vectores con un término de acoplamiento: dos 
 
 - **Presupuesto cero.** El proyecto es una iniciativa sin financiamiento recurrente. Todo el sistema opera con planes gratuitos o servicios de dominio público. Un cambio en los límites de esos planes puede afectar la operación; ver DEU-19 en `06_PENDIENTES.md`. La suspensión de Vercel Blob (H-VERCEL-01, 27/10/2026, ya cerrado) fue un ejemplo real de este riesgo y se resolvió con la migración a Google Drive (ADR-009).
 - **Sin servidores propios.** El despliegue usa servicios administrados.
-- **Operación sin ambiente local completo.** El almacenamiento (Google Drive vía Apps Script) y la IA solo están disponibles en producción o requieren credenciales que no se versionan. La verificación funcional se hace en GitHub Actions y en Vercel.
+- **Entorno local validado.** El proyecto cuenta con un archivo `.env.local` (protegido por `.gitignore`) que permite ejecutar pruebas profundas de los endpoints, adaptadores y lógica del motor con credenciales reales. La verificación funcional final se sigue haciendo en GitHub Actions y en Vercel para confirmar el comportamiento en el ecosistema real.
 
 ---
 

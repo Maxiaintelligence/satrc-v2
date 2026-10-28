@@ -14,7 +14,7 @@
 
 1. **Estado del repositorio:** ejecutar `git status` y confirmar que el árbol de trabajo está limpio.
 2. **Estado de producción:** revisar la última corrida de GitHub Actions, el estado del despliegue en Vercel y **el timestamp real de los archivos en Google Drive** (`estado_ligero.json`, `estado_diocesano.json`). Una corrida en verde no garantiza que Drive se haya actualizado: el runner puede imprimir `✅ Publicación exitosa` aunque `escribirJSONBlob` haya devuelto `null` (ver H-DRIVE-01).
-3. **Diagnóstico:** SIEMPRE ATACAR LA CAUSA RAÍZ, NO ASUMIR NADA, NO EL SÍNTOMA. Usar PowerShell y pruebas en la terminal. El entorno no es local, pero se tiene acceso completo a los servicios, claves y repositorio. Usar los logs de Vercel o de GitHub Actions como una fuente entre varias, **no como la única**. Los logs pueden reportar "éxito" aunque el efecto real no haya ocurrido: verificar siempre el estado final en el servicio de destino (Drive, Vercel, GitHub).
+3. **Diagnóstico:** SIEMPRE ATACAR LA CAUSA RAÍZ, NO ASUMIR NADA, NO EL SÍNTOMA. Usar PowerShell y pruebas en la terminal. El entorno local está configurado con `.env.local` para pruebas profundas contra los servicios reales, pero la verificación del efecto final se debe hacer en producción (Drive, Vercel, GitHub Actions) para no confundir el comportamiento del entorno local con el de la nube.
 4. **Preguntar antes de asumir:** si el alcance o el diseño son ambiguos, consultarlo con la persona que coordina el proyecto antes de escribir una sola línea.
 
 ---

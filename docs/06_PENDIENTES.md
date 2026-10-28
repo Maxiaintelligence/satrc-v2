@@ -173,7 +173,8 @@ Los siguientes se cerraron y su detalle está en `04_HISTORIAL.md`. No se mantie
 - **H-RUNNER-01:** Renombrado a **H-REPORTE-02**. El runner ya usa Drive; el que falla es `reporteDiario.mjs`.
 - **H-SARA-02:** Cerrado el 28/10/2026 (commit `2a3e3e8`). El runner ya no envía `evaluaciones: null` en días tranquilos, envía `[]`.
 - **H-DRIVE-02 (Zod schema):** Cerrado el 28/10/2026 (commit `3053e29`). El esquema Zod acepta arreglos vacíos en días tranquilos.
-- **Incidente de producción 28/10/2026:** Cerrado. Causa raíz: URL de Vercel mal copiada + Zod estricto + runner enviando null. Resuelto. Detalle en `VERIFICACION_MULTIFACTOR.md`.
+- **Incidente de producción 28/10/2026:** Cerrado. Causa raíz: URL de Vercel mal copiada + Zod estricto + runner enviando null. 
+- **H-ENTORNO-01 (Entorno local):** Cerrado el 28/10/2026. Se configuró y validó el archivo `.env.local` con las 7 variables críticas (`GOOGLE_SCRIPT_URL`, `GROQ_API_KEY`, `SARA_ADMIN_TOKEN`, `CLAVE_SALA_OPERATIVA`, `SATRC_OPERADORES_JSON`, `GITHUB_PAT`, `CRON_SECRET`). Esto habilita pruebas profundas en local antes de desplegar a producción.Resuelto. Detalle en `VERIFICACION_MULTIFACTOR.md`.
 
 ---
 

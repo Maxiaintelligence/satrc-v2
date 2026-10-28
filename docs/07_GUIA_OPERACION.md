@@ -181,6 +181,12 @@ node --check scripts\reportes\reporteDiario.mjs
 
 `node --check` es obligatorio para `api/` y `scripts/`, porque `npm test` no los cubre.
 
+### 5.1 Entorno local y credenciales
+
+El proyecto admite pruebas profundas en local. Crea un archivo `.env.local` en la raíz (está en `.gitignore`, nunca se sube) y define las variables descritas en §8.1.
+
+Para validar que las credenciales son correctas antes de correr pruebas, se recomienda usar el script de validación de 4 niveles que hace peticiones reales a Google Apps Script, Groq y Vercel.
+
 ---
 
 ## 6. Recuperación ante fallos
