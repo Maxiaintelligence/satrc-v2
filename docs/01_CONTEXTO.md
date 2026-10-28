@@ -16,7 +16,7 @@ SatRC (Sistema de Alerta Temprana y Riesgos Climáticos) es una aplicación web 
 ## 2. Principios
 
 - **Subordinación institucional.** SatRC no sustituye a Protección Civil ni a CONAGUA. Traduce y orienta; las determinaciones oficiales prevalecen siempre.
-- **Preferencia por el falso positivo.** Una alerta de más tiene un costo bajo. No alertar a tiempo puede costar vidas.
+- **Precisión sobre cobertura.** Una alerta debe corresponder a un evento real. Los falsos positivos erosionan la confianza de las comunidades y hacen que ignoren las alertas verdaderas (efecto "el niño que gritó lobo"). El sistema prefiere no alertar antes que alertar sin fundamento verificable. La precisión es la condición para que la PWA sea confiable.
 - **Trazabilidad.** Cada acción del sistema (corrida automática, reporte bajo demanda, reporte diario) deja un registro en la bitácora, encadenado con SHA-256.
 - **Transparencia.** Las decisiones de diseño y sus límites están documentados en `08_DECISIONES.md`.
 
