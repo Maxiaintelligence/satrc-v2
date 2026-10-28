@@ -25,5 +25,5 @@ jobs:
       - name: Ejecutar Motor Autónomo Multivectorial SARA
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+          GOOGLE_SCRIPT_URL: ${{ secrets.GOOGLE_SCRIPT_URL }}
         run: node scripts/ejecutar_sara_autonomo.mjs
