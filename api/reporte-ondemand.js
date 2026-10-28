@@ -220,7 +220,7 @@ Devuelve la respuesta en formato JSON estricto.`;
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          model: "llama-3.1-8b-instant",
+          model: "openai/gpt-oss-120b",
           temperature: 0.1,
           max_completion_tokens: 2500,
           response_format: { type: "json_object" },
