@@ -1,9 +1,8 @@
 import crypto from 'crypto';
-import { put, list } from '@vercel/blob';
-import { repararMojibake, repararObjeto } from '../src/lib/compartido/mojibake.js';
+import { leerJSONBlob, escribirJSONBlob } from '../src/lib/compartido/googleDrive.js';
+import { repararObjeto } from '../src/lib/compartido/mojibake.js';
 import { EstadoDiocesanoResponseSchema } from '../src/schemas/estadoDiocesanoSchema.js';
 import { generarTituloDictamen } from '../src/lib/compartido/dictamen.js';
-import { generarResumenMultivector } from '../src/lib/compartido/bitacora.js';
 
 const BLOQUE_GENESIS = "0000000000000000000000000000000000000000000000000000000000000000";
 const MAX_REGISTROS_BITACORA = 500;
@@ -81,12 +80,6 @@ function tokenValido(req) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
-async function leerJSONBlob(blob, ahora) {
-  const res = await fetch(`${blob.url}?t=${ahora.getTime()}`, { cache: 'no-store' });
-  if (!res.ok) throw new Error(`Lectura de ${blob.pathname} falló: HTTP ${res.status}`);
-  return res.json();
-}
-
 export default async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
   res.setHeader("Pragma", "no-cache");
@@ -108,51 +101,31 @@ export default async function handler(req, res) {
   let bitacoraLeida = false;
 
   try {
-    const listadoBlobs = await list();
-    const blobs = listadoBlobs?.blobs || [];
-    const buscar = (nombre) => blobs.find(b => b.pathname === nombre);
+    const [rep, est, bit] = await Promise.all([
+      leerJSONBlob(PATH_REPORTE),
+      leerJSONBlob(PATH_ESTADO),
+      leerJSONBlob(PATH_BITACORA)
+    ]);
 
-    const blobRep = buscar(PATH_REPORTE);
-    if (blobRep) {
-      try {
-        ultimoReporteGuardado = await leerJSONBlob(blobRep, ahora);
-      } catch (e) {
-        console.warn("Aviso reporte on-demand:", e.message);
-      }
-    }
-
-    const blobEstado = buscar(PATH_ESTADO);
-    if (blobEstado) {
-      try {
-        estadoMaestro = await leerJSONBlob(blobEstado, ahora);
-      } catch (e) {
-        console.warn("Aviso estado maestro:", e.message);
-      }
-    }
-
-    const blobBitacora = buscar(PATH_BITACORA);
-    if (blobBitacora) {
-      try {
-        const dBit = await leerJSONBlob(blobBitacora, ahora);
-        historialBitacora = Array.isArray(dBit.bitacora) ? dBit.bitacora : [];
-        ultimoDictamen = dBit.ultimo_dictamen || null;
-        bitacoraLeida = true;
-      } catch (e) {
-        console.warn("Aviso bitácora:", e.message);
-      }
+    ultimoReporteGuardado = rep;
+    estadoMaestro = est;
+    
+    if (bit) {
+      historialBitacora = Array.isArray(bit.bitacora) ? bit.bitacora : [];
+      ultimoDictamen = bit.ultimo_dictamen || null;
+      bitacoraLeida = true;
     } else {
       bitacoraLeida = true;
     }
   } catch (errBlob) {
-    console.warn("Aviso Vercel Blob:", errBlob.message);
+    console.warn("Aviso leyendo Google Drive:", errBlob.message);
   }
 
   if (estadoMaestro && estadoMaestro.evaluaciones && estadoMaestro.evaluaciones.length > 0 && !forzar) {
-    // N27 — Reparar mojibake en todos los textos antes de servir al frontend
     const respuestaBlob = {
       ultimo_reporte_ondemand: repararObjeto(ultimoReporteGuardado),
       exito: true,
-      origen: "VERCEL_BLOB_ACTUALIZADO",
+      origen: "GOOGLE_DRIVE_ACTUALIZADO",
       hora_servidor_mexico: estadoMaestro.hora_local_mexico || horaMexicoStr,
       dictamen: repararObjeto(estadoMaestro.dictamen || ultimoDictamen),
       semaforo: estadoMaestro.semaforo,
@@ -165,9 +138,7 @@ export default async function handler(req, res) {
     if (validacion.success) {
       return res.json(validacion.data);
     } else {
-      // H8 — Si el Blob no cumple el contrato, logueamos y caemos al fallback en vivo.
-      // No devolvemos 500 para no dejar al operador sin datos.
-      console.error("❌ [ZOD] El estado del Blob no cumple el schema:", validacion.error.errors);
+      console.error("❌ [ZOD] El estado de Drive no cumple el schema:", validacion.error.errors);
     }
   }
 
@@ -182,7 +153,6 @@ export default async function handler(req, res) {
   const estadoSituacion = nivel4 > 0 ? "SITUACION_CRITICA" : (nivel3 > 0 ? "SITUACION_GRAVE" : "SITUACION_NORMAL");
   const { color, titulo: tituloBase } = ESTADOS[estadoSituacion];
 
-  // H5.2 — Título determinista (el contexto puede traer vectorTop, si no, default)
   const vectorTop = contexto.vector_dominante || (nivel4 > 0 ? 'HIDROLOGICO' : 'SIN_AMENAZA');
   const tituloDictamen = generarTituloDictamen(nivel4 > 0 ? 4 : (nivel3 > 0 ? 3 : 1), vectorTop);
 
@@ -284,14 +254,10 @@ Comunidades críticas: ${JSON.stringify(resumenSeveridad?.criticasNombres || [])
     }
 
     try {
-      await put(PATH_BITACORA, JSON.stringify({
+      await escribirJSONBlob(PATH_BITACORA, JSON.stringify({
         bitacora: historialBitacora,
         ultimo_dictamen: dictamenFinal
-      }), {
-        access: 'public',
-        addRandomSuffix: false,
-        allowOverwrite: true
-      });
+      }));
       bitacoraGuardada = true;
     } catch (e) {
       console.error("Error al actualizar bitacora Blob:", e);
@@ -300,7 +266,6 @@ Comunidades críticas: ${JSON.stringify(resumenSeveridad?.criticasNombres || [])
     console.error("Bitácora no escrita: la lectura previa falló y se evitó sobrescribir la cadena.");
   }
 
-  // N27 — Reparar mojibake en todos los textos antes de servir al frontend
   return res.json({
     ultimo_reporte_ondemand: repararObjeto(ultimoReporteGuardado),
     exito: true,
