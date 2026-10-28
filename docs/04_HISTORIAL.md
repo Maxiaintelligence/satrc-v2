@@ -347,6 +347,38 @@ Objetivo: cerrar deuda, establecer pruebas y documentar. Sin funciones nuevas.
   - En producción: Apan bajó de N3 a N1, Almoloya de N3 a N2 (Vigilancia normal por CAPE 860). El total de N2 bajó de 246 a 217 y los N1 subieron de 159 a 188.
 - **Commits:** `d248fdb`.
 
+## 7. Crisis de Vercel Blob y Migración a Google Drive (27 al 28/10/2026)
+
+Esta sección documenta la crisis que llevó a la migración total de la base de datos y la resolución de los problemas de arquitectura subyacentes.
+
+### E5-H-VERCEL-01 — Suspensión de Vercel Blob y migración de emergencia
+
+- **Síntoma:** La aplicación dejó de funcionar en producción. El endpoint de reportes on-demand devolvía `500 Internal Server Error`, y el runner de GitHub Actions fallaba al publicar. Los logs de Vercel mostraban `BlobStoreSuspendedError: Vercel Blob: This store has been suspended`.
+- **Causa Raíz:** Se superó el límite de "Advanced Operations" (2,000/mes) del plan Hobby de Vercel. Vercel bloqueó la tienda de almacenamiento hasta el próximo ciclo de facturación.
+- **Solución:** Se migró todo el almacenamiento (estado diocesano, bitácora y reportes) a **Google Drive**, usando Google Apps Script como API Web. Se creó el adaptador `src/lib/compartido/googleDrive.js`.
+- **Verificación:** El endpoint de reportes on-demand respondió con `HTTP 200` en 4.29 segundos, generando el reporte con IA y guardándolo en Drive.
+
+### E5-H-RUNNER-01 — Migración del cron autónomo a Google Drive
+
+- **Síntoma:** El runner seguía intentando usar Vercel Blob, fallando con `Error al publicar en Google Drive: Falta GOOGLE_SCRIPT_URL`.
+- **Causa:** El secreto `GOOGLE_SCRIPT_URL` no estaba inyectado en el archivo `.github/workflows/sara_cron.yml`. Además, `reporteDiario.mjs` seguía intentando escribir en Blob.
+- **Solución:** Se agregó la variable al YAML, se eliminó la dependencia de `BLOB_READ_WRITE_TOKEN`, y se modificó `reporteDiario.mjs` para usar el adaptador de Drive.
+- **Verificación:** El runner terminó exitosamente en GitHub Actions.
+
+### E5-H-DRIVE-TIMEOUT — Optimización del estado diocesano
+
+- **Síntoma:** Vercel seguía cayendo en `RESPUESTA_EN_VIVO`. El archivo `estado_diocesano.json` pesaba 921 KB y Google Drive tardaba 7.15 segundos en entregarlo, superando el límite de 10s de Vercel.
+- **Solución:** Se creó el `estado_ligero.json` (2.69 KB), que solo contiene el semáforo, el dictamen y las evaluaciones N3/N4. Vercel ahora lee este archivo ligero.
+- **Verificación:** El archivo ligero se lee en 2.21 segundos.
+
+### E5-H-DRIVE-BLOQUEO — Bloqueo de Google Apps Script a Vercel
+
+- **Síntoma:** Vercel devolvía `Unexpected token '<', "<!doctype "` al intentar leer de Drive, y `HTTP 401` al intentar escribir.
+- **Causa:** Google Apps Script bloquea las peticiones desde IPs de la nube (Vercel) por seguridad, redirigiendo a una página de login HTML.
+- **Solución:** Se re-implementó el script en Google Apps Script, seleccionando explícitamente "Ejecutar como: Yo" y "Quién tiene acceso: Cualquier persona". (Esta acción se está verificando actualmente).
+
+---
+
 ## 6. Lecciones consolidadas
 
 | ID | Lección | Origen |
