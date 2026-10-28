@@ -5,23 +5,24 @@
 ## Principio rector
 
 > Ningún cambio se escribe sin entender qué problema resuelve, qué archivos toca, cómo se verifica y cómo se revierte si falla. El sistema está en producción y lo usan personas reales.
+>
+> **Principio de precisión (DEC-011, 28/10/2026):** una alerta debe corresponder a un evento real. Los falsos positivos erosionan la confianza de las comunidades y hacen que ignoren las alertas verdaderas. La metodología prioriza la verificación empírica sobre la suposición, y la comprobación del efecto real sobre la confianza en el código de salida.
 
 ---
 
 ## Fase 1: Antes de tocar nada
 
 1. **Estado del repositorio:** ejecutar `git status` y confirmar que el árbol de trabajo está limpio.
-2. **Estado de producción:** revisar la última corrida de GitHub Actions y el estado del despliegue en Vercel.
-3. **Diagnóstico:** SIEMPRE ATACAR LA CAUSA RAIZ, NO ASUMIR NADA, NO EL SINTOMA. Usar powershell, pruebas en la terminal, el entorno no es local, pero se tiene acesso completo a los servicios, claves y repositorio, usar los logs de Vercel o de GitHub Actions para entender el error real.
+2. **Estado de producción:** revisar la última corrida de GitHub Actions, el estado del despliegue en Vercel y **el timestamp real de los archivos en Google Drive** (`estado_ligero.json`, `estado_diocesano.json`). Una corrida en verde no garantiza que Drive se haya actualizado: el runner puede imprimir `✅ Publicación exitosa` aunque `escribirJSONBlob` haya devuelto `null` (ver H-DRIVE-01).
+3. **Diagnóstico:** SIEMPRE ATACAR LA CAUSA RAÍZ, NO ASUMIR NADA, NO EL SÍNTOMA. Usar PowerShell y pruebas en la terminal. El entorno no es local, pero se tiene acceso completo a los servicios, claves y repositorio. Usar los logs de Vercel o de GitHub Actions como una fuente entre varias, **no como la única**. Los logs pueden reportar "éxito" aunque el efecto real no haya ocurrido: verificar siempre el estado final en el servicio de destino (Drive, Vercel, GitHub).
 4. **Preguntar antes de asumir:** si el alcance o el diseño son ambiguos, consultarlo con la persona que coordina el proyecto antes de escribir una sola línea.
 
 ---
 
 ## Fase 2: Diseño
 
-1. **Alcance mínimo:** la solución más pequeña que resuelve el problema.
+1. **Pruebas primero en lógica crítica:** si el cambio toca el motor de riesgo o los contratos de datos, las pruebas se escriben antes que el código.
 2. **Un commit por causa:** cada commit debe poder revertirse con `git revert <hash>` sin afectar lo demás. Los hitos grandes se dividen en commits atómicos (por ejemplo, H8.1, H8.2, H8.3).
-3. **Pruebas primero en lógica crítica:** si el cambio toca el motor de riesgo o los contratos de datos, las pruebas se escriben antes que el código.
 
 ---
 
@@ -42,7 +43,7 @@ Se debe indicar el nombre de la función, variable o bloque lógico que se va a 
 *Ejemplo:* "Dentro de la función `handler`, busca la variable `const systemPrompt = ...` (alrededor de la línea 130)."
 
 ### 3. Bloque de código de reemplazo (con inicio y fin)
-**Queda estrictamente prohibido decir "reemplaza todo el archivo"** (a menos que el archivo sea nuevo o tenga demasiadas ediciones, para ello el usuario proporcionara la ultima version del codigo para sobre este hacer las ediciones).
+**Queda estrictamente prohibido decir "reemplaza todo el archivo"** (a menos que el archivo sea nuevo o tenga demasiadas ediciones; en ese caso, el usuario proporcionará la última versión del código para hacer las ediciones sobre ella).
 Se debe escribir el bloque exacto a reemplazar, indicando explícitamente con comentarios dónde inicia y dónde termina la edición, y garantizando que las llaves de cierre (`}`, `);`) queden intactas.
 
 *Ejemplo:*
@@ -67,24 +68,41 @@ Cada propuesta debe terminar con el comando exacto de Git para subir el cambio, 
 
 ## Fase 3: Verificación local (antes del commit)
 
-| Tipo | Qué hacer |
-|---|---|
-| Sintaxis | `node --check <archivo>` en `api/` y `scripts/`. `npm run build` para el frontend. |
-| Pruebas | `npm test` debe quedar en verde. Si el cambio agrega una función, agrega su prueba. |
-| Imports | Si cambias un `import`, verifica en tiempo de ejecución que el módulo carga. |
-| Contratos | Si cambias el esquema de datos, verifica que los esquemas Zod sigan validando (`npm test`). |
+| Tipo | Qué hacer | Obligatorio |
+|---|---|---|
+| Sintaxis | `node --check <archivo>` en `api/` (.js) y `scripts/` (.mjs). | Sí, si se tocó backend |
+| Build | `npm run build` para el frontend. | Sí, si se tocó `src/` |
+| Lint | `npm run lint` (oxlint). Se toleran advertencias, no errores. | Sí |
+| Pruebas | `npm test` debe quedar en verde. Si el cambio agrega una función, agrega su prueba. | Sí |
+| Imports | Si cambias un import, verifica en tiempo de ejecución que el módulo carga. | Sí |
+| Contratos | Si cambias el esquema de datos, verifica que los esquemas Zod sigan validando (`npm test`). | Sí, si se tocó `src/schemas/` |
 
-> `npm test` no valida `api/` ni `scripts/`. Por eso `node --check` es obligatorio para esos archivos.
+**Referencia verificada el 27/10/2026** con pruebas empíricas (P1, P2, P3): `npm test` → 167 pruebas en 17 archivos, todas en verde. `npm run build` → verde (solo warning benigno de chunks > 500 kB). `npm run lint` → 51 advertencias, 0 errores. Reverificar estas cifras al cierre de cada hito con `npm test`, `npm run build` y `npm run lint`. Si difieren, actualizar esta línea antes de dar el hito por cerrado.
+
+> `npm test` no valida `api/`, `scripts/*.mjs` ni el build de React. Por eso `node --check` es obligatorio para backend, y `npm run build` para el frontend.
 
 ---
 
 ## Fase 4: Commit, despliegue y verificación en producción
 
-- **Formato de commit:** `tipo(área): descripción corta`. Ejemplo: `fix(api): aumenta max_completion_tokens en Groq`.
-- **Despliegue:** tras el push, confirmar en Vercel que el despliegue está en estado **Ready**.
-- **CI:** confirmar que el workflow `tests.yml` pasa en verde.
-- **Si el cambio toca el runner:** disparar manualmente `sara_cron.yml` y verificar que el log indique zonas completas y sin errores de validación.
-- **Si el cambio afecta un endpoint público:** probarlo en la interfaz o con una petición HTTP antes de dar el hito por cerrado.
+**Formato de commit:** `tipo(área): descripción corta`. Ejemplo: `fix(api): aumenta max_completion_tokens en Groq`.
+
+**Despliegue:** tras el push, confirmar en Vercel que el despliegue está en estado `Ready`.
+
+**CI:** confirmar que el workflow `tests.yml` pasa en verde.
+
+**Si el cambio toca el runner (`scripts/`):**
+- Disparar manualmente `sara_cron.yml`.
+- Verificar que el log indique cobertura completa (14/14 zonas) y sin errores de validación.
+- Verificar el efecto real en Google Drive: consultar el timestamp de `estado_ligero.json` y `estado_diocesano.json`. El timestamp debe ser posterior al disparo. Si el log dice "Publicación exitosa" pero el timestamp no cambió, el fix falló silenciosamente.
+- Consultar `/api/sara` y confirmar que devuelve `origen: GOOGLE_DRIVE_ACTUALIZADO` (no `RESPUESTA_EN_VIVO`) en días con y sin emergencias.
+
+**Si el cambio toca el almacenamiento (`googleDrive.js`, `bitacora.js`, `sara.js`, `reporte-ondemand.js`):**
+- Leer el archivo real desde Drive con una llamada directa a `leerJSONBlob` desde PowerShell o desde un script de prueba.
+- Confirmar que la estructura es la esperada (no `null`, no HTML de login de Apps Script, no error).
+- Si el cambio toca la bitácora, verificar que el `prev_hash` del último registro nuevo coincida con el `hash_completo` del registro anterior.
+
+**Si el cambio afecta un endpoint público:** probarlo en la interfaz o con una petición HTTP antes de dar el hito por cerrado.
 
 ---
 
@@ -92,49 +110,43 @@ Cada propuesta debe terminar con el comando exacto de Git para subir el cambio, 
 
 Cada cierre de hito actualiza, en el mismo cambio:
 
-1. `06_PENDIENTES.md`: se quita el ítem cerrado o se marca su estado.
-2. `04_HISTORIAL.md`: se agrega el fix con síntoma, causa, solución, verificación y commit.
-3. `08_DECISIONES.md`: se registra el ADR si el cambio altera la arquitectura o los proveedores de servicios.
-4. `LEEME_PRIMERO.md`: se actualiza el estado general si cambió.
+- **`06_PENDIENTES.md`:** se quita el ítem cerrado o se marca su estado. Si el fix reveló deuda nueva, se agrega con su identificador y severidad.
+- **`04_HISTORIAL.md`:** se agrega el fix con síntoma, causa, solución, verificación y commit.
+- **`08_DECISIONES.md`:** se registra el ADR si el cambio altera la arquitectura o los proveedores de servicios.
+- **`LEEME_PRIMERO.md`:** se actualiza el estado general si cambió.
 
 Un ítem no puede estar en dos documentos a la vez. Si está en el historial, sale del backlog.
 
----
+### Reglas de seguridad documental
 
-## Reglas de seguridad documental
-
-- **Nunca** escribir en la documentación claves, tokens, contraseñas ni sus valores de ejemplo. Usa el nombre de la variable de entorno y un placeholder (`<CLAVE>`).
-- **Nunca** incluir nombres personales de terceros. Usa el rol (por ejemplo, "Coordinación pastoral").
-- **Nunca** incluir rutas locales con nombres de usuario.
+- Nunca escribir en la documentación claves, tokens, contraseñas ni sus valores de ejemplo. Usa el nombre de la variable de entorno y un placeholder (`<CLAVE>`).
+- Nunca incluir nombres personales de terceros. Usa el rol (por ejemplo, "Coordinación pastoral").
+- Nunca incluir rutas locales con nombres de usuario.
 - Si una credencial aparece en un commit, se considera comprometida: se rota aunque después se elimine del código.
 
----
+### Reglas de calidad documental
 
-## Reglas de calidad documental
-
-- **Sin placeholders en commits.** Si falta un hash, escribir "pendiente de registrar" y completarlo después.
-- **Sin cifras sin fuente.** Un conteo (tests, localidades, hitos) incluye la fecha y el comando que lo produjo.
-- **Sin números de línea** en la documentación: cambian con cualquier edición. Referencia el archivo y la función.
-- **Un solo lugar por dato.** Si un dato se repite en dos documentos, uno de ellos debe enlazar al otro en vez de copiarlo.
+- Sin placeholders en commits. Si falta un hash, escribir "pendiente de registrar" y completarlo después.
+- Sin cifras sin fuente. Un conteo (tests, localidades, hitos) incluye la fecha y el comando que lo produjo.
+- Sin números de línea en la documentación: cambian con cualquier edición. Referenciar el archivo y la función.
+- Un solo lugar por dato. Si un dato se repite en dos documentos, uno de ellos debe enlazar al otro en vez de copiarlo.
 
 ---
 
 ## Las reglas de oro
 
-1. **Nunca asumir el estado.** Verificar con comandos: `git status`, logs de Vercel, `npm test`.
-2. **Atacar la causa raíz, no el síntoma.**
-3. **Preguntar antes que asumir.**
-4. **Un commit por causa.**
-5. **La suite de pruebas es obligatoria.** Si `npm test` falla, no se hace push.
-6. **Verificar lo que se afirma.** Si un documento dice algo, debe poder comprobarse en el código.
-7. **Verificar en producción.** Que compile en local no basta.
-8. **Probar con datos reales** cuando el cambio depende de una API externa.
-9. **Documentar decisiones y bugs** en `04_HISTORIAL.md` y `08_DECISIONES.md`.
-10. **Pausar antes de acumular cambios.** Cerrar un hito antes de empezar el siguiente.
-11. **Ningún secreto en el repositorio.**
-12. **Prohibido reemplazar archivos enteros** si tienen más de 50 líneas. Los cambios se hacen por bloques quirúrgicos con referencias de inicio y fin.
-13. **Prueba de sintaxis obligatoria.** Antes de cualquier `git commit`, ejecutar `node --check` en los archivos de backend modificados.
-
----
-
-*Fin de la metodología.*
+1. Nunca asumir el estado. Verificar con comandos: `git status`, logs de Vercel, `npm test`, timestamp en Drive.
+2. Atacar la causa raíz, no el síntoma.
+3. Preguntar antes que asumir.
+4. Un commit por causa.
+5. La suite de pruebas es obligatoria. Si `npm test` falla, no se hace push.
+6. Verificar lo que se afirma. Si un documento dice algo, debe poder comprobarse en el código.
+7. Verificar en producción. Que compile en local no basta.
+8. Probar con datos reales cuando el cambio depende de una API externa.
+9. Documentar decisiones y bugs en `04_HISTORIAL.md` y `08_DECISIONES.md`.
+10. Pausar antes de acumular cambios. Cerrar un hito antes de empezar el siguiente.
+11. Ningún secreto en el repositorio.
+12. Prohibido reemplazar archivos enteros si tienen más de 50 líneas. Los cambios se hacen por bloques quirúrgicos con referencias de inicio y fin.
+13. Prueba de sintaxis obligatoria. Antes de cualquier `git commit`, ejecutar `node --check` en los archivos de backend modificados.
+14. Verificar el efecto real, no solo el código de salida. Un proceso que termina en 0 puede haber fallado silenciosamente. Los logs de "publicación exitosa" no sustituyen la verificación del archivo en Drive.
+15. Si el fix toca el almacenamiento o la bitácora, incluir una prueba de lectura real desde Drive antes de dar el cambio por cerrado.

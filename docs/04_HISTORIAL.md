@@ -418,3 +418,92 @@ El handover de cada sesión registraba el estado, los pendientes y cómo retomar
 - **Fix aplicado (parcial):** Se agregó un blindaje en `SatRCOperativo.jsx` para capturar el error y no romper la UI, y se agregó un fallback en `api/reporte-ondemand.js` para errores 429. Se cambió el modelo a `llama-3.1-8b-instant` para intentar acelerar la respuesta.
 - **Estado:** El backend sigue siendo vulnerable a timeouts si el prompt es muy largo o Groq se satura. Documentado como `H-VERCEL-01`.
 - **Lección:** Las Serverless Functions tienen límites estrictos de tiempo. No se debe delegar la generación de documentos largos en una sola petición HTTP si el plan no garantiza el tiempo de ejecución.
+
+
+---
+
+## Anexo — Sesión 28/10/2026 (auditoría documental y de código)
+
+> **Nota de proceso:** este anexo es un registro temporal de la sesión del 28/10/2026. Contiene los cierres formales que faltaban, la bitácora de cambios documentales de la sesión y las lecciones extraídas. En la edición detallada posterior, cada bloque se integrará en las secciones principales (0-8).
+
+### A.1 Cierre formal de H-VIENTO-01 (registro faltante)
+
+- **Síntoma:** la especificación original (11) del evaluador de viento incluía un suavizado de 3 horas sobre la serie y un factor de rugosidad por relieve. El documento del motor de riesgo describía ambos como parte del diseño.
+- **Causa:** el código **nunca implementó** ni el suavizado ni el factor de rugosidad. Solo usa un suavizado en el sentido de "extracción del máximo de las próximas 24 h" (comentario en `windEvaluator.js` L41), no un suavizado temporal de 3 h. El factor de rugosidad tampoco existe.
+- **Solución:** cierre como **documental**. Se actualiza la especificación para reflejar el código real (DEC-010: el código es la referencia). No requiere cambio de código.
+- **Verificación:** T2 del 28/10/2026 confirmó que "suavizado" aparece en el código solo como comentario, no como implementación. La sección §5.3 del bloque 2.7 de `03_MOTOR_RIESGO.md` documenta el cierre.
+- **Fecha de cierre declarada:** 24/10/2026 (según `06_PENDIENTES.md` §3).
+- **Fecha de registro formal:** 28/10/2026 (era el registro faltante).
+- **Commits asociados:** ninguno propio (es cierre documental). El cambio se refleja en la versión 2.7 de `03_MOTOR_RIESGO.md` (pendiente de commit).
+- **Estado:** cerrado.
+
+### A.2 Aclaración sobre H6.6 (cierre que estaba en disputa)
+
+- **Estado real:** cerrado.
+- **Evidencia:** T14 del 28/10/2026 confirmó que `MonitorPublico.jsx` usa `niveles_por_vector` (líneas 426-436) y `acciones_operativas` (líneas 441-451) del orquestador.
+- **Documentación cruzada:**
+  - `06_PENDIENTES.md` L127: **cerrado** (correcto).
+  - `02_ARQUITECTURA.md` §3.1: **cerrado** (correcto, ya aplicado en bloque 2.6).
+  - `04_HISTORIAL.md` L188 y L403: **abierto** (desactualizado; debe corregirse en la siguiente edición).
+  - `02_ARQUITECTURA.md` §10 (versión 2.5): **listado como deuda** (corregido en bloque 2.6, ahora en §9).
+- **Acción pendiente:** corregir L188 y L403 de este mismo archivo en la edición detallada. Anotado como `H-DOC-H6.6` en `06_PENDIENTES.md` §6.5.
+
+### A.3 Bitácora de cambios documentales de la sesión 28/10/2026
+
+Esta sesión aplicó una reescritura coordinada de la documentación fundacional para alinear los documentos con el código real, tras la auditoría empírica. Los commits están referenciados cuando existen.
+
+| Documento | Cambio principal | Commit |
+|---|---|---|
+| `00_METODOLOGIA.md` | Reemplaza el principio "preferencia por el falso positivo" por "precisión sobre cobertura" (DEC-011). Añade verificación del efecto real en Drive (H-DRIVE-01), `npm run lint` en Fase 3, verificación de timestamp en Fase 4. Amplía de 13 a 15 reglas de oro. | pendiente de registrar |
+| `01_CONTEXTO.md` | Principio de precisión en §2. H-VERCEL-01 reformulado como histórico. `estado_ligero.json` agregado al diagrama de §8. Glosario actualizado con "Precisión sobre cobertura". | `d15d9e0` (C1) + pendiente del resto |
+| `08_DECISIONES.md` | DEC-011 agregada (reemplaza DEC-002). ADR-005 con "calibración pendiente bajo DEC-011". ADR-009 con H-REPORTE-02 y H-DRIVE-01. DEC-002 marcada como "reemplazada por DEC-011". PEND-05 agregada. Versión 2.6. | pendiente de registrar |
+| `02_ARQUITECTURA.md` | Versión 2.6. §3 reescrita con 3.1 + 3.2. **§5 "Fallback en vivo" restaurada**. **§8 "Contratos de datos (Zod)" restaurada**. §7 con `estado_ligero.json` como cuarto archivo. H6.6 cerrado. H-UI-02 parcialmente cerrado. H-REPORTE-02, H-DRIVE-01, H-DRIVE-02 registradas en §9. Referencias cruzadas §5/§8 alineadas. Mojibake limpiado. | pendiente de registrar |
+| `03_MOTOR_RIESGO.md` | Versión 2.7. §5.4 reformulada con arquitectura de doble capa. §9.4 ampliada con tabla de `tipo_amenaza`. H-VIENTO-02 agregada a §12. H-MOTOR-05 y H-DIAG-04 reclasificadas a críticas bajo DEC-011. Referencias cruzadas alineadas con `02` §8. Mojibake limpiado. | pendiente de registrar |
+
+### A.4 Lecciones de la sesión
+
+| ID | Lección | Origen |
+|---|---|---|
+| **H-TEST-12** | Los documentos de arquitectura y motor de riesgo deben declarar explícitamente qué campo se emite y en qué nivel (top-level vs anidado), no solo el nombre del vector. La ambigüedad de `vector_dominante` (que cambia de valor según el módulo) generó confusión durante la auditoría. | H-VIENTO-02 |
+| **H-TEST-13** | Los scripts de verificación empírica no deben confundir "mención en código" con "implementación efectiva". Un comentario que dice "suavizado" no es un suavizado implementado. Siempre extraer el contexto (línea anterior y siguiente) antes de concluir. | T2 (suavizado), T4 (isoterma), B1 (gemelo) |
+| **H-TEST-14** | Antes de declarar que un campo no existe en el código, buscar variantes de nomenclatura: `isoterma` vs `nivel_congelacion_m`, `VIENTO` vs `VIENTO_FUERTE`. El código puede estar correcto aunque use otro nombre. | T4b, T1 |
+| **H-TEST-15** | Los documentos de estado (`06_PENDIENTES`, `LEEME_PRIMERO`) deben revisarse contra el código antes de citarlos. `LEEME_PRIMERO` declaraba H-RUNNER-01 como deuda del runner cuando el problema real era `reporteDiario.mjs`. La documentación puede estar desactualizada sin que nadie lo detecte. | G1, S13, S14, S15 |
+| **H-PROCESO-01** | Una auditoría documental completa requiere: (1) prueba empírica de cada afirmación, (2) lectura del código fuente del campo mencionado, (3) verificación de la cadena de consumidores (evaluador → orquestador → dictamen/bitácora → prompt). Sin los 3 pasos, se generan falsos positivos y falsos negativos. | Sesión 28/10/2026 completa |
+
+### A.5 Estado al cierre de la sesión 28/10/2026
+
+| Aspecto | Estado |
+|---|---|
+| Documentos actualizados y verificados | `00`, `01`, `02`, `03`, `08` (5 de 11) |
+| Documentos pendientes de edición detallada | `04`, `05`, `06`, `07`, `09`, `LEEME_PRIMERO`, `VERIFICACION_MULTIFACTOR` |
+| Deudas de código nuevas identificadas | 17 (H-REPORTE-02, H-DRIVE-01, H-DRIVE-02, H-SARA-01..05, H-ONDEMAND-01/03/04/05/06/07/08/09, H-DRY-01, H-VIENTO-02) |
+| Deudas reclasificadas | 2 (H-MOTOR-05, H-DIAG-04 → 🔴 crítica) |
+| Deudas reformuladas | 2 (H-UI-02 parcialmente cerrado, H-CRON-01 sin BLOB) |
+| Ítems cerrados confirmados | 2 (H6.6, H-VIENTO-01 con registro faltante) |
+| Deudas documentales detectadas | 4 (H-DOC-HVIENTO-01, H-DOC-H6.6, H-DOC-REF-02, H-DOC-MOJI-02) |
+
+### A.6 Commit pendiente
+
+Este anexo se agregará al final de `04_HISTORIAL.md` y se acompañará del bloque correspondiente en `06_PENDIENTES.md`. **Ninguno de los dos se da por aplicado** hasta que:
+
+1. Se integren en la estructura formal del archivo (secciones 0-8 de `04`, secciones 1-5 de `06`).
+2. Se ajusten las referencias cruzadas a otros documentos.
+3. Se verifiquen con las pruebas de integridad correspondientes.
+
+**Commit propuesto (uno solo para ambos archivos):**
+
+docs(historial-pendientes): registra hallazgos de la sesión 28/10/2026
+
+Registra cierre formal de H-VIENTO-01 en 04_HISTORIAL.md
+
+Documenta la contradicción de H6.6 entre 04 (desactualizado) y 06/02 (correcto)
+
+Agrega 17 deudas de código nuevas identificadas en la auditoría
+
+Reclasifica H-MOTOR-05 y H-DIAG-04 a críticas bajo DEC-011
+
+Reformula H-UI-02 como parcialmente cerrado y H-CRON-01 sin BLOB
+
+Renombra H-RUNNER-01 → H-REPORTE-02
+
+Detecta 4 deudas documentales cruzadas

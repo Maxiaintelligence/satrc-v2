@@ -1,6 +1,6 @@
 # SatRC V2.0 — Registro de decisiones
 
-> **Versión del documento:** 2.5 (27/10/2026)
+> **Versión del documento:** 2.6 (28/10/2026)
 > **Propósito:** explicar por qué el sistema está diseñado como está. Cada decisión tiene contexto, decisión, consecuencias y estado.
 > **Regla:** una decisión nueva se agrega al final con el siguiente número. Una decisión se reemplaza con otra nueva; no se edita la original para cambiar su sentido.
 
@@ -36,11 +36,11 @@
 
 ### ADR-005: Orquestador multiamenaza con acoplamiento no lineal
 
-- **Estado:** vigente.
+- **Estado:** vigente, con calibración pendiente bajo DEC-011.
 - **Contexto:** un criterio de máximo (`Math.max` entre vectores) subestima las combinaciones. Dos amenazas moderadas simultáneas (por ejemplo, suelo saturado y viento) producen un efecto mayor que cada una por separado.
 - **Decisión:** el riesgo global es el máximo de los cuatro vectores más un término de acoplamiento por pares, con la forma `γ · (r_i − 1) · (r_j − 1)`.
 - **Coeficientes vigentes:** los definidos en el código (`crossThreatOrchestrator.js`): hidrológico–viento 0.20, hidrológico–térmico 0.15, convectivo–viento 0.30, térmico–hidrológico 0.10 y viento–térmico 0.05.
-- **Consecuencias:** los coeficientes son una decisión de diseño sin validación empírica todavía. Revisarlos cuando exista un registro de eventos reales.
+- **Consecuencias:** los coeficientes son una decisión de diseño sin validación empírica todavía. **Bajo el principio de precisión (DEC-011), el acoplamiento aditivo es una fuente potencial de sobreestimación** que debe validarse contra eventos reales. Revisarlos cuando exista un registro de eventos reales (PEND-03).
 
 ### ADR-006: Adaptador de forma en el proceso autónomo
 
@@ -54,7 +54,7 @@
 - **Estado:** vigente.
 - **Contexto:** en la auditoría H6.4, 47 localidades de Pachuca aparecían en N2 sin justificación. El viento basal de la sierra es más fuerte que el de los valles.
 - **Decisión:** por encima de 2 200 msnm, los umbrales de viento suben 5 km/h. El cálculo también normaliza la ráfaga a densidad de nivel del mar.
-- **Consecuencias:** coexisten dos mecanismos (densidad y altitud). La especificación original descartaba el segundo; el código lo conserva.
+- **Consecuencias:** coexisten dos mecanismos (densidad y altitud). Bajo DEC-011, la coexistencia debe revisarse si produce falsos positivos en zonas de altura.
 
 ### ADR-008: Nivel continuo con topes por nivel discreto
 
@@ -68,11 +68,13 @@
 - **Estado:** vigente (27/10/2026).
 - **Contexto:** Vercel Blob en el plan Hobby suspendió la tienda de datos por superar el límite de "Advanced Operations" (2,000/mes). Esto provocó errores 500 (FUNCTION_INVOCATION_FAILED) en la API y bloqueó el sistema en producción.
 - **Decisión:** migrar todo el almacenamiento (estado diocesano, bitácora y reporte vigente) a Google Drive, utilizando Google Apps Script como puente (API Web). Se creó el adaptador `src/lib/compartido/googleDrive.js`.
-- **Consecuencias:** 
+- **Consecuencias:**
   - La aplicación ya no depende de Vercel Blob, eliminando el límite de operaciones y el riesgo de suspensión.
-  - El almacenamiento es 100% gratuito y persistente.
+  - El almacenamiento es 100 % gratuito y persistente.
   - Se agregó una nueva variable de entorno crítica: `GOOGLE_SCRIPT_URL`.
-  - El runner (`ejecutar_sara_autonomo.mjs`) aún debe ser migrado (H-RUNNER-01).
+  - El runner (`ejecutar_sara_autonomo.mjs`) fue migrado a Drive.
+  - **Sin embargo, `scripts/reportes/reporteDiario.mjs` sigue usando `@vercel/blob` (H-REPORTE-02, ver `06_PENDIENTES.md`).** Como `BLOB_READ_WRITE_TOKEN` no está configurado en `sara_cron.yml`, el reporte diario falla silenciosamente al intentar escribir, aunque la corrida quede en verde.
+  - **El adaptador `escribirJSONBlob` devuelve `null` en caso de fallo sin propagar el error.** El runner no verifica el valor devuelto, por lo que imprime "✅ Publicación exitosa" aunque Drive no haya recibido los datos (H-DRIVE-01).
 
 ---
 
@@ -86,9 +88,10 @@
 
 ### DEC-002: Preferencia por el falso positivo
 
-- **Estado:** vigente.
-- **Decisión:** ante la duda, el sistema alerta. Una alerta innecesaria tiene un costo bajo; una alerta omitida puede costar una vida.
-- **Consecuencias:** el semáforo puede sobreestimar. Las decisiones de calibración (H-MOTOR-05) deben mantener este criterio.
+- **Estado:** reemplazada por DEC-011 (28/10/2026).
+- **Decisión (histórica):** ante la duda, el sistema alerta. Una alerta innecesaria tiene un costo bajo; una alerta omitida puede costar una vida.
+- **Consecuencias (históricas):** el semáforo puede sobreestimar. Las decisiones de calibración (H-MOTOR-05) debían mantener este criterio.
+- **Nota de reemplazo:** el criterio se sustituye por DEC-011. El texto original se conserva por trazabilidad histórica; el principio vigente es la precisión sobre la cobertura.
 
 ### DEC-003: Subordinación a las autoridades
 
@@ -100,7 +103,7 @@
 
 - **Estado:** vigente.
 - **Decisión:** la verificación funcional se hace en GitHub Actions y Vercel, porque el entorno local no tiene almacenamiento ni acceso al modelo de redacción.
-- **Consecuencias:** cada cambio que afecte al proceso autónomo se valida con una corrida manual.
+- **Consecuencias:** cada cambio que afecte al proceso autónomo se valida con una corrida manual y con verificación del timestamp real del archivo en Google Drive (ver `00_METODOLOGIA.md` Fase 4).
 
 ### DEC-005: Un commit por causa y pruebas antes de publicar
 
@@ -132,7 +135,7 @@
 ### DEC-009: Documentación en español, con numeración fija
 
 - **Estado:** vigente.
-- **Decisión:** la documentación se mantiene en español. La numeración de `00` a `08` se conserva; `08` pasa a ser el registro de decisiones.
+- **Decisión:** la documentación se mantiene en español. La numeración de `00` a `09` se conserva; `08` es el registro de decisiones.
 - **Consecuencias:** los documentos archivados quedan en `docs/archivo/` y no se citan como vigentes.
 
 ### DEC-010: Documentación para quien retoma el proyecto con ayuda de IA
@@ -141,11 +144,24 @@
 - **Decisión:** existe un punto de entrada (`LEEME_PRIMERO.md`) que resume el estado y define el orden de lectura. Cada documento declara su fuente de verdad (el código).
 - **Consecuencias:** cuando un documento y el código no coinciden, prevalece el código, y la diferencia se registra en `06_PENDIENTES.md`.
 
+### DEC-011: Precisión sobre cobertura
+
+- **Estado:** vigente (28/10/2026). Reemplaza a DEC-002.
+- **Contexto:** en versiones anteriores se emitían alertas de Nivel 3 cuando en las localidades no estaba ocurriendo ningún evento meteorológico relevante. La política anterior ("preferencia por el falso positivo") priorizaba la cobertura sobre la precisión. El resultado fue ruido: las comunidades aprendieron a desconfiar de las alertas porque muchas no se materializaban. Un sistema que alerta en exceso pierde eficacia real cuando el evento grave sí ocurre (efecto "el niño que gritó lobo").
+- **Decisión:** el principio rector del sistema es la precisión sobre la cobertura. **Una alerta debe corresponder a un evento real.** Ante la duda, el sistema prioriza la verificación empírica antes que la emisión preventiva. La confiabilidad de la PWA se mide por cuántas alertas emitidas se materializan, no por cuántas alertas se emiten.
+- **Consecuencias:**
+  1. **Calibración de umbrales.** Los umbrales del motor deben revisarse para eliminar falsos positivos conocidos: H-MOTOR-05 (sobreclasificación N2 en XIC, HUA, ZAC) y H-DIAG-04 (motor no calibrado para esas zonas) pasan de 🟡 media a 🔴 crítica.
+  2. **Acoplamiento del orquestador (ADR-005).** Los coeficientes γ del orquestador son aditivos y por lo tanto sobreestiman. Bajo DEC-011, deben validarse contra eventos reales antes de considerarse cerrados (PEND-03 se vuelve prioritario).
+  3. **Trade-off aceptado.** Se acepta un aumento controlado de falsos negativos como costo de reducir falsos positivos. Este trade-off se evalúa empíricamente, no por intuición.
+  4. **Verificación empírica.** Todo cambio en el motor debe acompañarse de un caso de prueba que demuestre que la alerta emitida corresponde a un evento real (documentado en `00_METODOLOGIA.md` Fase 3 y en `03_MOTOR_RIESGO.md`).
+  5. **Métrica de confiabilidad.** Se propone medir, en cada corrida, la proporción de localidades N3/N4 que efectivamente registraron un evento meteorológico en las 24 horas siguientes. Esta métrica se vuelve parte del monitoreo operativo (PEND-05).
+
 ---
 
 ## Parte C. Decisiones pendientes
 
 | ID | Pregunta | Quién decide |
 |---|---|---|
-| PEND-03 | ¿Los coeficientes de acoplamiento (ADR-005) se recalibran con eventos reales? | Coordinación técnica y pastoral |
+| PEND-03 | ¿Los coeficientes de acoplamiento (ADR-005) se recalibran con eventos reales? Bajo DEC-011 esta calibración es prioritaria. | Coordinación técnica y pastoral |
 | PEND-04 | ¿Se migrará el runner a un modelo de ejecución que no dependa de GitHub Actions (por ejemplo, Vercel Cron)? | Coordinación técnica |
+| PEND-05 | ¿Cuál es la métrica objetivo de confiabilidad (porcentaje de alertas que se materializan) que cierra DEC-011? | Coordinación técnica y pastoral |

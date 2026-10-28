@@ -121,7 +121,7 @@ export default async function handler(req, res) {
     console.warn("Aviso leyendo Google Drive:", errBlob.message);
   }
 
-  if (estadoMaestro && estadoMaestro.evaluaciones && estadoMaestro.evaluaciones.length > 0 && !forzar) {
+  if (estadoMaestro && estadoMaestro.semaforo && !forzar) {
     const respuestaBlob = {
       ultimo_reporte_ondemand: repararObjeto(ultimoReporteGuardado),
       exito: true,

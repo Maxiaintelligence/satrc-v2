@@ -599,7 +599,7 @@ async function ejecutarSARA() {
     zonas_sin_datos: paqueteMaestro.zonas_sin_datos,
     series_por_zona: paqueteMaestro.series_por_zona,
     motor_consenso: paqueteMaestro.motor_consenso,
-    evaluaciones: evaluacionesCriticas.length > 0 ? evaluacionesCriticas : null
+    evaluaciones: evaluacionesCriticas.length > 0 ? evaluacionesCriticas : [] 
   };
 
   // --- 7.5. Reporte Diario Automático (6:00 AM) ---
