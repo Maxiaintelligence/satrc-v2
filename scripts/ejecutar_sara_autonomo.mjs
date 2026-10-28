@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
-import { put, list } from '@vercel/blob';
+import { leerJSONBlob, escribirJSONBlob } from '../src/lib/compartido/googleDrive.js';
 import { generarReporteDiario } from './reportes/reporteDiario.mjs';
 import { seleccionarNodosRegionales as seleccionarNodosRegionalesShared } from '../src/lib/compartido/nodos.js';
 import { repararMojibake } from '../src/lib/compartido/mojibake.js';
@@ -216,16 +216,12 @@ async function registrarCorridaDegradada(horaMexicoStr, fechaDiaMexico, horaExac
   try {
     let bitacoraHistorial = [];
     let ultimoDictamenPrevio = null;
+    
     try {
-      const listado = await list();
-      const blobB = listado?.blobs?.find(b => b.pathname.includes('bitacora_sara.json'));
-      if (blobB) {
-        const rB = await fetch(blobB.url, { cache: 'no-store' });
-        if (rB.ok) {
-          const dB = await rB.json();
-          bitacoraHistorial = dB.bitacora || [];
-          ultimoDictamenPrevio = dB.ultimo_dictamen || null;
-        }
+      const dB = await leerJSONBlob('bitacora_sara.json');
+      if (dB) {
+        bitacoraHistorial = dB.bitacora || [];
+        ultimoDictamenPrevio = dB.ultimo_dictamen || null;
       }
     } catch (e) {}
 
@@ -257,12 +253,9 @@ async function registrarCorridaDegradada(horaMexicoStr, fechaDiaMexico, horaExac
     const payloadBitacora = { bitacora: bitacoraHistorial };
     if (ultimoDictamenPrevio) payloadBitacora.ultimo_dictamen = ultimoDictamenPrevio;
 
-    await put('bitacora_sara.json', JSON.stringify(payloadBitacora), {
-      access: 'public', addRandomSuffix: false, allowOverwrite: true,
-      token: process.env.BLOB_READ_WRITE_TOKEN
-    });
+    await escribirJSONBlob('bitacora_sara.json', JSON.stringify(payloadBitacora));
 
-    console.log("📝 Corrida degradada registrada en bitácora SHA-256.");
+    console.log("📝 Corrida degradada registrada en bitácora SHA-256 (Google Drive).");
   } catch (e) {
     console.error("❌ No se pudo registrar la corrida degradada:", e);
   }
@@ -531,14 +524,9 @@ async function ejecutarSARA() {
   // --- 7. Bitácora ---
   let bitacoraHistorial = [];
   try {
-    const listado = await list();
-    const blobB = listado?.blobs?.find(b => b.pathname.includes('bitacora_sara.json'));
-    if (blobB) {
-      const rB = await fetch(blobB.url, { cache: 'no-store' });
-      if (rB.ok) {
-        const dB = await rB.json();
-        bitacoraHistorial = dB.bitacora || [];
-      }
+    const dB = await leerJSONBlob('bitacora_sara.json');
+    if (dB) {
+      bitacoraHistorial = dB.bitacora || [];
     }
   } catch (e) {}
 
@@ -628,7 +616,7 @@ async function ejecutarSARA() {
     }
   }
 
-  // H8 — Validar el contrato de datos antes de publicar al Blob.
+  // H8 — Validar el contrato de datos antes de publicar
   const validacion = EstadoDiocesanoBlobSchema.safeParse(paqueteMaestro);
   if (!validacion.success) {
     console.error("❌ [ZOD] El paqueteMaestro no cumple el schema:", validacion.error.errors);
@@ -636,19 +624,12 @@ async function ejecutarSARA() {
   }
 
   try {
-    await put('estado_diocesano.json', JSON.stringify(paqueteMaestro), {
-      access: 'public', addRandomSuffix: false, allowOverwrite: true,
-      token: process.env.BLOB_READ_WRITE_TOKEN
-    });
+    await escribirJSONBlob('estado_diocesano.json', JSON.stringify(paqueteMaestro));
+    await escribirJSONBlob('bitacora_sara.json', JSON.stringify({ bitacora: bitacoraHistorial, ultimo_dictamen: dictamenSARA }));
 
-    await put('bitacora_sara.json', JSON.stringify({ bitacora: bitacoraHistorial, ultimo_dictamen: dictamenSARA }), {
-      access: 'public', addRandomSuffix: false, allowOverwrite: true,
-      token: process.env.BLOB_READ_WRITE_TOKEN
-    });
-
-    console.log(`✅ [SARA RUNNER] Publicación exitosa con ${zonasOk.length} zonas y consenso GFS+ICON+GEM a las ${horaMexicoStr}.`);
+    console.log(`✅ [SARA RUNNER] Publicación exitosa en Google Drive con ${zonasOk.length} zonas y consenso GFS+ICON+GEM a las ${horaMexicoStr}.`);
   } catch (e) {
-    console.error("❌ Error al publicar en Vercel Blob:", e);
+    console.error("❌ Error al publicar en Google Drive:", e);
     process.exit(1);
   }
 }
