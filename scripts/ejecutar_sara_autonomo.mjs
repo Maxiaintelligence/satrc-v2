@@ -589,6 +589,19 @@ async function ejecutarSARA() {
     evaluaciones: evaluaciones
   };
 
+  // OPTIMIZACIÓN H-VERCEL-01: Crear paquete ligero para Vercel (solo N3/N4 y metadatos)
+  const evaluacionesCriticas = evaluaciones.filter(e => e.nivel_alerta >= 3);
+  const paqueteLigero = {
+    actualizado_iso: paqueteMaestro.actualizado_iso,
+    hora_local_mexico: paqueteMaestro.hora_local_mexico,
+    dictamen: paqueteMaestro.dictamen,
+    semaforo: paqueteMaestro.semaforo,
+    zonas_sin_datos: paqueteMaestro.zonas_sin_datos,
+    series_por_zona: paqueteMaestro.series_por_zona,
+    motor_consenso: paqueteMaestro.motor_consenso,
+    evaluaciones: evaluacionesCriticas // Solo N3 y N4
+  };
+
   // --- 7.5. Reporte Diario Automático (6:00 AM) ---
   if (apiKeyGroq && debeGenerarReporteDiario(horaMexicoStr, fechaDiaMexico, bitacoraHistorial)) {
     console.log('\n📋 [N28] Es la ventana del reporte diario. Generando...');
@@ -625,6 +638,7 @@ async function ejecutarSARA() {
 
   try {
     await escribirJSONBlob('estado_diocesano.json', JSON.stringify(paqueteMaestro));
+    await escribirJSONBlob('estado_ligero.json', JSON.stringify(paqueteLigero));
     await escribirJSONBlob('bitacora_sara.json', JSON.stringify({ bitacora: bitacoraHistorial, ultimo_dictamen: dictamenSARA }));
 
     console.log(`✅ [SARA RUNNER] Publicación exitosa en Google Drive con ${zonasOk.length} zonas y consenso GFS+ICON+GEM a las ${horaMexicoStr}.`);

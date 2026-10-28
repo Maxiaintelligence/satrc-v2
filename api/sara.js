@@ -103,7 +103,7 @@ export default async function handler(req, res) {
   try {
     const [rep, est, bit] = await Promise.all([
       leerJSONBlob(PATH_REPORTE),
-      leerJSONBlob(PATH_ESTADO),
+      leerJSONBlob('estado_ligero.json'), // <-- Leemos el archivo ligero
       leerJSONBlob(PATH_BITACORA)
     ]);
 
