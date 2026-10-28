@@ -374,7 +374,7 @@ Esta sección documenta la crisis que llevó a la migración total de la base de
 ### E5-H-DRIVE-BLOQUEO — Bloqueo de Google Apps Script a Vercel
 
 - **Síntoma:** Vercel devolvía `Unexpected token '<', "<!doctype "` al intentar leer de Drive, y `HTTP 401` al intentar escribir.
- el origen en Vercel sigue diciendo RESPUESTA_EN_VIVO y el semáforo aparece vacío. Necesitamos diagnosticar si Vercel está leyendo el archivo estado_ligero.json o si la validación de Zod está fallando.
+ el origen en Vercel sigue diciendo RESPUESTA_EN_VIVO y el semáforo aparece vacío. Necesitamos diagnosticar si Vercel está leyendo el archivo estado_ligero.json o si la validación de Zod está fallando. 
 - **Causa:** Google Apps Script bloquea las peticiones desde IPs de la nube (Vercel) por seguridad, redirigiendo a una página de login HTML.
 - **Solución:** Se re-implementó el script en Google Apps Script, seleccionando explícitamente "Ejecutar como: Yo" y "Quién tiene acceso: Cualquier persona". 
 - **Verificación:** La prueba en PowerShell confirmó que Google devuelve un JSON válido (`Semáforo: N4=0 | N3=0`). El bloqueo de seguridad de Google se ha superado. La aplicación está lista para leer los datos correctamente en Vercel.
