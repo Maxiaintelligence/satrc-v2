@@ -1,6 +1,6 @@
 # SatRC V2.0 — Contexto, principios y glosario
 
-> **Versión del documento:** 2.4 (22/10/2026)
+> **Versión del documento:** 2.5 (27/10/2026)
 > **Audiencia:** personas que coordinan, operan o mantienen el sistema, y asistentes de IA que retoman el proyecto.
 
 ---
@@ -68,9 +68,9 @@ Un orquestador combina los cuatro vectores con un término de acoplamiento: dos 
 
 ## 7. Restricciones de diseño
 
-- **Presupuesto cero.** El proyecto es una iniciativa sin financiamiento recurrente. Todo el sistema opera con planes gratuitos o servicios de dominio público. Un cambio en los límites de esos planes puede afectar la operación; ver DEU-19 en `06_PENDIENTES.md`.
+- **Presupuesto cero.** El proyecto es una iniciativa sin financiamiento recurrente. Todo el sistema opera con planes gratuitos o servicios de dominio público. Un cambio en los límites de esos planes puede afectar la operación; ver H-VERCEL-01 y DEU-19 en `06_PENDIENTES.md`.
 - **Sin servidores propios.** El despliegue usa servicios administrados.
-- **Operación sin ambiente local completo.** El almacenamiento y la IA solo están disponibles en producción. La verificación funcional se hace en GitHub Actions y en Vercel.
+- **Operación sin ambiente local completo.** El almacenamiento (Google Drive vía Apps Script) y la IA solo están disponibles en producción o requieren credenciales que no se versionan. La verificación funcional se hace en GitHub Actions y en Vercel.
 
 ---
 
@@ -97,7 +97,7 @@ Un orquestador combina los cuatro vectores con un término de acoplamiento: dos 
 └──────────────────────────────────────────────────────────────┘
                               ↕
 ┌──────────────────────────────────────────────────────────────┐
-│ Almacenamiento (Vercel Blob)                                 │
+│ Almacenamiento (Google Drive vía Apps Script)                │
 │ estado_diocesano.json · bitacora_sara.json ·                 │
 │ reporte_diocesano_vigente.json                               │
 └──────────────────────────────────────────────────────────────┘
@@ -125,9 +125,9 @@ Detalle de componentes y contratos en `02_ARQUITECTURA.md`.
 | **Semáforo / nivel de alerta** | Clasificación de 1 a 4: 1 Normal, 2 Vigilancia, 3 Alerta temprana, 4 Emergencia. |
 | **Vector** | Tipo de amenaza evaluada: hidrológico, viento, térmico o convectivo. |
 | **Acoplamiento** | Efecto combinado de dos vectores simultáneos, calculado por el orquestador. |
-| **SARA** | Agente de redacción de reportes con IA. Según el handover, sus siglas significan "Sistema de Alerta y Respuesta Automatizada". Confirmar la expansión con la coordinación. |
+| **SARA** | Agente de redacción de reportes con IA (Modelo `gpt-oss-120b` en Groq). Sus siglas significan "Sistema de Alerta y Respuesta Automatizada". |
 | **Bitácora** | Registro de cada corrida y reporte, encadenado con hashes SHA-256. |
-| **Blob** | Almacenamiento de archivos en Vercel donde se publica el estado vigente. |
+| **Google Drive (Adaptador)** | Almacenamiento de archivos (`.json`) vía Google Apps Script. Reemplazó a Vercel Blob por límites del plan gratuito. |
 | **Etapa** | Fase de trabajo del proyecto. Etapa 3 (deuda técnica), Etapa 4 (multiamenaza), Etapa 5 (integración multivectorial). |
 | **Hito (H)** | Subtarea dentro de una etapa, por ejemplo H6.4a. Un identificador de hito solo tiene sentido con su etapa: H5 de Etapa 3 y H5.0 de Etapa 5 son trabajos distintos. |
 | **Versión 3.0** | Salto futuro de la aplicación: autenticación real, nuevos vectores, percentiles históricos. No es lo mismo que Etapa 3. |
@@ -140,7 +140,8 @@ Detalle de componentes y contratos en `02_ARQUITECTURA.md`.
 
 ## 10. Documentos relacionados
 
-- `LEEME_PRIMERO.md`: punto de entrada y estado actual.
-- `00_METODOLOGIA.md`: reglas de trabajo.
-- `06_PENDIENTES.md`: deuda técnica y riesgos abiertos.
-- `08_DECISIONES.md`: decisiones de arquitectura y su justificación.
+- `docs/LEEME_PRIMERO.md`: punto de entrada y estado actual.
+- `docs/00_METODOLOGIA.md`: reglas de trabajo.
+- `docs/06_PENDIENTES.md`: deuda técnica y riesgos abiertos.
+- `docs/08_DECISIONES.md`: decisiones de arquitectura y su justificación.
+

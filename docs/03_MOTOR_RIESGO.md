@@ -1,9 +1,9 @@
 # SatRC V2.0 — Motor de evaluación de riesgo
 
-> **Versión del documento:** 2.5 (24/10/2026)  
+> **Versión del documento:** 2.6 (27/10/2026)  
 > **Fuente de verdad:** el código. Este documento describe el comportamiento actual y señala donde las especificaciones de diseño no coinciden con él.  
 > **Alcance:** motor hidrológico (Etapa 3), evaluadores de viento, térmico y convectivo, adaptador hidrológico y orquestador (Etapa 4), y el consenso de modelos que los alimenta.  
-> **Cambios de esta versión:** cierra H-TERM-01 (nivel continuo térmico alineado con el contrato `[nivel, nivel+0.99]`, commit `343f80d`); cierra H-VIENTO-01 como documental; agrega H-CONV-02 a §12; actualiza el conteo de pruebas a 159/17 (verificado 24/10/2026).
+> **Cambios de esta versión:** cierra H-MOTOR-07 (lectura de viento corregida), cierra H-CONV-03 (CAPE mínimo para Downburst), cierra H-TERM-01 (commit `343f80d`) y cierra H-VIENTO-01 como documental. Actualiza el conteo de pruebas a 167/17 (verificado 27/10/2026).
 
 ---
 
@@ -49,7 +49,7 @@ Las reglas se aplican en orden. Cada una puede subir el nivel, nunca bajarlo.
 | 5 | Corte vial | Acceso por terracería o brecha, y (lluvia ≥ 20 mm o saturación ≥ 50 mm) | N3 |
 | 6 | Vigilancia | Lluvia ≥ 8 mm, o saturación ≥ 30 mm, o visibilidad ≤ 2 km (niebla) | N2 |
 
-> **Discrepancia detectada (H-MOTOR-07, 24/10/2026):** la Regla 1 lee `h.wind_speed_10m` del evento actual, pero el consenso expone el campo como `viento_kmh`. `vientoSostenidoMax` siempre queda en 0 y la condición `viento < 40 km/h` de la Regla 1 siempre se cumple trivialmente. La protección del Altiplano es más laxa de lo diseñado. Ver `06_PENDIENTES.md` §2.2.
+> **Nota (H-MOTOR-07 cerrado el 27/10/2026, commit `d248fdb`):** la Regla 1 leía erróneamente `h.wind_speed_10m` en lugar de `h.viento_kmh`, por lo que la protección del Altiplano nunca detectaba vientos altos. El código ahora está alineado con la serie del consenso.
 
 ### 2.2 Prioridad y diagnóstico
 El nivel final es el máximo de las reglas que se disparan (`Math.max`).
@@ -355,7 +355,7 @@ El paquete publicado por el runner contiene, por localidad, `nivel_alerta` (igua
 
 ## 11. Pruebas
 
-La suite se ejecuta con `npm test`. **Resultado verificado el 24/10/2026:** 17 archivos y 159 pruebas, todas en verde. El conteo cambia con el tiempo; actualizar esta cifra con cada cierre de hito. Las pruebas del motor están en `src/engine/__tests__/` y `scripts/engine/__tests__/`.
+La suite se ejecuta con `npm test`. **Resultado verificado el 27/10/2026:** 17 archivos y 167 pruebas, todas en verde. El conteo cambia con el tiempo; actualizar esta cifra con cada cierre de hito. Las pruebas del motor están en `src/engine/__tests__/` y `scripts/engine/__tests__/`.
 
 Cada campo nuevo que se publica debe tener una prueba que verifique su valor y su rango (lección H-TEST-05 en `04_HISTORIAL.md`). Los tests 9 a 14 de `thermalEvaluator.test.js` son el ejemplo del cumplimiento de esta regla en el cierre de H-TERM-01.
 
@@ -367,16 +367,16 @@ Cada campo nuevo que se publica debe tener una prueba que verifique su valor y s
 |---|---|---|
 | **H-CONV-01** | Unidades erróneas en la especificación convectiva (§7.3) | Documental |
 | **H-CONV-02** | Cizalladura escalar en lugar de vectorial (§7.1) | Abierta; requiere expandir el contrato del consenso |
-| H-CONV-03 | Falso positivo de Downburst con CAPE bajo (§7.2) | Cerrado (27/10/2026) |
-| **H-MOTOR-07** | Regla 1 del Altiplano lee `wind_speed_10m` en lugar de `viento_kmh` (§2.1) | Abierta |
 | **H-ORQ-07** | Coeficientes γ y mapeo del orquestador distintos de la especificación (§9.2, §9.3) | Documental; el código es la referencia |
 | **H-ORQ-08** | `determinarVectorDominante` con `indexOf` en `sort` (§9.4) | Abierta, cosmética |
 | **H-MOTOR-01** | Gemelo del runner distinto del canónico (§3) | Abierta, V3.0 |
 | **H-MOTOR-05** | Sobreclasificación de N2 en zonas húmedas (XIC, HUA, ZAC) | Abierta, V3.0 |
 | **H-MOTOR-03** | El reporte diario exige 216 h; el runner usa 192 h | Abierta |
 
-
-**Cerrados en esta versión:** H-TERM-01 (commit `343f80d`), H-VIENTO-01 (documental).
+**Cerrados en esta versión (27/10/2026):**
+- **H-CONV-03:** Falso positivo de Downburst con CAPE bajo (§7.2). Se exigió CAPE > 1000.
+- **H-MOTOR-07:** Regla 1 del Altiplano leía el campo de viento equivocado (§2.1).
+- **H-TERM-01:** Nivel continuo térmico fuera del contrato (commit `343f80d`).
+- **H-VIENTO-01:** Suavizado no implementado en el código (documental).
 
 Los detalles de cada ítem están en `06_PENDIENTES.md`.
-```

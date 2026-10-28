@@ -1,6 +1,6 @@
 # SatRC V2.0 — Registro de decisiones
 
-> **Versión del documento:** 2.4 (22/10/2026)
+> **Versión del documento:** 2.5 (27/10/2026)
 > **Propósito:** explicar por qué el sistema está diseñado como está. Cada decisión tiene contexto, decisión, consecuencias y estado.
 > **Regla:** una decisión nueva se agrega al final con el siguiente número. Una decisión se reemplaza con otra nueva; no se edita la original para cambiar su sentido.
 
@@ -18,22 +18,21 @@
 
 ### ADR-002: Consenso determinista de modelos (GFS, ICON y GEM)
 
-- **Estado:** vigente, con una excepción documentada.
+- **Estado:** vigente.
 - **Decisión:** calcular la mediana hora por hora entre los tres modelos, con filtro de ceros espurios en la lluvia. En Etapa 4 se agregaron ocho variables con estrategias propias: mediana para las de superficie, máximo para CAPE y viento en 700 hPa, y GFS preferente para la altura de congelación (GEM la devuelve nula).
-- **Consecuencias:** el resultado es reproducible para las mismas entradas. La versión del consenso que usa el proceso autónomo no incluye las ocho variables de Etapa 4. Ver H-MULTI-01 en `06_PENDIENTES.md` y `VERIFICACION_MULTIFACTOR.md`.
+- **Consecuencias:** el resultado es reproducible para las mismas entradas. El proceso autónomo ya utiliza el consenso compartido (H-MULTI-01 cerrado el 22/10/2026).
 
 ### ADR-003: Bitácora con encadenamiento criptográfico
 
 - **Estado:** vigente.
 - **Decisión:** cada registro incluye el hash del registro anterior y su propio hash SHA-256. El primer registro encadena con un bloque génesis de ceros.
-- **Consecuencias:** cualquier alteración de un registro anterior se detecta, porque cambia todos los hashes posteriores. La cadena **no impide** la alteración; solo la hace visible. La bitácora se almacena en Vercel Blob, que es un servicio externo; la integridad depende de que quien revisa recalcule la cadena.
-- **Nota:** en documentos anteriores se describía como "inmutable" o "imposible de adulterar". Esa redacción se corrige aquí.
+- **Consecuencias:** cualquier alteración de un registro anterior se detecta, porque cambia todos los hashes posteriores. La cadena **no impide** la alteración; solo la hace visible. La bitácora ahora se almacena en Google Drive (vía Apps Script), un servicio externo. La integridad depende de que quien revisa recalcule la cadena.
 
 ### ADR-004: Módulos compartidos (DRY)
 
 - **Estado:** vigente, con una excepción pendiente.
 - **Decisión:** la lógica común entre frontend y backend vive en `src/lib/compartido/`, con una sola fuente.
-- **Excepción:** el proceso autónomo tiene su propia versión del consenso (ver ADR-002) y la constante de tamaño de lote aparece en tres archivos (DEU-22). Ambas son deuda abierta.
+- **Excepción:** la constante de tamaño de lote aparece en tres archivos (DEU-22) y el parser del SMN está duplicado (DEU-29). Ambas son deuda abierta.
 
 ### ADR-005: Orquestador multiamenaza con acoplamiento no lineal
 
@@ -41,7 +40,6 @@
 - **Contexto:** un criterio de máximo (`Math.max` entre vectores) subestima las combinaciones. Dos amenazas moderadas simultáneas (por ejemplo, suelo saturado y viento) producen un efecto mayor que cada una por separado.
 - **Decisión:** el riesgo global es el máximo de los cuatro vectores más un término de acoplamiento por pares, con la forma `γ · (r_i − 1) · (r_j − 1)`.
 - **Coeficientes vigentes:** los definidos en el código (`crossThreatOrchestrator.js`): hidrológico–viento 0.20, hidrológico–térmico 0.15, convectivo–viento 0.30, térmico–hidrológico 0.10 y viento–térmico 0.05.
-- **Corrección:** versiones anteriores de este registro citaban coeficientes distintos (0.15, 0.10, 0.25 y 0.05) de una especificación de diseño. Esos valores no coinciden con el código y quedan sustituidos por los vigentes.
 - **Consecuencias:** los coeficientes son una decisión de diseño sin validación empírica todavía. Revisarlos cuando exista un registro de eventos reales.
 
 ### ADR-006: Adaptador de forma en el proceso autónomo
@@ -49,7 +47,7 @@
 - **Estado:** vigente.
 - **Contexto:** el orquestador entrega `nivel_alerta_global`, pero el esquema de validación y la interfaz esperan `nivel_alerta`.
 - **Decisión:** el proceso autónomo copia el valor global en `nivel_alerta` y conserva los campos nuevos como opcionales. Si el orquestador falla para una localidad, se usa el motor hidrológico anterior para esa localidad.
-- **Consecuencias:** un fallo del orquestador en una localidad no detiene la publicación, pero **no queda registrado** como degradación. Ver H-MULTI-02 en `06_PENDIENTES.md`.
+- **Consecuencias:** un fallo del orquestador en una localidad no detiene la publicación, pero **no queda registrado** como degradación.
 
 ### ADR-007: Umbral de viento según altitud
 
@@ -63,7 +61,18 @@
 - **Estado:** vigente.
 - **Contexto:** los evaluadores emiten un valor continuo que el orquestador compara entre vectores. Un valor continuo fuera del rango de su nivel discreto produjo falsos positivos (H-ORQ-02 y H-ORQ-03).
 - **Decisión:** cada evaluador devuelve un valor continuo dentro de `[nivel, nivel + 0.99]`, y el mapeo a nivel global usa umbrales de 2.0, 3.0 y 4.0.
-- **Consecuencias:** el evaluador térmico no cumple esta regla en todos sus casos (H-TERM-01). Pendiente de prueba y corrección.
+- **Consecuencias:** esta regla se ha verificado en todos los evaluadores, incluido el térmico (H-TERM-01 cerrado el 24/10/2026).
+
+### ADR-009: Migración del almacenamiento a Google Drive
+
+- **Estado:** vigente (27/10/2026).
+- **Contexto:** Vercel Blob en el plan Hobby suspendió la tienda de datos por superar el límite de "Advanced Operations" (2,000/mes). Esto provocó errores 500 (FUNCTION_INVOCATION_FAILED) en la API y bloqueó el sistema en producción.
+- **Decisión:** migrar todo el almacenamiento (estado diocesano, bitácora y reporte vigente) a Google Drive, utilizando Google Apps Script como puente (API Web). Se creó el adaptador `src/lib/compartido/googleDrive.js`.
+- **Consecuencias:** 
+  - La aplicación ya no depende de Vercel Blob, eliminando el límite de operaciones y el riesgo de suspensión.
+  - El almacenamiento es 100% gratuito y persistente.
+  - Se agregó una nueva variable de entorno crítica: `GOOGLE_SCRIPT_URL`.
+  - El runner (`ejecutar_sara_autonomo.mjs`) aún debe ser migrado (H-RUNNER-01).
 
 ---
 
@@ -73,7 +82,7 @@
 
 - **Estado:** vigente.
 - **Decisión:** el sistema opera solo con servicios gratuitos o de dominio público. No hay servidores de pago, licencias comerciales ni suscripciones.
-- **Consecuencias:** dependencia de los límites de planes gratuitos (DEU-19). Un cambio en esos límites puede afectar la operación.
+- **Consecuencias:** dependencia de los límites de planes gratuitos (DEU-19). La migración a Google Drive (ADR-009) es una consecuencia directa de esta decisión.
 
 ### DEC-002: Preferencia por el falso positivo
 
@@ -102,7 +111,7 @@
 ### DEC-006: Verificar la API antes de codificar contra ella
 
 - **Estado:** vigente.
-- **Decisión:** antes de usar una variable o un endpoint externo, se comprueba con una llamada real. Esta regla nació del hallazgo de H-E4-01: las variables existían, pero con un sufijo por modelo que la primera verificación no encontró.
+- **Decisión:** antes de usar una variable o un endpoint externo, se comprueba con una llamada real. Esta regla nació del hallazgo de H-E4-01 y se reforzó durante la migración a Google Drive.
 - **Consecuencias:** cada nueva integración externa incluye una verificación empírica documentada.
 
 ### DEC-007: Etapa 3 es deuda técnica, no Versión 3.0
@@ -115,16 +124,15 @@
 
 - **Estado:** vigente, con condiciones.
 - **Decisión (22/10/2026):** el repositorio permanece público. Motivos: el presupuesto es cero, y las corridas automáticas y el despliegue funcionan igual con repositorio privado. El plan gratuito de GitHub cubre 2 000 minutos al mes para repositorios privados.
-- **Condiciones:**
-  1. Rotar las claves expuestas en el código antes de publicar cambios de documentación (R-01).
+- **Condiciones actualizadas (27/10/2026):**
+  1. Las claves expuestas en el código ya fueron rotadas y movidas a variables de entorno (R-01, R-02, R-04 cerrados).
   2. Confirmar que las corridas de `sara_cron.yml` se mantienen dentro del límite mensual.
-  3. Atender R-02 y R-04 en código. La visibilidad del repositorio no los resuelve, porque la exposición ya existe en el sitio desplegado.
 - **Revisión:** cuando cambie cualquiera de las condiciones.
 
 ### DEC-009: Documentación en español, con numeración fija
 
 - **Estado:** vigente.
-- **Decisión:** la documentación se mantiene en español. La numeración de `00` a `08` se conserva; `08` pasa a ser el registro de decisiones, en lugar del plan de la Etapa 3, que se archiva.
+- **Decisión:** la documentación se mantiene en español. La numeración de `00` a `08` se conserva; `08` pasa a ser el registro de decisiones.
 - **Consecuencias:** los documentos archivados quedan en `docs/archivo/` y no se citan como vigentes.
 
 ### DEC-010: Documentación para quien retoma el proyecto con ayuda de IA
@@ -139,6 +147,5 @@
 
 | ID | Pregunta | Quién decide |
 |---|---|---|
-| PEND-01 | ¿El Monitor Climático muestra el semáforo N1 a N4 y el desglose por vector? (H-UI-01 a H-UI-03, H6.6) | Coordinación pastoral |
-| PEND-02 | ¿Se corrige la interfaz para que no lea el token de administración desde el navegador? (R-02) | Coordinación técnica |
 | PEND-03 | ¿Los coeficientes de acoplamiento (ADR-005) se recalibran con eventos reales? | Coordinación técnica y pastoral |
+| PEND-04 | ¿Se migrará el runner a un modelo de ejecución que no dependa de GitHub Actions (por ejemplo, Vercel Cron)? | Coordinación técnica |

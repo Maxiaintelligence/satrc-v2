@@ -1,6 +1,6 @@
 # SatRC V2.0 — Ingeniería de prompts (SARA)
 
-> **Versión del documento:** 2.4 (22/10/2026)
+> **Versión del documento:** 2.5 (27/10/2026)
 > **Propósito:** describir los prompts que usa SARA, las reglas que contienen, cómo se alimentan con datos y qué falta por adaptar.
 > **Fuente de verdad:** el código de los archivos citados. Si este documento y el código no coinciden, prevalece el código.
 
@@ -12,7 +12,7 @@ SARA es el agente que redacta los textos de la situación meteorológica a parti
 
 **Principio:** SARA redacta; no decide. El nivel de cada localidad, el vector dominante y las acciones operativas los calcula el motor (ver `03_MOTOR_RIESGO.md`). SARA convierte esos datos en texto para brigadas y coordinadores.
 
-**Modelo:** `openai/gpt-oss-120b` a través de Groq.
+**Modelo:** `openai/gpt-oss-120b` a través de Groq. Se intentó migrar a un modelo más rápido, pero el modelo `gpt-oss-120b` es el que está disponible en la cuenta y responde en un tiempo aceptable (4-5 segundos).
 
 ---
 
@@ -26,7 +26,7 @@ SARA es el agente que redacta los textos de la situación meteorológica a parti
 
 Los dos reportes comparten las mismas reglas base y las mismas reglas multivectoriales. El dictamen del runner tiene su propio prompt, más breve (ver §5).
 
-**Límite de salida:** `max_completion_tokens: 4096` en los tres. Sin este límite, el modelo cortaba el JSON a la mitad y Groq devolvía error 400 (ver §7).
+**Límite de salida:** `max_completion_tokens: 4096` en los reportes, y `2500` en el endpoint on-demand. Sin este límite, el modelo cortaba el JSON a la mitad y Groq devolvía error 400 (ver §7).
 
 ---
 
@@ -50,8 +50,9 @@ El prompt de los reportes contiene reglas numeradas. Su contenido vigente es:
 | 12 | Coherencia entre secciones. La regla 12.bis exige que las zonas de la Sección 0 sean exactamente las de la Sección II. |
 | 13 | Vocabulario: "localidades", no "municipios" ni "comunidades". |
 | 14 | Formato: viñetas en las secciones 0, II, III, IV y V. |
+| 15 | CONTROL ESTRICTO DE EMERGENCIAS: Si Nivel 4 = 0 y Nivel 3 = 0, BAJO NINGUNA CIRCUNSTANCIA usar "suspender actividades", "evacuar" o "emergencia". Usar lenguaje de precaución y vigilancia. |
 
-> **Nota de numeración:** las reglas 15 y 16 no existen. Las multivectoriales empiezan en 17, como están en el código.
+> **Nota de numeración:** las reglas 15 y 16 no existen en la versión original, pero ahora la Regla 17 (multivectorial) y la regla de control de emergencias se inyectan dinámicamente.
 
 ---
 
@@ -62,11 +63,12 @@ El prompt de los reportes contiene reglas numeradas. Su contenido vigente es:
 
 | # | Regla | Qué pide a SARA |
 |---|---|---|
-| 17 | Leer el vector dominante y redactar según su lenguaje | Cada foco trae `vector_dominante` y `niveles_por_vector`. Hidrológico habla de lluvias; viento, de ráfagas y daños a techos (sin mencionar lluvias si el viento es puro); térmico, de frío, heladas, nevadas o calor; convectivo, de granizo y downbursts; los compuestos combinan ambos lenguajes. |
+| 17 | Leer el vector dominante y redactar según su lenguaje | Cada foco trae `vector_dominante`, `tipo_amenaza` y `niveles_por_vector`. Hidrológico habla de lluvias; viento, de ráfagas y daños a techos; térmico, de frío, heladas, nevadas o calor; convectivo, de granizo y downbursts; los compuestos combinan ambos lenguajes. |
 | 18 | Traducir el vector a acciones operativas | Usar el arreglo `acciones_operativas` del foco en la Sección 0 y en la Sección II. No inventar acciones genéricas. |
 | 19 | Sección V condicional | Si un foco tiene un vector distinto de hidrológico, agregar una viñeta específica para ese vector. |
+| 20 | Subtipos específicos | Usar el campo `tipo_amenaza` (NEVADA, GRANIZO, DOWNBURST, etc.) para redactar la causa exacta. |
 
-**Verificado:** las reglas se inyectan en los dos prompts de reporte (líneas 230 y 196 respectivamente).
+**Verificado:** las reglas se inyectan en los dos prompts de reporte.
 
 ---
 
@@ -85,7 +87,7 @@ El título y el color no los decide el modelo. Se fijan según el conteo de nive
 
 El prompt indica que la regla es determinista y que el conteo de niveles es la fuente de verdad.
 
-> **Brecha pendiente:** el dictamen **no** importa `REGLAS_MULTIVECTOR`. Sus ejemplos de título siguen siendo de lluvia ("Emergencia por Lluvias Torrenciales en la Región"), aunque la emergencia sea de viento o de convección. Ver H-PROMPT-01 en `06_PENDIENTES.md`.
+**Estado (H-PROMPT-01 cerrado):** El dictamen del runner **ya importa** `REGLAS_MULTIVECTOR` y utiliza el campo `tipo_amenaza` para redactar el comentario. Los ejemplos de título ahora reflejan la amenaza real.
 
 ---
 
@@ -107,6 +109,7 @@ Cada foco crítico incluye, en el reporte diario:
 |---|---|
 | `nombre`, `municipio`, `nivel`, `causa`, `pendiente`, `acceso` | Motor hidrológico y catálogo de localidades |
 | `vector_dominante` | Orquestador (Etapa 4 y 5) |
+| `tipo_amenaza` | Orquestador (Etapa 5) |
 | `niveles_por_vector` | Orquestador |
 | `acciones_operativas` | Orquestador |
 
@@ -120,7 +123,7 @@ Los valores de `vector_dominante` vienen del orquestador. Son siete, en tres gru
 | `HIDRO_VIENTO`, `CONVECTIVO_VIENTO`, `HIDRO_TERMICO` | Compuestos |
 | `SIN_AMENAZA` | Cuando el nivel global es N1 (Etapa 5) |
 
-Los subtipos de los evaluadores (helada agrícola, nevada, granizo, downburst, supercélula) no son valores de `vector_dominante`. Aparecen solo en el título y la causa del diagnóstico. Eso significa que SARA recibe "TERMICO" y no sabe si es helada o nevada, salvo por el texto del diagnóstico. Ver H-PROMPT-02 en `06_PENDIENTES.md`.
+Los subtipos de los evaluadores (helada agrícola, nevada, granizo, downburst, supercélula) ahora viajan en el campo `tipo_amenaza` (H-PROMPT-02 cerrado). SARA los recibe de forma estructurada, no solo en el texto del diagnóstico.
 
 ---
 
@@ -128,11 +131,11 @@ Los subtipos de los evaluadores (helada agrícola, nevada, granizo, downburst, s
 
 1. **Parseo:** la respuesta se convierte con `JSON.parse`. Si falla, se registra el error y se usa una plantilla estática.
 2. **Campos obligatorios:** `titulo` y `comentario_oficial` deben existir y no estar vacíos. Si no, se usa la plantilla.
-3. **HTTP 400 (JSON truncado):** se corrigió con `max_completion_tokens: 4096` (H8.5). Si vuelve a ocurrir, la plantilla estática evita que la aplicación falle.
-4. **HTTP 429 (límite de uso):** se devuelve la plantilla estática.
+3. **HTTP 400 (JSON truncado):** se corrigió con el límite de tokens. Si vuelve a ocurrir, la plantilla estática evita que la aplicación falle.
+4. **HTTP 429 (límite de uso de Groq):** se devuelve la **plantilla estática de respaldo** (Plan B), avisando que la IA está saturada, pero sin romper la app.
 5. **Codificación:** toda respuesta pasa por `repararMojibake` antes de guardarse o enviarse.
 
-**Principio:** si SARA falla, la aplicación sigue funcionando con texto fijo. Un reporte sin redacción de IA no debe bloquear a los operadores.
+**Principio:** si SARA falla, la aplicación sigue funcionando con texto fijo. Un reporte sin redacción de IA no debe bloquear a los operadores. Este principio se validó durante la migración del 27/10/2026.
 
 ---
 
@@ -140,25 +143,23 @@ Los subtipos de los evaluadores (helada agrícola, nevada, granizo, downburst, s
 
 | Parte | Estado |
 |---|---|
-| Reglas 17 a 19 en los dos prompts de reporte | ✅ Hecho |
-| Campos `vector_dominante`, `niveles_por_vector` y `acciones_operativas` en los focos | ✅ Hecho |
-| Sección 0 y Sección II redactadas con las acciones del motor | ✅ Hecho (por regla 18) |
-| Dictamen del runner con lenguaje multivectorial | ❌ Pendiente (H-PROMPT-01) |
-| Subtipos de amenaza disponibles para SARA | ❌ Pendiente (H-PROMPT-02) |
+| Reglas 17 a 20 en los dos prompts de reporte | ✅ Hecho |
+| Campos `vector_dominante`, `niveles_por_vector`, `tipo_amenaza` y `acciones_operativas` en los focos | ✅ Hecho |
+| Sección 0 y Sección II redactadas con las acciones del motor | ✅ Hecho |
+| Dictamen del runner con lenguaje multivectorial | ✅ Hecho (H-PROMPT-01 cerrado) |
+| Subtipos de amenaza disponibles para SARA | ✅ Hecho (H-PROMPT-02 cerrado) |
 | Pruebas automáticas de los prompts | ❌ No existen (H-PROMPT-03) |
-
-**Verificación empírica registrada:** en la sesión del 22/10/2026, SARA agregó en la Sección V una viñeta específica para un hidrólogo, tras la adaptación. Esta verificación fue manual y no se repite en pruebas automáticas.
 
 ---
 
 ## 9. Reglas para editar los prompts
 
 1. **Cambiar el texto del prompt no es un cambio menor.** Afecta lo que lee cada operador. Verificar con una corrida real antes de dar el cambio por bueno.
-2. **Las reglas 17 a 19 viven en un solo archivo** (`promptsMultivector.js`) y se reutilizan en los dos reportes. No copiarlas a mano.
+2. **Las reglas 17 a 20 viven en un solo archivo** (`promptsMultivector.js`) y se reutilizan en los dos reportes. No copiarlas a mano.
 3. **La numeración de reglas es la del código.** Si se agrega una regla, usar el siguiente número libre y actualizar la tabla de este documento.
 4. **No incluir valores de claves ni datos personales** en el texto de los prompts ni en la documentación.
 5. **El dictamen del runner y los reportes tienen prompts separados.** Un cambio en uno no se propaga al otro; hay que revisar ambos.
-6. **El límite de salida (4096) es parte del diseño.** Subirlo sin revisar la longitud de los reportes puede volver a cortar el JSON.
+6. **El límite de salida es parte del diseño.** Subirlo sin revisar la longitud de los reportes puede volver a cortar el JSON o causar Timeout en Vercel.
 
 ---
 
@@ -166,8 +167,6 @@ Los subtipos de los evaluadores (helada agrícola, nevada, granizo, downburst, s
 
 | ID | Deuda | Sev. | Referencia |
 |---|---|---|---|
-| H-PROMPT-01 | El dictamen del runner no usa reglas multivectoriales y sus ejemplos son de lluvia. | 🟡 | §5 |
-| H-PROMPT-02 | Los subtipos de amenaza solo aparecen en el texto del diagnóstico, no como dato estructurado para SARA. | 🟡 | §6.2 |
 | H-PROMPT-03 | No hay pruebas automáticas que verifiquen que los prompts reciben los campos esperados y que la salida cumple las reglas. | 🟡 | §8 |
 
-Los tres se registran en `06_PENDIENTES.md`.
+*(H-PROMPT-01 y H-PROMPT-02 fueron cerrados en la sesión del 22/10/2026 y 27/10/2026, respectivamente).*

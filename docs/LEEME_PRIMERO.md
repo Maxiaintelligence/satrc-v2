@@ -1,7 +1,7 @@
 # SatRC V2.0 — Leer primero
 
 > **Propósito de este archivo:** punto de entrada para cualquier persona o chat de IA que retome el proyecto. Resume el estado actual y dice en qué orden leer el resto de la documentación.
-> **Última actualización:** 24/10/2026 (cierre de H-TERM-01 y sincronización con el estado real del código).
+> **Última actualización:** 27/10/2026 (Migración a Google Drive, cierre de riesgos de seguridad y correcciones post-Etapa 5).
 
 ---
 
@@ -13,29 +13,34 @@ Detalle completo en `01_CONTEXTO.md`.
 
 ## 2. Estado actual (resumen)
 
-| Etapa | Estado | Documento de referencia |
+| Etapa / Hito | Estado | Documento de referencia |
 |---|---|---|
 | Etapa 3: deuda técnica, tests, validación de contratos | Cerrada | `04_HISTORIAL.md` |
 | Etapa 4: motor multiamenaza (4 evaluadores + orquestador) | Cerrada a nivel funcional | `03_MOTOR_RIESGO.md`, `04_HISTORIAL.md` |
 | Etapa 5: integración multivectorial (UI, bitácora, prompts) | Cerrada | `04_HISTORIAL.md` |
-| Correcciones post-Etapa 5 | H-MULTI-01..05, H-PROMPT-01/02, H6.6, H-TERM-01 cerrados | `04_HISTORIAL.md` |
+| Correcciones post-Etapa 5 (H-MULTI, H-PROMPT, H-TERM, H-BITACORA) | Cerradas | `04_HISTORIAL.md` |
+| Correcciones de Seguridad (R-01, R-02, R-04) y Migración de BD | Cerradas | `04_HISTORIAL.md`, `08_DECISIONES.md` (ADR-009) |
 | Versión 3.0 (autenticación real, nuevos vectores, percentiles) | Planeada, no iniciada | `06_PENDIENTES.md` |
-| Correcciones post-Etapa 5 | H-MULTI-01..05, H-PROMPT-01/02, H6.6, H-TERM-01, H-BITACORA-01, H-REPORTE-01 cerrados | `04_HISTORIAL.md` |
 
-**Verificado el 24/10/2026 en el HEAD `9288793`:** 159 pruebas en 17 archivos, todas en verde; `npm run build` verde; lint con 0 errores y 51 advertencias (coinciden con DEU-24 y DEU-25). El consenso del proceso autónomo ya incluye las variables de Etapa 4 (H-MULTI-01 cerrado). Detalle en `VERIFICACION_MULTIFACTOR.md`.
+**Verificado el 27/10/2026 en el HEAD `d248fdb`:** 167 pruebas en 17 archivos, todas en verde; `npm run build` verde; lint con 0 errores y 51 advertencias (coinciden con DEU-24 y DEU-25). 
 
-**Producción:** operativa en Vercel con ejecución autónoma cada 3 horas en GitHub Actions. Última corrida verificada: `40045053119` (24/10/2026).
+**Infraestructura:** 
+- **Producción:** operativa en Vercel con ejecución autónoma cada 3 horas en GitHub Actions.
+- **Base de datos (Crítico):** Debido a la suspensión de Vercel Blob por límites del plan Hobby, todo el almacenamiento (estado, bitácora y reportes) fue migrado a **Google Drive (vía Google Apps Script)**. La lógica de conexión vive en `src/lib/compartido/googleDrive.js` y se configura con `GOOGLE_SCRIPT_URL`. Ver ADR-009 en `08_DECISIONES.md`.
 
 ## 3. Lo más urgente
 
-Antes de cualquier cambio, revisa `06_PENDIENTES.md`, sección "Riesgos activos". Los riesgos R-01 a R-04 están abiertos y requieren rotación de claves y cambios de código:
+Antes de cualquier cambio, revisa `06_PENDIENTES.md`, sección "Riesgos activos".
 
-- El endpoint `GET /api/sara` devuelve la bitácora completa sin autenticación.
+- **R-03:** El endpoint `GET /api/sara` todavía devuelve la bitácora completa sin autenticación (pendiente de mitigar en V3.0 o con un refactor).
 
-Además, hay dos riesgos de integridad de datos recién confirmados en producción (no estaban en la lista anterior):
+**Riesgos y problemas recién resueltos (para contexto histórico):**
+- **H-VERCEL-01 (Resuelto):** El Timeout y la suspensión de Vercel Blob ya no afectan al sistema tras la migración a Google Drive.
+- **R-01, R-02, R-04 (Resueltos):** Las claves ya no están en el código. Se movieron a variables de entorno (`SATRC_OPERADORES_JSON` y `CLAVE_SALA_OPERATIVA`).
+- **H-BITACORA-01 (Resuelto):** La colisión de escritura en la bitácora se solucionó centralizando la creación de hashes en `bitacora.js`.
 
-- **H-BITACORA-01:** ✅ Cerrado el 24/10/2026 (commit `d3b0c1c`). La cadena SHA-256 se rompía en `SARA_LOG_132`. Los registros nuevos ya se encadenan correctamente.
-- **H-REPORTE-01:** ✅ Cerrado el 24/10/2026 (commit `d3b0c1c`). El reporte diario ya no sobrescribe el reporte vigente si es parcial.
+**Deuda técnica inminente:**
+- **H-RUNNER-01:** El script autónomo (`scripts/ejecutar_sara_autonomo.mjs`) aún intenta usar Vercel Blob. Debe migrarse al adaptador de Google Drive para que el cron vuelva a publicar el estado. Esta es la máxima prioridad de desarrollo actual.
 
 ## 4. Orden de lectura recomendado
 
