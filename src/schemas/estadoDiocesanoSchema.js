@@ -91,7 +91,7 @@ export const EstadoDiocesanoBlobSchema = z.object({
     totalNivel2: z.number().nonnegative(),
     totalNivel1: z.number().nonnegative()
   }),
-  evaluaciones: z.array(EvaluacionSchema).min(1).nullable() // Acepta null si el sistema está degradado
+  evaluaciones: z.array(EvaluacionSchema).nullable() // Acepta null si el sistema está degradado
 }).passthrough(); // Ignora campos extra que el runner pueda agregar en el futuro
 
 // 3. Schema para la API (lo que devuelve /api/sara)

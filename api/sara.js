@@ -138,7 +138,7 @@ export default async function handler(req, res) {
     if (validacion.success) {
       return res.json(validacion.data);
     } else {
-      console.error("❌ [ZOD] El estado de Drive no cumple el schema:", validacion.error.errors);
+      console.error("❌ [ZOD] El estado de Drive no cumple el schema:", validacion.error.issues);
     }
   }
 
