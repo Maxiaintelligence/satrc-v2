@@ -150,3 +150,30 @@ Un ítem no puede estar en dos documentos a la vez. Si está en el historial, sa
 13. Prueba de sintaxis obligatoria. Antes de cualquier `git commit`, ejecutar `node --check` en los archivos de backend modificados.
 14. Verificar el efecto real, no solo el código de salida. Un proceso que termina en 0 puede haber fallado silenciosamente. Los logs de "publicación exitosa" no sustituyen la verificación del archivo en Drive.
 15. Si el fix toca el almacenamiento o la bitácora, incluir una prueba de lectura real desde Drive antes de dar el cambio por cerrado.
+---
+
+## Fase 6: Protocolo de rescate de producción y pruebas en 4 niveles
+
+> **Contexto:** Tras el incidente del 28/10/2026, se estableció este protocolo obligatorio para diagnosticar y resolver fallos en producción. El método empírico demostró que la intuición falla; solo los datos y la verificación en capas revelan la causa raíz.
+
+Cuando la aplicación falle en producción (por ejemplo, `/api/sara` devuelve `RESPUESTA_EN_VIVO`, el semáforo está vacío o hay errores 500), es **obligatorio** seguir este orden:
+
+1. **Nivel 1: Prueba de Endpoints (Frontend → Vercel)**
+   - Hacer peticiones HTTP directas con `Invoke-RestMethod` a `/api/sara`, `/api/smn`, etc.
+   - Comparar el `origen` y los datos devueltos con lo esperado.
+
+2. **Nivel 2: Prueba de Almacenamiento (Vercel/GitHub → Drive)**
+   - Probar el `GOOGLE_SCRIPT_URL` directamente desde PowerShell local con `?action=leer&file=...`.
+   - Si funciona local pero falla en Vercel, el problema es de red, IP bloqueada o variable de entorno mal configurada.
+
+3. **Nivel 3: Prueba del Runner (GitHub Actions)**
+   - Revisar el log del último run. Verificar que las 14 zonas se evaluaron.
+   - Confirmar que el archivo en Drive tiene el `actualizado_iso` reciente.
+
+4. **Nivel 4: Prueba de Contratos (Zod)**
+   - Revisar los logs de Vercel (función `api/sara`).
+   - Si Zod falla, inspeccionar el JSON crudo desde Drive y compararlo con el esquema.
+
+**Regla de oro del rescate:** Documentar el diagnóstico (síntomas, causa raíz, fix) antes de aplicar código. El commit debe incluir la prueba empírica de que el problema se resolvió.
+
+---

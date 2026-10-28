@@ -1,6 +1,6 @@
 # SatRC V2.0 — Historial de bugs, hitos y lecciones
 
-> **Versión del documento:** 2.4 (22/10/2026)
+> **Versión del documento:** 2.5 (28/10/2026)
 > **Propósito:** registro cronológico de los problemas resueltos, los hitos cerrados y las lecciones aprendidas. Cada entrada indica síntoma, causa, solución, verificación y commit.
 > **Regla:** un bug entra aquí solo cuando está resuelto. Lo pendiente va a `06_PENDIENTES.md`.
 
@@ -31,7 +31,8 @@ Los hitos se nombran con la etapa cuando puede haber confusión. Esta versión s
 | Etapa 3 (H0 a H9) | Octubre de 2026 | Deuda técnica cerrada. Tag `etapa-3-cerrada` |
 | Etapa 4 (H6.1 a H6.7) | 21 a 22 de octubre de 2026 | Motor multiamenaza en producción. Tag `etapa-4-cerrada` (commit `29009fe`) |
 | Etapa 5 (H5.0 a H5.8) | 22 de octubre de 2026 | Integración multivectorial en interfaz, bitácora y prompts |
-| Revisión documental | 22 de octubre de 2026 | Conciliación de documentos con el código (este archivo) |
+| Migración a Drive | 27 de octubre de 2026 | Suspensión de Vercel Blob y migración de emergencia |
+| **Rescate y Auditoría** | **28 de octubre de 2026** | **Resolución del incidente de producción (RESPUESTA_EN_VIVO), fix de Zod, auditoría documental completa** |
 
 ---
 
@@ -108,7 +109,6 @@ Objetivo: cerrar deuda, establecer pruebas y documentar. Sin funciones nuevas.
 - **Síntoma:** la interfaz no leía `visibility_gfs_seamless` y usaba 10 km por defecto.
 - **Solución:** el código ya lo tenía resuelto desde H7a.2. Se agregó una prueba que blinda el respaldo triple.
 - **Commit:** `6becdf9` (pendiente de confirmar con `git log`).
-- **Nota de trazabilidad:** este mismo commit aparece en otra sección del historial anterior asociado a la prueba H5.1 de Etapa 5. Verificar con `git log` antes de citarlo.
 
 ### E3-H6 (H-FUNC-01) — Funciones duplicadas
 - **Síntoma:** 14 copias de 7 funciones repartidas en el código.
@@ -185,7 +185,7 @@ Objetivo: cerrar deuda, establecer pruebas y documentar. Sin funciones nuevas.
 - **Lección:** `H-TEST-10`. Este identificador reemplaza al `H-TEST-06` que tenía esta lección en el historial anterior.
 
 ### E4-H-CIERRE — Cierre de Etapa 4
-- **Estado:** cerrada a nivel funcional. Quedan abiertos H6.6, H7 y H-ARCH-01 (ver `06_PENDIENTES.md`).
+- **Estado:** cerrada a nivel funcional. Quedan abiertos H6.6 *(Nota 28/10/2026: H6.6 se cerró en Etapa 5, ver 6.1)*, H7 y H-ARCH-01 (ver `06_PENDIENTES.md`).
 - **Tag:** `etapa-4-cerrada` en el commit `29009fe`.
 
 ---
@@ -218,7 +218,6 @@ Objetivo: cerrar deuda, establecer pruebas y documentar. Sin funciones nuevas.
 - `dictamen.js` con una tabla de siete vectores (cuatro simples y tres compuestos).
 - El banner de la Sala Operativa muestra la amenaza real. Por ejemplo, "Alerta por Frío Extremo" cuando el vector es térmico, en lugar de "Deslaves".
 
-
 ### E5-H5.3 — Bitácora multivectorial
 - **Commits:** `a5262b8`, `541cbdd`, `ac16c1c`.
 - `bitacora.js` registra el desglose por vector en el resumen que se encadena con SHA-256. Ejemplo: `N3 [hidro:36, viento:0, termico:0, conv:0] | Top-1: HIDROLOGICO`.
@@ -242,13 +241,13 @@ Objetivo: cerrar deuda, establecer pruebas y documentar. Sin funciones nuevas.
 - **Commit:** `fe85b08`.
 - **Lección:** `H-TEST-09`.
 
-#### H-PROMPT-01 — Dictamen del runner con lenguaje multivectorial y formato optimizado
+### H-PROMPT-01 — Dictamen del runner con lenguaje multivectorial y formato optimizado
 - **Síntoma:** El dictamen del runner usaba un prompt genérico sin reglas multivectoriales (sus ejemplos eran solo de lluvia). Además, el resumen de la bitácora mostraba los números antes que el texto, dificultando la lectura rápida.
 - **Solución:** Se importó `REGLAS_MULTIVECTOR` en el runner y se inyectó el `tipo_amenaza` en el prompt. Se reordenó el resumen de la bitácora para seguir la lógica "Qué -> Dónde -> Cuánto" (Texto -> Cobertura -> Conteos).
 - **Verificación:** El dictamen en producción ahora genera textos como "Se mantiene la vigilancia normal... | Zonas OK: 14/14. | N4: 0...".
 - **Commits:** `3f2f672` y el commit de reordenamiento.
 
-#### H-PROMPT-02 — Subtipos de amenaza estructurados para SARA
+### H-PROMPT-02 — Subtipos de amenaza estructurados para SARA
 - **Síntoma:** SARA recibía el vector genérico (`TERMICO` o `CONVECTIVO`) y tenía que adivinar si era una nevada, una helada, un granizo o un downburst leyendo el texto del diagnóstico.
 - **Solución:** El orquestador ahora expone el campo `tipo_amenaza` (ej. `NEVADA`, `GRANIZO`, `VIGILANCIA_NORMAL`) y el prompt de SARA lo utiliza en la Regla 17.
 - **Verificación:** Test J en verde. API de producción devuelve el campo correctamente.
@@ -276,10 +275,8 @@ Objetivo: cerrar deuda, establecer pruebas y documentar. Sin funciones nuevas.
 - **Solución:** El orquestador ahora inyecta `datos_disponibles_por_vector`. La bitácora muestra `SIN_DATOS` si el vector no tuvo información.
 - **Verificación:** Tests G, H, I en verde.
 - **Commit:** `5c826cd`.
----
 
 ### Cierre de Etapa 5
-
 - **Tag:** `etapa-5-cerrada` en el commit `ae67db3`.
 - **Documentación de cierre:** `b213bca` (handover) y `890ba6e` (backlog), HEAD al momento de la verificación.
 
@@ -288,100 +285,88 @@ Objetivo: cerrar deuda, establecer pruebas y documentar. Sin funciones nuevas.
 ## 5.bis Fixes post-Etapa 5 (octubre de 2026)
 
 ### E5-H-TERM-01 — Nivel continuo térmico fuera del contrato [nivel, nivel+0.99]
-
 - **Síntoma:** con sensación térmica de 0 °C y nevada real (nivel discreto 3), `nivel_alerta_continuo` devolvía 2.64, que el orquestador leía como N2. Una nevada (N3) podía degradarse a N2 global.
-- **Causa:** `thermalEvaluator.js` calculaba el continuo con `1.0 + (nivelFrio - 1) * pesoFrio` en lugar de `nivelFinal + peso * 0.99`. Viola ADR-008 y `03_MOTOR_RIESGO.md` §5.3. Además, el cálculo del continuo se hacía antes del desempate frío/calor, así que en el caso patológico de frío N2 + calor N3 en la misma ventana, el continuo podía ser de N1 mientras el discreto era N3.
-- **Solución:** se reordenó el bloque. `nivelFinal` (después del desempate, frío gana empates) se calcula primero, y el continuo después con la fórmula `nivelFinal + peso_dominante * 0.99`. Se aplica el peso del vector dominante, no de `nivelFrio` o `nivelCalor` por separado.
-- **Verificación:**
-  - 6 tests de reproducción nuevos en `thermalEvaluator.test.js` (tests 9 a 14): nevada, frío N2, frío N3, calor N2, calor N3, frío+calor simultáneos. Fallan pre-fix (2.64, 1.89, 2.96, 1.92, 2.98, 1.89), pasan post-fix (3.81, 2.88, 3.97, 2.91, 3.98, 2.88).
-  - Test E en `regresionMultifactor.test.js` endurecido de `> 2.0` a `[3.0, 3.99]` para blindar la regresión.
-  - 159 pruebas en 17 archivos, todas en verde (24/10/2026). `npm run build` verde.
-  - Producción: corrida `40045053119` con semáforo sin cambios (N4=0 | N3=0 | N2=246 | N1=159), 0 localidades con `termico != 1.0`. Esperado: hoy no hay frío en octubre.
-  - Pendiente de re-auditoría de invierno, cuando el térmico dispare por primera vez. Si la subida de N3 supera el 30 %, evaluar recalibración del peso.
+- **Causa:** `thermalEvaluator.js` calculaba el continuo con `1.0 + (nivelFrio - 1) * pesoFrio` en lugar de `nivelFinal + peso * 0.99`. Viola ADR-008. Además, el cálculo del continuo se hacía antes del desempate frío/calor.
+- **Solución:** se reordenó el bloque. `nivelFinal` se calcula primero, y el continuo después con la fórmula `nivelFinal + peso_dominante * 0.99`.
+- **Verificación:** 6 tests de reproducción nuevos. En producción, semáforo sin cambios por ser octubre (sin frío).
 - **Commit:** `343f80d`.
 - **Lección:** H-TEST-05 aplicada (campo nuevo con test de valor y rango).
 
-### Nota — H-BITACORA-01 confirmado en producción (24/10/2026)
-
-- **Síntoma:** la cadena SHA-256 de la bitácora se rompe en el registro `SARA_LOG_132` (de 264). `prev_hash` real (`7c4f60d1c896e129...`) no coincide con el esperado (`fa62b7cb9b571e68...`).
-- **Causa probable:** colisión de escritura entre `reporteDiario.mjs` y `ejecutar_sara_autonomo.mjs`. El runner carga `bitacoraHistorial` al inicio, `generarReporteDiario()` escribe la bitácora desde el módulo, y el runner vuelve a escribir con la copia vieja.
-- **Estado:** pendiente. Próximo commit de código propuesto: H-BITACORA-01 + H-REPORTE-01 juntos (tocan los mismos tres archivos y comparten causa raíz).
-- **Verificación:** comando PowerShell documentado en `06_PENDIENTES.md`.
-- **No es regresión de H-TERM-01:** verificado, el fix de H-TERM-01 no tocó `bitacora.js`, `sara.js`, `ejecutar_sara_autonomo.mjs` ni `reporteDiario.mjs`.
-
 ### Cierre de H-BITACORA-01 y H-REPORTE-01 (24/10/2026)
-
-- **Síntoma (H-BITACORA-01):** La cadena SHA-256 de la bitácora se rompía en producción. Confirmado en `SARA_LOG_132` (de 264 registros).
-- **Causa:** Colisión de escritura. El runner cargaba `bitacoraHistorial` en memoria, luego llamaba a `generarReporteDiario()`, que hacía su propio `put('bitacora_sara.json')` leyendo una base sin el registro del runner. Al final, el runner volvía a hacer `put` pisando el registro del diario y rompiendo el `prev_hash` del siguiente ciclo.
-- **Síntoma (H-REPORTE-01):** El reporte diario parcial (con <14/14 zonas) sobrescribía el `reporte_diocesano_vigente.json`, violando la regla de negocio.
-- **Solución:** 
-  - Se extrajo la lógica de creación de hash/ID a `calcularNuevaEntradaBitacora` en `src/lib/compartido/bitacora.js`.
-  - `reporteDiario.mjs` ya no hace `put` de la bitácora; en su lugar, recibe `bitacoraBase` por parámetro y devuelve el `registro_bitacora` al runner.
-  - `ejecutar_sara_autonomo.mjs` es el único que hace el `put` final, asegurando que la cadena se mantenga intacta.
-  - Se añadió `if (!esParcial)` antes del `put` del reporte vigente en `reporteDiario.mjs`.
-- **Verificación:** 
-  - 5 tests nuevos (2 en `bitacora.test.js`, 3 estáticos en `regresionMultifactor.test.js`). 164/164 tests en verde (24/10/2026).
-  - En producción, los registros nuevos (`SARA_LOG_255` a `257`) están correctamente encadenados. La ruptura histórica en `SARA_LOG_132` se mantiene, como es de esperar (no se puede reparar retroactivamente).
+- **Síntoma:** la cadena SHA-256 de la bitácora se rompía en producción. El reporte diario parcial sobrescribía el vigente.
+- **Causa:** Colisión de escritura. El runner cargaba la bitácora en memoria, luego `generarReporteDiario()` hacía su propio `put` leyendo una base sin el registro del runner. Al final, el runner volvía a hacer `put` pisando el registro del diario y rompiendo el `prev_hash`.
+- **Solución:** Se extrajo la lógica a `calcularNuevaEntradaBitacora`. `reporteDiario.mjs` ya no hace `put` de la bitácora; recibe `bitacoraBase` por parámetro y devuelve el registro al runner. `ejecutar_sara_autonomo.mjs` es el único que hace el `put` final. Se añadió `if (!esParcial)` antes del `put` del reporte.
+- **Verificación:** 164/164 tests en verde. En producción, los registros nuevos se encadenan correctamente.
 - **Commits:** `d3b0c1c`.
-- **Lección:** La centralización de la lógica de escritura de la bitácora previene futuras colisiones (documentada como H-BITACORA-02 para concurrencia).
 
 ### Cierre de Riesgos de Seguridad (R-01, R-02, R-04) — 27/10/2026
-
 - **Síntoma:** Credenciales y claves de acceso expuestas en el código fuente público y en el bundle del navegador.
-- **Solución:** 
-  - R-01/DEU-21: Se eliminó `USUARIOS_AUTORIZADOS` de `api/reporte-ondemand.js` y se reemplazó por la variable de entorno `SATRC_OPERADORES_JSON` (mapeo de clave a rol).
-  - R-02: Se eliminó el uso de `VITE_SARA_ONDEMAND_TOKEN` en el frontend y la validación por `x-admin-token` en el backend.
-  - R-04: Se eliminó la clave en texto plano de `App.jsx` y se creó el endpoint `api/auth-operativo.js` que valida contra la variable secreta `CLAVE_SALA_OPERATIVA`.
-- **Verificación:** 
-  - `npm run build` y `npm test` (164/164) en verde.
-  - En producción: login de Sala Operativa, generación de reportes on-demand y actualización de bitácora funcionando con las nuevas variables de Vercel.
-- **Commits:** `0110708`, `d3b0c1c` (parcial), y el commit de auth-operativo.
+- **Solución:** Se movieron a variables de entorno (`SATRC_OPERADORES_JSON`, `CLAVE_SALA_OPERATIVA`), se creó el endpoint `api/auth-operativo.js`, y se eliminó el token expuesto.
+- **Verificación:** Build y test (164/164) en verde. Producción funcionando con las nuevas variables.
+- **Commits:** `0110708`, `d3b0c1c`, y el commit de auth-operativo.
 
 ### Cierre de H-MOTOR-07 y H-CONV-03 — 27/10/2026
-
-- **Síntoma H-MOTOR-07:** El motor hidrológico leía `wind_speed_10m` en lugar de `viento_kmh`, por lo que la Regla 1 (protección del Altiplano) nunca detectaba vientos > 40 km/h.
-- **Síntoma H-CONV-03:** El motor convectivo disparaba alertas N3 por "Downburst" con valores de CAPE muy bajos (ej. 560 J/kg), generando falsos positivos en localidades como Apan y Almoloya que aparecían en la web con alertas de "vientos destructivos".
-- **Solución:** Se cambió el campo de viento en `riskEvaluator.js` y se agregó la condición `capeMax > 1000` para el downburst en `convectiveEvaluator.js`. Se agregaron 3 tests de regresión.
-- **Verificación:** 
-  - 167 tests en verde.
-  - En producción: Apan bajó de N3 a N1, Almoloya de N3 a N2 (Vigilancia normal por CAPE 860). El total de N2 bajó de 246 a 217 y los N1 subieron de 159 a 188.
+- **Síntoma H-MOTOR-07:** El motor hidrológico leía `wind_speed_10m` en lugar de `viento_kmh`, por lo que la Regla 1 nunca detectaba vientos > 40 km/h.
+- **Síntoma H-CONV-03:** El motor convectivo disparaba alertas N3 por "Downburst" con valores de CAPE muy bajos, generando falsos positivos (Apan, Almoloya).
+- **Solución:** Se cambió el campo de viento en `riskEvaluator.js` y se agregó `capeMax > 1000` en `convectiveEvaluator.js`.
+- **Verificación:** 167 tests en verde. Apan bajó de N3 a N1, Almoloya de N3 a N2.
 - **Commits:** `d248fdb`.
 
-## 7. Crisis de Vercel Blob y Migración a Google Drive (27 al 28/10/2026)
-
-Esta sección documenta la crisis que llevó a la migración total de la base de datos y la resolución de los problemas de arquitectura subyacentes.
-
-### E5-H-VERCEL-01 — Suspensión de Vercel Blob y migración de emergencia
-
-- **Síntoma:** La aplicación dejó de funcionar en producción. El endpoint de reportes on-demand devolvía `500 Internal Server Error`, y el runner de GitHub Actions fallaba al publicar. Los logs de Vercel mostraban `BlobStoreSuspendedError: Vercel Blob: This store has been suspended`.
-- **Causa Raíz:** Se superó el límite de "Advanced Operations" (2,000/mes) del plan Hobby de Vercel. Vercel bloqueó la tienda de almacenamiento hasta el próximo ciclo de facturación.
-- **Solución:** Se migró todo el almacenamiento (estado diocesano, bitácora y reportes) a **Google Drive**, usando Google Apps Script como API Web. Se creó el adaptador `src/lib/compartido/googleDrive.js`.
-- **Verificación:** El endpoint de reportes on-demand respondió con `HTTP 200` en 4.29 segundos, generando el reporte con IA y guardándolo en Drive.
-
-### E5-H-RUNNER-01 — Migración del cron autónomo a Google Drive
-
-- **Síntoma:** El runner seguía intentando usar Vercel Blob, fallando con `Error al publicar en Google Drive: Falta GOOGLE_SCRIPT_URL`.
-- **Causa:** El secreto `GOOGLE_SCRIPT_URL` no estaba inyectado en el archivo `.github/workflows/sara_cron.yml`. Además, `reporteDiario.mjs` seguía intentando escribir en Blob.
-- **Solución:** Se agregó la variable al YAML, se eliminó la dependencia de `BLOB_READ_WRITE_TOKEN`, y se modificó `reporteDiario.mjs` para usar el adaptador de Drive.
-- **Verificación:** El runner terminó exitosamente en GitHub Actions.
-
-### E5-H-DRIVE-TIMEOUT — Optimización del estado diocesano
-
-- **Síntoma:** Vercel seguía cayendo en `RESPUESTA_EN_VIVO`. El archivo `estado_diocesano.json` pesaba 921 KB y Google Drive tardaba 7.15 segundos en entregarlo, superando el límite de 10s de Vercel.
-- **Solución:** Se creó el `estado_ligero.json` (2.69 KB), que solo contiene el semáforo, el dictamen y las evaluaciones N3/N4. Vercel ahora lee este archivo ligero.
-- **Verificación:** El archivo ligero se lee en 2.21 segundos.
-
-### E5-H-DRIVE-BLOQUEO — Bloqueo de Google Apps Script a Vercel
-
-- **Síntoma:** Vercel devolvía `Unexpected token '<', "<!doctype "` al intentar leer de Drive, y `HTTP 401` al intentar escribir.
- el origen en Vercel sigue diciendo RESPUESTA_EN_VIVO y el semáforo aparece vacío. Necesitamos diagnosticar si Vercel está leyendo el archivo estado_ligero.json o si la validación de Zod está fallando. 
-- **Causa:** Google Apps Script bloquea las peticiones desde IPs de la nube (Vercel) por seguridad, redirigiendo a una página de login HTML.
-- **Solución:** Se re-implementó el script en Google Apps Script, seleccionando explícitamente "Ejecutar como: Yo" y "Quién tiene acceso: Cualquier persona". 
-- **Verificación:** La prueba en PowerShell confirmó que Google devuelve un JSON válido (`Semáforo: N4=0 | N3=0`). El bloqueo de seguridad de Google se ha superado. La aplicación está lista para leer los datos correctamente en Vercel.
+### Crisis de Vercel Blob y Migración a Google Drive (27 al 28/10/2026)
+- **Síntoma:** La aplicación dejó de funcionar. Los logs mostraban `BlobStoreSuspendedError`.
+- **Causa:** Se superó el límite de "Advanced Operations" del plan Hobby de Vercel.
+- **Solución:** Migración total a Google Drive (Apps Script). Se creó el adaptador `googleDrive.js`. Se inyectó `GOOGLE_SCRIPT_URL` en el YAML. Se creó `estado_ligero.json` (2.69 KB) para evitar timeouts en Vercel. Se re-implementó el Apps Script con "Ejecutar como: Yo" y "Acceso: Cualquier persona" para evitar bloqueos de IP.
 
 ---
 
-## 6. Lecciones consolidadas
+## 6. Sesión 28/10/2026 — Auditoría, Rescate de Producción y Fix Crítico
+
+Esta sección documenta el incidente de producción más grave desde la creación del sistema y la auditoría documental que derivó de él.
+
+### 6.1 Aclaraciones Históricas y Cierres Formales
+
+**H-VIENTO-01 (Cierre formal)**
+- **Síntoma:** la especificación original del evaluador de viento incluía un suavizado de 3 horas y un factor de rugosidad.
+- **Causa:** el código **nunca implementó** ni el suavizado (solo extrae el máximo de 24h) ni el factor de rugosidad.
+- **Solución:** cierre como **documental**. Se actualiza la especificación para reflejar el código real (DEC-010). No requiere cambio de código.
+- **Fecha de registro:** 28/10/2026.
+
+**Aclaración sobre H6.6**
+- **Estado real:** cerrado en Etapa 5.
+- **Evidencia:** T14 del 28/10/2026 confirmó que `MonitorPublico.jsx` usa `niveles_por_vector` y `acciones_operativas` del orquestador.
+- **Corrección:** Las notas históricas en las secciones 4 y 7 de este documento que decían "H6.6 abierto" o "pendiente" han sido corregidas en esta versión.
+
+### 6.2 Incidente de Producción: La "Tormenta Perfecta" (`RESPUESTA_EN_VIVO`)
+
+- **Síntoma:** `/api/sara` devolvía `origen: RESPUESTA_EN_VIVO`. El semáforo aparecía vacío (`N4=undefined, N3=undefined`). El dictamen mostraba un texto genérico ("Informe Diocesano") en lugar del real. La bitácora era falsa (`SARA_LOG_1`). El runner de GitHub Actions reportaba "publicación exitosa", pero los operadores y el público no veían nada.
+- **Causa Raíz (3 fallos encadenados):**
+  1. **Infraestructura:** La variable `GOOGLE_SCRIPT_URL` en Vercel contenía una URL de redirección (`script.googleusercontent.com`) en lugar de la canónica (`script.google.com/macros/s/.../exec`). Las peticiones fallaban silenciosamente.
+  2. **Runner:** En días sin alertas N3/N4, el runner generaba el paquete ligero con `evaluaciones: null`.
+  3. **Validación Zod:** El esquema `EstadoDiocesanoBlobSchema` exigía `.min(1)` en `evaluaciones`, por lo que rechazaba el `[]` (o aceptaba el null solo si usaba `.nullable()` pero luego fallaba con el arreglo vacío).
+- **Solución:**
+  1. Corrección manual de `GOOGLE_SCRIPT_URL` en Vercel y redeploy sin caché.
+  2. `scripts/ejecutar_sara_autonomo.mjs` y `api/sara.js` modificados para aceptar y enviar días tranquilos (`evaluaciones: []`).
+  3. `src/schemas/estadoDiocesanoSchema.js` modificado para aceptar arreglos vacíos (se eliminó `.min(1)`). Se corrigió el log de errores de Zod (`.issues` en lugar de `.errors`).
+- **Verificación:**
+  - La app pasó de `RESPUESTA_EN_VIVO` a `GOOGLE_DRIVE_ACTUALIZADO`.
+  - `semaforo: N4=0 N3=0 N2=262 N1=143` (405 localidades).
+  - `dictamen.titulo: Vigilancia por Vientos Fuertes`.
+- **Commits:** `2a3e3e8` (acepta días tranquilos), `3053e29` (Zod schema).
+- **Deudas expuestas (nuevas):** H-DRIVE-01 (silencia errores), H-DRIVE-04 (no valida URL), H-DRIVE-05 (Vercel no puede escribir en Drive por HTTP 401), H-SARA-01 (fallback miente).
+
+### 6.3 Auditoría Documental y Actualización del Sistema
+
+Tras el rescate, se realizó una auditoría empírica de los 11 documentos fundacionales. Se reescribieron para alinear la documentación con el código real y se institucionalizó el principio **DEC-011 (Precisión sobre cobertura)**.
+
+- `00_METODOLOGIA.md`: Reemplaza el principio de falso positivo. Añade verificación de efecto real en Drive. Establece el Protocolo de Rescate de Producción en 4 niveles.
+- `01_CONTEXTO.md`: Glosario actualizado. Principio de precisión.
+- `08_DECISIONES.md`: DEC-011 agregada. ADR-009 documenta los riesgos de Drive.
+- `02_ARQUITECTURA.md`, `03_MOTOR_RIESGO.md`, `05_PROMPT_SARA.md`, `07_GUIA_OPERACION.md`, `09_ARBOL_Y_RUTA_DE_APRENDIZAJE.md`, `LEEME_PRIMERO.md`: Actualizados con el estado real de las deudas, la arquitectura de Drive y las referencias cruzadas.
+- `06_PENDIENTES.md`: Integración de 26 deudas nuevas y reclasificación bajo DEC-011.
+
+---
+
+## 7. Lecciones consolidadas
 
 | ID | Lección | Origen |
 |---|---|---|
@@ -392,118 +377,26 @@ Esta sección documenta la crisis que llevó a la migración total de la base de
 | H-TEST-09 | `npm test` no valida `api/` ni `scripts/`. Usar `node --check` antes del commit | Corrección de SMN |
 | H-TEST-10 | Las pruebas de integración deben usar datos reales de la API, no datos sintéticos | E4-H6.7 |
 | H-E4-LEC | Verificar las APIs externas con llamadas reales antes de codificar | E4-H-E4-01 |
+| **H-TEST-12** | Los documentos de arquitectura y motor de riesgo deben declarar explícitamente qué campo se emite y en qué nivel (top-level vs anidado), no solo el nombre del vector. | H-VIENTO-02 |
+| **H-TEST-13** | Los scripts de verificación empírica no deben confundir "mención en código" con "implementación efectiva". Extraer siempre el contexto. | T2, T4, B1 (Sesión 28/10) |
+| **H-TEST-14** | Antes de declarar que un campo no existe en el código, buscar variantes de nomenclatura (ej. `isoterma` vs `nivel_congelacion_m`). | T4b, T1 (Sesión 28/10) |
+| **H-TEST-15** | Los documentos de estado (`06_PENDIENTES`, `LEEME_PRIMERO`) deben revisarse contra el código antes de citarlos. La documentación puede estar desactualizada sin que nadie lo detecte. | G1, S13 (Sesión 28/10) |
+| **H-PROCESO-01** | Una auditoría documental completa requiere: (1) prueba empírica, (2) lectura del código fuente, (3) verificación de la cadena de consumidores. | Sesión 28/10/2026 |
+| **H-PROCESO-02** | Las URLs de infraestructura crítica (como `GOOGLE_SCRIPT_URL`) deben validarse por código (ej. que empiece con `script.google.com`) para evitar errores humanos de copy-paste de redirecciones. | Incidente 28/10/2026 |
 
 ---
 
-## 7. Sesiones de trabajo
+## 8. Sesiones de trabajo
 
-El handover de cada sesión registraba el estado, los pendientes y cómo retomar el trabajo. En este historial se consolida la información de la sesión del 22/10/2026:
+El handover de cada sesión registraba el estado, los pendientes y cómo retomar el trabajo.
 
-- **Estado al cierre:** Etapa 5 cerrada, corrección del SMN aplicada, 143 declaraciones de prueba detectadas en el código (confirmar con `npm test`).
-- **Pendientes que quedaron:** H-SMN-WS, H6.6 y H-ARCH-01 (ver `06_PENDIENTES.md`).
-- **Para retomar:** leer `LEEME_PRIMERO.md` y, en este orden, `00_METODOLOGIA.md`, `06_PENDIENTES.md`, `02_ARQUITECTURA.md` y `03_MOTOR_RIESGO.md`.
+- **Sesión 22/10/2026:** Etapa 5 cerrada, corrección del SMN aplicada. Pendientes: H-SMN-WS, H6.6, H-ARCH-01.
+- **Sesión 28/10/2026:** Incidente de producción resuelto (`RESPUESTA_EN_VIVO`). 8 documentos fundacionales reescritos. Deudas reclasificadas bajo DEC-011. Sistema operativo (`origen: GOOGLE_DRIVE_ACTUALIZADO`). Pendientes inmediatos: H-REPORTE-02, H-DRIVE-01/04/05, H-SARA-01/03/04.
 
 ---
 
-## 8. Trazabilidad
+## 9. Trazabilidad
 
 - Los hashes de Etapa 5 y de los cierres de Etapa 4 se verificaron con `git log` el 22/10/2026.
-- Los marcados como "pendientes de confirmar" no aparecieron en las 30 entradas revisadas. Verificar con `git log --oneline | findstr <hash>` antes de citarlos.
 - Los hashes marcados con `<hash>` en versiones anteriores no están disponibles y no se consignan aquí.
-
-### Nota — Error Crítico de Vercel en Reporte On-Demand (27/10/2026)
-
-- **Síntoma:** El botón "Generar Reporte" fallaba con error 500 (Internal Server Error) o congelaba la interfaz.
-- **Causa:** El límite de ejecución de 10 segundos del plan Hobby de Vercel. El backend debe leer el Blob, consultar a Groq y escribir en el Blob; si la IA tarda más de 10s, Vercel corta la ejecución de golpe.
-- **Fix aplicado (parcial):** Se agregó un blindaje en `SatRCOperativo.jsx` para capturar el error y no romper la UI, y se agregó un fallback en `api/reporte-ondemand.js` para errores 429. Se cambió el modelo a `llama-3.1-8b-instant` para intentar acelerar la respuesta.
-- **Estado:** El backend sigue siendo vulnerable a timeouts si el prompt es muy largo o Groq se satura. Documentado como `H-VERCEL-01`.
-- **Lección:** Las Serverless Functions tienen límites estrictos de tiempo. No se debe delegar la generación de documentos largos en una sola petición HTTP si el plan no garantiza el tiempo de ejecución.
-
-
----
-
-## Anexo — Sesión 28/10/2026 (auditoría documental y de código)
-
-> **Nota de proceso:** este anexo es un registro temporal de la sesión del 28/10/2026. Contiene los cierres formales que faltaban, la bitácora de cambios documentales de la sesión y las lecciones extraídas. En la edición detallada posterior, cada bloque se integrará en las secciones principales (0-8).
-
-### A.1 Cierre formal de H-VIENTO-01 (registro faltante)
-
-- **Síntoma:** la especificación original (11) del evaluador de viento incluía un suavizado de 3 horas sobre la serie y un factor de rugosidad por relieve. El documento del motor de riesgo describía ambos como parte del diseño.
-- **Causa:** el código **nunca implementó** ni el suavizado ni el factor de rugosidad. Solo usa un suavizado en el sentido de "extracción del máximo de las próximas 24 h" (comentario en `windEvaluator.js` L41), no un suavizado temporal de 3 h. El factor de rugosidad tampoco existe.
-- **Solución:** cierre como **documental**. Se actualiza la especificación para reflejar el código real (DEC-010: el código es la referencia). No requiere cambio de código.
-- **Verificación:** T2 del 28/10/2026 confirmó que "suavizado" aparece en el código solo como comentario, no como implementación. La sección §5.3 del bloque 2.7 de `03_MOTOR_RIESGO.md` documenta el cierre.
-- **Fecha de cierre declarada:** 24/10/2026 (según `06_PENDIENTES.md` §3).
-- **Fecha de registro formal:** 28/10/2026 (era el registro faltante).
-- **Commits asociados:** ninguno propio (es cierre documental). El cambio se refleja en la versión 2.7 de `03_MOTOR_RIESGO.md` (pendiente de commit).
-- **Estado:** cerrado.
-
-### A.2 Aclaración sobre H6.6 (cierre que estaba en disputa)
-
-- **Estado real:** cerrado.
-- **Evidencia:** T14 del 28/10/2026 confirmó que `MonitorPublico.jsx` usa `niveles_por_vector` (líneas 426-436) y `acciones_operativas` (líneas 441-451) del orquestador.
-- **Documentación cruzada:**
-  - `06_PENDIENTES.md` L127: **cerrado** (correcto).
-  - `02_ARQUITECTURA.md` §3.1: **cerrado** (correcto, ya aplicado en bloque 2.6).
-  - `04_HISTORIAL.md` L188 y L403: **abierto** (desactualizado; debe corregirse en la siguiente edición).
-  - `02_ARQUITECTURA.md` §10 (versión 2.5): **listado como deuda** (corregido en bloque 2.6, ahora en §9).
-- **Acción pendiente:** corregir L188 y L403 de este mismo archivo en la edición detallada. Anotado como `H-DOC-H6.6` en `06_PENDIENTES.md` §6.5.
-
-### A.3 Bitácora de cambios documentales de la sesión 28/10/2026
-
-Esta sesión aplicó una reescritura coordinada de la documentación fundacional para alinear los documentos con el código real, tras la auditoría empírica. Los commits están referenciados cuando existen.
-
-| Documento | Cambio principal | Commit |
-|---|---|---|
-| `00_METODOLOGIA.md` | Reemplaza el principio "preferencia por el falso positivo" por "precisión sobre cobertura" (DEC-011). Añade verificación del efecto real en Drive (H-DRIVE-01), `npm run lint` en Fase 3, verificación de timestamp en Fase 4. Amplía de 13 a 15 reglas de oro. | pendiente de registrar |
-| `01_CONTEXTO.md` | Principio de precisión en §2. H-VERCEL-01 reformulado como histórico. `estado_ligero.json` agregado al diagrama de §8. Glosario actualizado con "Precisión sobre cobertura". | `d15d9e0` (C1) + pendiente del resto |
-| `08_DECISIONES.md` | DEC-011 agregada (reemplaza DEC-002). ADR-005 con "calibración pendiente bajo DEC-011". ADR-009 con H-REPORTE-02 y H-DRIVE-01. DEC-002 marcada como "reemplazada por DEC-011". PEND-05 agregada. Versión 2.6. | pendiente de registrar |
-| `02_ARQUITECTURA.md` | Versión 2.6. §3 reescrita con 3.1 + 3.2. **§5 "Fallback en vivo" restaurada**. **§8 "Contratos de datos (Zod)" restaurada**. §7 con `estado_ligero.json` como cuarto archivo. H6.6 cerrado. H-UI-02 parcialmente cerrado. H-REPORTE-02, H-DRIVE-01, H-DRIVE-02 registradas en §9. Referencias cruzadas §5/§8 alineadas. Mojibake limpiado. | pendiente de registrar |
-| `03_MOTOR_RIESGO.md` | Versión 2.7. §5.4 reformulada con arquitectura de doble capa. §9.4 ampliada con tabla de `tipo_amenaza`. H-VIENTO-02 agregada a §12. H-MOTOR-05 y H-DIAG-04 reclasificadas a críticas bajo DEC-011. Referencias cruzadas alineadas con `02` §8. Mojibake limpiado. | pendiente de registrar |
-
-### A.4 Lecciones de la sesión
-
-| ID | Lección | Origen |
-|---|---|---|
-| **H-TEST-12** | Los documentos de arquitectura y motor de riesgo deben declarar explícitamente qué campo se emite y en qué nivel (top-level vs anidado), no solo el nombre del vector. La ambigüedad de `vector_dominante` (que cambia de valor según el módulo) generó confusión durante la auditoría. | H-VIENTO-02 |
-| **H-TEST-13** | Los scripts de verificación empírica no deben confundir "mención en código" con "implementación efectiva". Un comentario que dice "suavizado" no es un suavizado implementado. Siempre extraer el contexto (línea anterior y siguiente) antes de concluir. | T2 (suavizado), T4 (isoterma), B1 (gemelo) |
-| **H-TEST-14** | Antes de declarar que un campo no existe en el código, buscar variantes de nomenclatura: `isoterma` vs `nivel_congelacion_m`, `VIENTO` vs `VIENTO_FUERTE`. El código puede estar correcto aunque use otro nombre. | T4b, T1 |
-| **H-TEST-15** | Los documentos de estado (`06_PENDIENTES`, `LEEME_PRIMERO`) deben revisarse contra el código antes de citarlos. `LEEME_PRIMERO` declaraba H-RUNNER-01 como deuda del runner cuando el problema real era `reporteDiario.mjs`. La documentación puede estar desactualizada sin que nadie lo detecte. | G1, S13, S14, S15 |
-| **H-PROCESO-01** | Una auditoría documental completa requiere: (1) prueba empírica de cada afirmación, (2) lectura del código fuente del campo mencionado, (3) verificación de la cadena de consumidores (evaluador → orquestador → dictamen/bitácora → prompt). Sin los 3 pasos, se generan falsos positivos y falsos negativos. | Sesión 28/10/2026 completa |
-
-### A.5 Estado al cierre de la sesión 28/10/2026
-
-| Aspecto | Estado |
-|---|---|
-| Documentos actualizados y verificados | `00`, `01`, `02`, `03`, `08` (5 de 11) |
-| Documentos pendientes de edición detallada | `04`, `05`, `06`, `07`, `09`, `LEEME_PRIMERO`, `VERIFICACION_MULTIFACTOR` |
-| Deudas de código nuevas identificadas | 17 (H-REPORTE-02, H-DRIVE-01, H-DRIVE-02, H-SARA-01..05, H-ONDEMAND-01/03/04/05/06/07/08/09, H-DRY-01, H-VIENTO-02) |
-| Deudas reclasificadas | 2 (H-MOTOR-05, H-DIAG-04 → 🔴 crítica) |
-| Deudas reformuladas | 2 (H-UI-02 parcialmente cerrado, H-CRON-01 sin BLOB) |
-| Ítems cerrados confirmados | 2 (H6.6, H-VIENTO-01 con registro faltante) |
-| Deudas documentales detectadas | 4 (H-DOC-HVIENTO-01, H-DOC-H6.6, H-DOC-REF-02, H-DOC-MOJI-02) |
-
-### A.6 Commit pendiente
-
-Este anexo se agregará al final de `04_HISTORIAL.md` y se acompañará del bloque correspondiente en `06_PENDIENTES.md`. **Ninguno de los dos se da por aplicado** hasta que:
-
-1. Se integren en la estructura formal del archivo (secciones 0-8 de `04`, secciones 1-5 de `06`).
-2. Se ajusten las referencias cruzadas a otros documentos.
-3. Se verifiquen con las pruebas de integridad correspondientes.
-
-**Commit propuesto (uno solo para ambos archivos):**
-
-docs(historial-pendientes): registra hallazgos de la sesión 28/10/2026
-
-Registra cierre formal de H-VIENTO-01 en 04_HISTORIAL.md
-
-Documenta la contradicción de H6.6 entre 04 (desactualizado) y 06/02 (correcto)
-
-Agrega 17 deudas de código nuevas identificadas en la auditoría
-
-Reclasifica H-MOTOR-05 y H-DIAG-04 a críticas bajo DEC-011
-
-Reformula H-UI-02 como parcialmente cerrado y H-CRON-01 sin BLOB
-
-Renombra H-RUNNER-01 → H-REPORTE-02
-
-Detecta 4 deudas documentales cruzadas
+- Los commits de la sesión 28/10/2026 (`2a3e3e8`, `3053e29`) y la reescritura documental están consolidados en los commits `2a3e3e8` y `3053e29`.
