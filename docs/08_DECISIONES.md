@@ -346,6 +346,8 @@
 | PEND-03 | ¿Los coeficientes de acoplamiento (ADR-005) se recalibran con eventos reales? Bajo DEC-011 esta calibración es prioritaria. | Coordinación técnica y pastoral | `08_DECISIONES.md` |
 | PEND-04 | ¿Se migrará el runner a un modelo de ejecución que no dependa de GitHub Actions (por ejemplo, Vercel Cron)? | Coordinación técnica | `08_DECISIONES.md` |
 | PEND-05 | ¿Cuál es la métrica objetivo de confiabilidad (porcentaje de alertas que se materializan) que cierra DEC-011? | Coordinación técnica y pastoral | `08_DECISIONES.md` |
+| **PEND-09** | **¿Cómo debe tratarse la escritura de `reporte_diocesano_vigente.json` y `bitacora_sara.json` cuando el primero tiene éxito y el segundo falla?** Opciones: (a) rollback; (b) orden invertido; (c) aceptar la inconsistencia con log persistente; (d) escritura transaccional en un único JSON. Bajo DEC-011, la opción debe ser verificable empíricamente y auditable. | Coordinación técnica y pastoral | Sesión 29/10/2026 (H-ONDEMAND-09, N-ONDEMAND-04) |
+| **PEND-10** | **¿Cómo se alinean los subtipos de `tipo_amenaza` entre el motor, la documentación (§9.4 de `03_MOTOR_RIESGO.md`) y los prompts (`REGLAS_MULTIVECTOR` en `promptsMultivector.js`)?** Opciones: (a) alinear código a docs; (b) alinear docs a código; (c) mapeo intermedio en el orquestador. Requiere test de contrato. | Coordinación técnica y pastoral | Sesión 29/10/2026 (N-MOTOR-29, N-MOTOR-05, N-RUNNER-VECTOR-CONTRACT) |
 
 **Decisiones resueltas el 29/10/2026:**
 

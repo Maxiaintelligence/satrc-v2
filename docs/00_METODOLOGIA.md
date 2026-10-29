@@ -125,15 +125,88 @@ Un ítem no puede estar en dos documentos a la vez. Si está en el historial, sa
 
 ### Reglas de edición documental (Método PowerShell + Node.js)
 
-A partir del 29/10/2026, toda edición masiva o crítica de los documentos fundacionales (00 a 09) debe realizarse utilizando el siguiente método para evitar problemas de codificación (UTF-8), saltos de línea (CRLF vs LF) y errores de reemplazo manual:
+A partir del 29/10/2026, toda edición masiva o crítica de los documentos fundacionales (00 a 09) debe realizarse con este método. Objetivo: preservar codificación UTF-8 sin BOM, respetar el separador de línea nativo del archivo (CRLF vs LF), y fallar ruidosamente antes de escribir si un anclaje no coincide.
 
-1. **No editar directamente en el editor de texto** si el cambio afecta a más de 10 líneas o involucra múltiples secciones.
-2. **Usar un script de Node.js (CJS)** para leer y escribir el archivo Markdown.
-3. **Encapsular el script de Node en un Here-String de comillas dobles (@" ... "@) en PowerShell.** Esto permite la interpolación de variables y evita conflictos con comillas simples o backticks dentro del código JS.
-4. **Construir el texto markdown usando un arreglo de strings** (usando String.fromCharCode(10) para los saltos de línea) y unirlos con join. Esto evita que los backticks del markdown rompan el template literal de JavaScript.
-5. **Verificar el resultado con Select-String** antes de hacer el commit.
+**Regla 1 — No editar a mano.** Si el cambio afecta a más de 10 líneas o a múltiples secciones, no se edita en VS Code. Se escribe un script Node.js que aplica los cambios de forma determinista.
 
-Esta regla garantiza que la documentación se mantenga íntegra y que los asistentes de IA puedan aplicar cambios de forma segura y reproducible.
+**Regla 2 — Extensión `.cjs` obligatoria.** El `package.json` declara `"type": "module"`. Un archivo `.mjs` fuerza ESM (sin `require`). Un archivo `.cjs` fuerza CommonJS (con `require`). **Nunca usar `.mjs` para scripts de edición documental.**
+
+**Regla 3 — Here-String con comillas simples `@' ... '@`.** No usar `@" ... "@`. Los documentos tienen backticks de markdown inline (archivo.md, npm test) que, dentro de `@" ... "@`, PowerShell 5.1 interpreta como escapes y rompe el script. `@' ... '@` transmite el texto literal sin interpretar. **Esta es la corrección que resolvió el fallo de la sesión del 29/10.**
+
+**Regla 4 — Detección y preservación del separador de línea.** El script lee el archivo, detecta `CRLF` vs `LF`, y reconstruye con el mismo separador:
+
+```js
+let s = fs.readFileSync(path, 'utf-8');
+if (s.charCodeAt(0) === 0xFEFF) s = s.slice(1);   // strip BOM (Regla 5)
+const sep = s.includes('\r\n') ? '\r\n' : '\n';
+let lineas = s.split(/\r?\n/);
+// ...modificar lineas...
+fs.writeFileSync(path, lineas.join(sep), 'utf-8');
+```
+
+**No hacer `split('\n')` + `join('\n')`** sin detectar: en archivos CRLF deja `\r` al final de cada línea y rompe cualquier reemplazo de bloque multilínea (lección de esta sesión).
+
+**Regla 5 — Strip de BOM en la lectura.** `Out-File -Encoding utf8` de PowerShell 5.1 escribe BOM (`EF BB BF`) al inicio del archivo. Node.js `fs.writeFileSync(p, s, 'utf-8')` **no** agrega BOM. Para garantizar la simetría, strip explícito en lectura: `if (s.charCodeAt(0) === 0xFEFF) s = s.slice(1);`.
+
+**Regla 6 — `process.exit(1)` antes de `writeFileSync` si falla cualquier anclaje.** Estructura del script:
+
+- **Fase A:** leer, detectar sep, strip BOM, split.
+- **Fase B:** aplicar todos los cambios. Cada cambio verifica su anclaje. Si un anclaje no existe, `console.error` + `process.exit(1)`. **NUNCA se escribe nada hasta que todos los cambios pasaron.**
+- **Fase C:** escribir con `writeFileSync`.
+
+Esto garantiza que un script con 20 cambios y 1 anclaje roto **no deja el archivo a medio editar**.
+
+**Regla 7 — Cinco patrones de inserción/reemplazo.** Cada cambio se clasifica en uno de estos 5 patrones:
+
+| Patrón | Cuándo usarlo |
+|---|---|
+| `reemplazarEnLinea(id, buscar, reemplazo, etiqueta)` | Localizar una línea por su ID único y reemplazar una substring dentro |
+| `reemplazarPorContenido(substr, reemplazo, etiqueta)` | Reemplazar una substring que aparece una sola vez en el documento |
+| `insertarAntesDe(id, nuevasLineas, etiqueta)` | Insertar N líneas antes de la línea que contiene el ID |
+| `insertarDespuesDe(id, nuevasLineas, etiqueta)` | Insertar N líneas después de la línea que contiene el ID |
+| `borrarLinea(substr, etiqueta)` | Eliminar la única línea que contiene la substring |
+
+Cada patrón itera sobre `lineas`, matchea con `.includes()` o `.replace()` sobre strings, y `process.exit(1)` si no encuentra. **No usar `.replace()` sobre el string completo del archivo** (falla con CRLF, falla con múltiples ocurrencias, no es legible el diagnóstico).
+
+**Regla 8 — Verificación post-script con `Select-String` + `git --no-pager diff --stat`.** Después de ejecutar el script, verificar:
+
+```powershell
+Select-String -Path "docs\ARCHIVO.md" -Pattern "ID1|ID2|ID3" | Select-Object LineNumber, Line
+git --no-pager diff --stat docs/ARCHIVO.md
+```
+
+El diff debe mostrar el número esperado de inserciones y eliminaciones. Si el diff está vacío, el script falló silenciosamente (caso que ocurrió cuando `process.exit(1)` se disparó antes del `writeFileSync`).
+
+**Regla 9 — Verificación end-to-end de la corrida.** La salida del script debe mostrar un `OK: <etiqueta>` por cada cambio aplicado, más el separador detectado, más la longitud original y la nueva. Sin esos logs, el script no se considera completado.
+
+**Ejemplo de la secuencia completa** (validada el 29/10/2026 sobre `06_PENDIENTES.md`):
+
+1. **Prueba K (read-only):** dump del contenido actual con `node -e "..."`.
+2. **Script en PowerShell:**
+
+```powershell
+$script = @'
+const fs = require('fs');
+const path = 'docs/06_PENDIENTES.md';
+let s = fs.readFileSync(path, 'utf-8');
+if (s.charCodeAt(0) === 0xFEFF) s = s.slice(1);
+const sep = s.includes('\r\n') ? '\r\n' : '\n';
+let lineas = s.split(/\r?\n/);
+console.log('Separador: ' + (sep === '\r\n' ? 'CRLF' : 'LF'));
+// ...definir los 5 patrones...
+// ...aplicar los cambios...
+fs.writeFileSync(path, lineas.join(sep), 'utf-8');
+console.log('OK: docs/06_PENDIENTES.md reescrito (' + s.length + ' → ' + lineas.join(sep).length + ')');
+'@
+$script | Out-File -FilePath "editar_06_pendientes.cjs" -Encoding utf8
+node editar_06_pendientes.cjs
+Remove-Item "editar_06_pendientes.cjs"
+```
+
+3. **Verificación post-script:** `Select-String` + `git --no-pager diff --stat`.
+4. **Confirmación:** si el diff es el esperado, se continúa con el siguiente documento. Si no, se reporta y se detiene.
+
+**Esta regla garantiza que la documentación se mantenga íntegra y que los asistentes de IA puedan aplicar cambios de forma segura y reproducible. Los 5 patrones, la detección de CRLF, el strip de BOM y el `process.exit(1)` temprano son las correcciones que resolvieron los 3 fallos concretos de la sesión del 29/10/2026.**
 
 ### Reglas de seguridad documental
 

@@ -720,6 +720,62 @@ Durante el diagnóstico del reporte diario, se descubrió que la causa raíz no 
 
 ---
 
+## 7.23 Sesión 29/10/2026 — Consolidación del contrato del motor
+
+> **Fecha:** 29/10/2026
+> **Propósito:** cerrar la brecha de contrato del motor al nivel de solidez que ya tenía la infraestructura. 7 commits atómicos, 8 IDs reales cerrados, 3 IDs nuevos formalizados.
+
+### Contexto
+
+La sesión del 29/10/2026 había dejado la infraestructura sólida (ADR-010, ADR-012, ADR-013, Watchdog, Drive, cron reparado) pero el contrato del motor seguía con deudas. Esta sesión ataca específicamente esas deudas por clase:
+
+- **Clase 2 (observabilidad):** sin verificación del efecto real, cualquier mejora del motor queda enmascarada.
+- **Clase 0 (contrato):** campos que mienten en auditoría y subtipos que no coinciden.
+
+Los fixes de Clase 1 (precisión) y Clase 3 (DRY) quedan pendientes por requerir datos reales o decisión de diseño (PEND-09, PEND-10).
+
+### Commits
+
+| # | Hash | Fix | ID real(es) | Tests |
+|---|---|---|---|---|
+| 1 | `876864f` | CI endurecido: 4 steps (tests, node --check, lint, build) | N-CI-03, DEU-16, DEU-17, H-CI-01 | 179 → 179 |
+| 2 | `87caa05` | `escribirJSONBlob` lanza excepción en fallo | H-DRIVE-01 | 179 → 185 |
+| 3 | `888885a` | Limpieza de marcador residual | (sin ID) | 185 → 185 |
+| 4 | `c276e59` | 3 tests de divergencias del gemelo | (nuevo: N-TEST-02) | 185 → 188 |
+| 5 | `8c4cf42` | Test CAPE con nulls intermitentes de GEM | (nuevo: N-TEST-11) | 188 → 189 |
+| 6 | `1505624` | `umbralFisicoDeslaveMm` reporta 65.0 | N-MOTOR-30 | 189 → 190 |
+| 7 | `d66e800` | `proximidad_umbral_n4` = null fuera de N3 | (nuevo: N-MOTOR-16) | 190 → 194 |
+
+### Cierres formales
+
+- **H-DRIVE-01** (`87caa05`): `escribirJSONBlob` ya no silencia el fallo. 6 tests unitarios + verificación real contra Drive (escritura exitosa + fallo con URL inválida).
+- **H-CI-01** (`876864f`): el workflow ejecuta `npm run build`.
+- **N-CI-03** (`876864f`): el workflow ejecuta `node --check` y `npm run build`.
+- **DEU-16** (`876864f`): la regla de `node --check` antes del commit ya se aplica en CI.
+- **DEU-17** (`876864f`, parcial): sintaxis cubierta. Validación funcional de `api/` y `scripts/` sigue como deuda.
+- **N-MOTOR-30** (`1505624`): `umbralFisicoDeslaveMm` reporta 65.0 constante.
+- **N-MOTOR-08-bis** (confirmado por `c276e59`): el runner asigna N4 donde el frontend asigna N3, con evidencia empírica en el Test 6.
+
+### IDs formalizados por primera vez
+
+Los siguientes IDs se crearon durante la sesión de auditoría del 29/10 para catalogar hallazgos nuevos. No existían en `06_PENDIENTES.md`; se registran aquí por primera vez como "cerrados":
+
+- **N-TEST-02** (`c276e59`): 3 tests para las divergencias `api7DiasPrevios`, `eventoActual` y `Regla 4 graduada` del gemelo.
+- **N-TEST-11** (`8c4cf42`): test que verifica el filtro de nulls de GEM en `consensusEngine.js` sobre las 240 horas del fixture real.
+- **N-MOTOR-16** (`d66e800`): `proximidad_umbral_n4` reporta `null` fuera de N3. 4 tests nuevos (N1, N2, N3, N4).
+
+### Verificación
+
+- **Baseline final:** 194 pass + 0 rojos, 57 warnings, 0 errores a HEAD `d66e800`.
+- **Workflows verdes:** 7/7 (`40951960626`, `40954827559`, `40955545327`, `40962949010`, `40964186871`, `40967148872`, `40968402003`).
+- **`headSha` coincide** en cada uno con el commit local.
+
+### Lecciones de proceso
+
+Ver §8: H-PROCESO-10 a H-PROCESO-17.
+
+---
+
 ## 8. Lecciones consolidadas
 
 | ID | Lección | Origen |
@@ -744,6 +800,14 @@ Durante el diagnóstico del reporte diario, se descubrió que la causa raíz no 
 | **H-PROCESO-04** | **El silencio en la bitácora no siempre es un bug de lógica.** Puede significar que el proceso nunca se ejecutó (el cron no disparó). Antes de culpar al código, verificar que el disparador funciona. | Sesión 29/10/2026 |
 | **H-PROCESO-05** | **Un script de reemplazo de PowerShell puede dar falsos negativos por diferencias de saltos de línea (CRLF vs LF).** Usar Node.js (`fs.replace`) para ediciones masivas en el código. | Sesión 29/10/2026 |
 | **H-TEST-21** | **Los límites de los LLM (Groq) cuentan tokens reservados (prompt + max_completion_tokens) para la admisión.** Si reduces el max_tokens, evitas el error 413 y liberas margen para la ventana de 60s. | Sesión 29/10/2026 |
+| **H-PROCESO-10** | **`Out-File -Encoding utf8` de PowerShell 5.1 escribe BOM (`EF BB BF`).** Un archivo con BOM puede ser rechazado por GitHub Actions o parsearse mal. Usar `node -e "fs.writeFileSync(p, s, 'utf-8')"` y strip explícito de `\uFEFF` en lectura. | Sesión 29/10/2026 (Fix #1) |
+| **H-PROCESO-11** | **`Get-Content` de PowerShell 5.1 no es fiable para diagnosticar encoding.** Muestra mojibake falso en archivos UTF-8 correctos (code page 850/1252). Verificar con `[System.IO.File]::ReadAllBytes` o con `node -e`. | Sesión 29/10/2026 |
+| **H-PROCESO-12** | **`git diff` abre el pager `less` y bloquea en `(END)`.** Salir con `q`. Alternativa: `git --no-pager diff`. | Sesión 29/10/2026 |
+| **H-PROCESO-13** | **Las marcas `// --- INICIO ---` / `// --- FIN ---` son delimitadores de referencia, no contenido a pegar.** En Fase 2.5, todo bloque de reemplazo debe aclarar explícitamente: "las marcas no se pegan". El Fix #2 dejó un marcador residual por instrucción ambigua. | Sesión 29/10/2026 (Fix #2, corregido en `888885a`) |
+| **H-PROCESO-14** | **Verificar existencia de un ID en `06_PENDIENTES.md` antes de escribir el mensaje de commit.** De 7 fixes de la sesión, 4 usaron IDs inventados. Los fixes son correctos; los IDs se formalizan por primera vez en §7.23. Próxima sesión: `Select-String` del ID antes del commit. | Sesión 29/10/2026 |
+| **H-PROCESO-15** | **Los documentos fundacionales usan CRLF en checkout Windows.** Un script Node.js que hace `split('\n')` deja `\r` al final y rompe el reemplazo de bloques multilínea. Usar `split(/\r?\n/)` + `join(sep)` con `sep = s.includes('\r\n') ? '\r\n' : '\n'`. | Sesión 29/10/2026 |
+| **H-PROCESO-16** | **En proyectos con `"type": "module"` en `package.json`, un script `.mjs` fuerza ESM (sin `require`).** Para forzar CJS, usar extensión `.cjs`. | Sesión 29/10/2026 |
+| **H-PROCESO-17** | **Un script de edición documental con más de ~10 cambios debe tener `process.exit(1)` por cada anclaje fallido, ANTES del `writeFileSync`.** Verificar todos los anclajes primero, escribir solo si todos pasan. | Sesión 29/10/2026 |
 
 ---
 

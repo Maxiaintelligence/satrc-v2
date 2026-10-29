@@ -1,4 +1,4 @@
-﻿# SatRC V2.0 — Leer primero
+# SatRC V2.0 — Leer primero
 
 > **Propósito de este archivo:** punto de entrada para cualquier persona o chat de IA que retome el proyecto. Resume el estado actual y dice en qué orden leer el resto de la documentación.
 > **Última actualización:** 29/10/2026 (Sesión de cierre: fixes de motor, infraestructura y Groq).
@@ -28,21 +28,22 @@ Detalle completo en `01_CONTEXTO.md`. Decisiones de arquitectura en `08_DECISION
 | Sesión 28/10/2026: rescate de producción (RESPUESTA_EN_VIVO) + fix de Zod | Cerrada | `04_HISTORIAL.md` §6 |
 | Auditoría empírica P0–P12 (29/10/2026) | Cerrada | `04_HISTORIAL.md` §7 |
 | **Sesión de Cierre 29/10/2026** | **Cerrada.** Fixes de motor, infraestructura y resiliencia. | `04_HISTORIAL.md` §7.22 |
+| **Consolidación del contrato del motor (29/10/2026)** | **Cerrada.** 7 commits, 8 IDs reales cerrados, 3 IDs formalizados. Baseline 194 pass. | `04_HISTORIAL.md` §7.23 |
 | Versión 3.0 (autenticación real, nuevos vectores, percentiles) | Planeada, no iniciada | `06_PENDIENTES.md` §4 |
 
 **Baseline verificado el 29/10/2026 (Cierre):**
 
 | Comando | Resultado real |
 |---|---|
-| `npm test` | **179 pass + 0 rojos** en 17 archivos. Los tests obsoletos de Zod se actualizaron en el commit `f6f4281`. |
-| `npm run lint` | **55 advertencias, 0 errores.** |
-| `npm run build` | Verde. 853.44 kB / 201.79 kB gzip. |
+| `npm test` | **194 pass + 0 rojos** en 18 archivos (179 previos + 6 googleDrive.test.js + 3 divergencias gemelo + 1 CAPE nulls GEM + 1 umbralFisicoDeslaveMm + 4 proximidad_umbral_n4). Los tests obsoletos de Zod se actualizaron en el commit `f6f4281`. |
+| `npm run lint` | **57 advertencias, 0 errores.** |
+| `npm run build` | Verde. 858.42 kB / 203.42 kB gzip. / 201.79 kB gzip. |
 
 **Infraestructura:**
 - **Producción:** operativa en Vercel con ejecución autónoma en GitHub Actions.
 - **Disparadores (ADR-010 y ADR-012):** Arquitectura de 3 capas. 1) GitHub `on.schedule`. 2) `cron-job.org` (reparado el 29/10). 3) Watchdog en GitHub Actions que corre a las 6:30 AM y dispara el reporte si no existe.
 - **Base de datos:** Google Drive (vía Google Apps Script). Ver ADR-009.
-- **PWA:** Network-Only puro. No funciona offline (H-DOC-PWA-01).
+- **PWA:** Service worker registrado en `index.html`. Estrategia real en `public/sw.js` pendiente de verificar (H-DOC-PWA-01, N-PWA-03).
 
 ---
 
@@ -65,9 +66,10 @@ Antes de cualquier cambio, revisar `06_PENDIENTES.md` §2 (deuda técnica activa
 
 ### 3.4 Críticas independientes que siguen abiertas
 - **H-PROMPT-09:** El prompt de on-demand no tiene la regla 12.bis (coherencia).
-- **H-DRIVE-01:** `escribirJSONBlob` devuelve `null` en fallo sin propagar. Riesgo latente.
 - **N-UI-01:** El Monitor Público no muestra el semáforo en días tranquilos.
 - **R-03:** `/api/sara` devuelve la bitácora sin autenticación.
+- **PEND-09:** Decisión sobre escritura transaccional de bitácora (bloquea H-ONDEMAND-09 y N-ONDEMAND-04).
+- **PEND-10:** Decisión sobre alineación de subtipos de `tipo_amenaza` (bloquea N-MOTOR-29, N-MOTOR-05, N-RUNNER-VECTOR-CONTRACT).
 
 ### 3.5 Decisiones pendientes
 | ID | Pregunta | Bloquea |
@@ -76,6 +78,8 @@ Antes de cualquier cambio, revisar `06_PENDIENTES.md` §2 (deuda técnica activa
 | PEND-03 | ¿Los coeficientes de acoplamiento se recalibran con eventos reales? | V3.0 |
 | PEND-04 | ¿Se migrará el runner a Vercel Cron? | V3.0 |
 | PEND-05 | ¿Cuál es la métrica objetivo de confiabilidad? | Monitoreo |
+| **PEND-09** | Escritura transaccional de bitácora | H-ONDEMAND-09 |
+| **PEND-10** | Alineación de subtipos de `tipo_amenaza` | N-MOTOR-29, N-MOTOR-05, N-RUNNER-VECTOR-CONTRACT |
 
 ---
 

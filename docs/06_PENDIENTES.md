@@ -93,7 +93,7 @@ Severidad: 🔴 crítica · 🟠 alta · 🟡 media · 🟢 baja. El esfuerzo es
 | **H-PKG-01** | **Zod 4 con `.errors` en el runner.** `ejecutar_sara_autonomo.mjs:635` usa `validacion.error.errors`, campo eliminado en Zod 4. Confirmado con P1. | 🟠 | Bajo | Confirmada, abierta | P1 del 29/10/2026 |
 | **N-OPS-01** | **Escalabilidad de Apps Script no documentada.** `SatRCOperativo.jsx` refresca `/api/sara` cada 5 min × 3 reads = **36 requests a Drive por hora por operador activo**. | 🟠 | Bajo | Abierta | |
 | **N-OPS-02** | **`construirResumenAtmosferico` duplicada con contratos divergentes.** Viola ADR-004. | 🟠 | Bajo | Abierta | |
-| **H-DRIVE-01** | **Reformulada como riesgo latente, no activo.** `escribirJSONBlob` devuelve `null` en fallo sin propagar error. El runner imprime `✅ Publicación exitosa` ciegamente. | 🔴 | Bajo | Abierta como **riesgo latente** | P4 del 29/10/2026 |
+| **H-DRIVE-01** | **Reformulada como riesgo latente, no activo.** `escribirJSONBlob` devuelve `null` en fallo sin propagar error. El runner imprime `✅ Publicación exitosa` ciegamente. | 🔴 | Bajo | **Cerrada** el 29/10/2026 (commit 87caa05, ver 04_HISTORIAL.md §7.23) | P4 del 29/10/2026 |
 | **H-DRIVE-05** | Vercel recibe HTTP 401 al intentar escribir en Drive (Apps Script). | 🔴 | Bajo | Abierta | Logs Vercel 28/10/2026 |
 | **H-DRIVE-04** | `googleDrive.js` no valida el formato de `GOOGLE_SCRIPT_URL`. | 🟠 | Bajo | Abierta | Incidente 28/10/2026 |
 | **H-ONDEMAND-01** | `tokenConsolaValido()` en `reporte-ondemand.js`: `if (!esperado) return true`. | 🔴 | Bajo | Abierta | Análisis 28/10/2026 |
@@ -126,21 +126,21 @@ Severidad: 🔴 crítica · 🟠 alta · 🟡 media · 🟢 baja. El esfuerzo es
 | **N-API-GH-01** | `GITHUB_OWNER`, `GITHUB_REPO`, `GITHUB_REF` hardcodeados. | 🟢 | Bajo | Abierta | |
 | DEU-30 | `normalizarDatosRegionales` cae a `14` con `||`. | 🟢 | Bajo | Abierta | |
 | **H-CRON-01** | `sara_cron.yml` no tiene pre-check de `GROQ_API_KEY` y `GOOGLE_SCRIPT_URL`. | 🟢 | Bajo | Abierta | |
-| H-CI-01 | `tests.yml` no corre `npm run build`. | 🟢 | Bajo | Abierta | |
+| H-CI-01 | `tests.yml` no corre `npm run build`. | 🟢 | Bajo | **Cerrada** el 29/10/2026 (commit 876864f). El workflow ahora ejecuta npm run build en el step Build | |
 | **N-RESILIENCIA-429** | **Falla silenciosa del reporte diario ante 429/413 de Groq.** **CERRADA el 29/10/2026 (commit `a274db4`).** Se redujo `max_tokens` a 3000 (diario) y 800 (dictamen), y se agregó retry con backoff de 30s. | 🔴 | Medio | ✅ **Cerrada** | Sesión 29/10/2026 |
 
 ### 2.5 Pruebas y calidad
 
-> **Baseline verificado el 29/10/2026 (Cierre de sesión):**
-> - `npm test` → **179 pass + 0 rojos** en 17 archivos. Los 2 rojos obsoletos de schema fueron actualizados en el commit `f6f4281`. Los 3 tests nuevos (N-MOTOR-06 + bis) y el test de N-FETCH-01 están en verde.
-> - `npm run lint` → **55 advertencias, 0 errores**.
+> **Baseline verificado el 29/10/2026 (Cierre de sesión, HEAD d66e800):**
+> - `npm test` → **194 pass + 0 rojos** en 18 archivos. Incluye: 179 previos + 6 googleDrive.test.js (H-DRIVE-01) + 3 divergencias del gemelo (N-TEST-02) + 1 CAPE nulls GEM (N-TEST-11) + 1 umbralFisicoDeslaveMm (N-MOTOR-30) + 4 proximidad_umbral_n4 (N-MOTOR-16). Los 2 rojos obsoletos de schema fueron actualizados en el commit `f6f4281`. Los 3 tests nuevos (N-MOTOR-06 + bis) y el test de N-FETCH-01 están en verde.
+> - `npm run lint` → **57 advertencias, 0 errores**.
 > - `npm run build` → verde, 853.44 kB / 201.79 kB gzip.
 
 | ID | Deuda | Sev. | Esfuerzo | Estado |
 |---|---|---|---|---|
-| DEU-16 | La regla de `node --check` antes del commit no se aplica en CI. | 🟡 | Bajo | Abierta |
-| DEU-17 | `tests.yml` solo ejecuta Vitest; no valida `api/` ni `scripts/*.mjs`. | 🟡 | Bajo | Abierta |
-| **N-CI-03** | **`tests.yml` no corre `node --check` ni `npm run build`.** | 🟠 | Bajo | Abierta |
+| DEU-16 | La regla de `node --check` antes del commit no se aplica en CI. | 🟡 | Bajo | **Cerrada** el 29/10/2026 (commit 876864f). El workflow ejecuta node --check en 9 archivos de api/ y scripts/ |
+| DEU-17 | `tests.yml` solo ejecuta Vitest; no valida `api/` ni `scripts/*.mjs`. | 🟡 | Bajo | **Cerrada parcialmente** el 29/10/2026 (commit 876864f). Sintaxis cubierta por node --check. Validación funcional de api/ y scripts/ sigue como deuda |
+| **N-CI-03** | **`tests.yml` no corre `node --check` ni `npm run build`.** | 🟠 | Bajo | **Cerrada** el 29/10/2026 (commit 876864f). El workflow ejecuta 4 steps: tests, node --check, lint, build |
 | **H-PROCESO-03** | **Lección de P5b:** un filtro vacío no es evidencia de ausencia de datos. | 🟡 | — | Lección registrada |
 | **N-TEST-01** | Tests usan `require('fs')` y `require('path')` en ESM. | 🟡 | Bajo | Abierta |
 | **N-TEST-07** | El test "Downburst N4" no valida el subtipo `DOWNBURST`. | 🟡 | Bajo | Abierta |
@@ -200,6 +200,8 @@ Severidad: 🔴 crítica · 🟠 alta · 🟡 media · 🟢 baja. El esfuerzo es
 | H-DOC-PUBLIC-01 | `public/` documentado. | 🟢 | Cerrado | Análisis 28/10/2026 |
 | H-DOC-DIAGEXT-01 | `diagnostico_externo/` documentado. | 🟢 | Cerrado | Análisis 28/10/2026 |
 | **H-DOC-PWA-01** | `LEEME_PRIMERO.md` y `09_ARBOL` dicen "cache offline parcial". Es Network-Only puro. | 🟠 | Abierta | P0 del 29/10/2026 |
+| **N-DOC-03** | `01_CONTEXTO.md` contiene un snapshot antiguo de `08_DECISIONES.md` embebido (ADR-001 a ADR-009). Requiere decisión de cómo corregirlo (D1=A del 29/10: solo registrar deuda, no tocar el archivo). | 🟠 | Abierta | Sesión 29/10/2026 |
+| **N-DOC-04** | 5 documentos fundacionales quedaron desactualizados tras la sesión del 29/10/2026 y no se actualizaron en esta sesión: `02_ARQUITECTURA.md` (notas "aún en Vercel Blob" en L51/154/188/189 + H-DRIVE-01/H-REPORTE-02 en §9), `03_MOTOR_RIESGO.md` (baseline 179 en L570 + N-MOTOR-08-bis/16/30 abiertas en §12), `05_PROMPT_SARA.md` (R18 como pendiente en §4 pese a estar implementada), `07_GUIA_OPERACION.md` (baseline 165/179 en L9/274 + `BLOB_READ_WRITE_TOKEN` en L454/459), `09_ARBOL_Y_RUTA_DE_APRENDIZAJE.md` (`src/lib/compartido/__tests__/` con 7 archivos cuando ya son 8 con `googleDrive.test.js`). Corregir en una sesión específica de coherencia documental. | 🟠 | Abierta | Sesión 29/10/2026 (Vía 3 del cierre) |
 
 ### 2.10 Re-auditoría de invierno pendiente
 
@@ -215,9 +217,9 @@ En la verificación del 27/10/2026, las 405 localidades tenían `niveles_por_vec
 | **N-MOTOR-24** | `calcularUmbralDeslave` calcula un umbral dinámico (`65 - pendiente*0.85 - factorRelieve`) que **nunca se usa en las reglas**. | 🟠 | Verificado en código |
 | **N-MOTOR-28** | El piso del aviso SMN (`Math.max(lluviaEfectiva, pisoSMN)`) es una fuente de sobreestimación no catalogada bajo DEC-011. | 🟠 | Verificado en código |
 | **N-MOTOR-29** | `tipoAmenaza: "ESTABLE"` (Regla 1) y `"VIGILANCIA_NORMAL"` (Regla 6) no coinciden con `03_MOTOR_RIESGO.md` §9.4. | 🟠 | Verificado en código |
-| **N-MOTOR-30** | `umbralFisicoDeslaveMm` reportado en el diagnóstico no coincide con el umbral (65.0) realmente usado. | 🟡 | Verificado en código |
+| **N-MOTOR-30** | `umbralFisicoDeslaveMm` reportado en el diagnóstico no coincide con el umbral (65.0) realmente usado. | 🟡 | **Cerrada** el 29/10/2026 (commit 1505624). El campo reporta 65.0 constante. 1 test nuevo en riskEvaluator.test.js |
 | **N-MOTOR-05-bis** | SPP (43 localidades) y HYC (13) tienen perfil `Aw`/`LADERA` similar a XIC/HUA/ZAC, pero no aparecen en la lista original de H-MOTOR-05. **Confirmado por P9.** | 🔴 | Confirmado por P9 |
-| **N-MOTOR-08-bis** | Regla 4 (inundación) no pondera por `tc_horas`. Sobrestima cuencas lentas. | 🟠 | Verificado en datos |
+| **N-MOTOR-08-bis** | Regla 4 (inundación) no pondera por `tc_horas`. Sobrestima cuencas lentas. | 🟠 | **Confirmado por test** el 29/10/2026 (commit c276e59). El runner asigna N4 donde el frontend asigna N3 con poblacionAguasArriba < 50000 y lluvia 35-64 mm. Ver riskEvaluatorRunner.test.js Test 6 |
 | **N-DICT-01** | `generarTituloDictamen(2, 'SIN_AMENAZA')` produce `"Vigilancia por Condiciones Normales"` (contradictorio). | 🟡 | Verificado en código |
 | **N-DICT-02** | Sin test que verifique que `NOMBRES_VECTOR` cubre todos los vectores. | 🟡 | Verificado en código |
 | **N-REG-02** | `construirBloqueRegional` hardcodea `"ventana 72h"` en el encabezado incluso en on-demand. | 🟡 | Verificado en código |
@@ -228,6 +230,14 @@ En la verificación del 27/10/2026, las 405 localidades tenían `niveles_por_vec
 | **N-MOJ-01** | `mojibake.js` no detecta mojibake de caracteres de 4 bytes UTF-8. | 🟢 | Verificado en código |
 | **N-MOJ-02** | `repararMojibake` silenciosa si no repara. | 🟢 | Verificado en código |
 | **N-NODOS-01** | Desempate por orden de iteración si empatan poblaciones. | 🟢 | Verificado en código |
+| **N-DRY-04** | URLs NOAA duplicadas entre `latest-gif.js` (objeto `DIRS` hardcodeado) y `noaa-goes.js` (`NOAA_PRODUCTS.*.dir`). El backend no importa `NOAA_PRODUCTS`. Viola ADR-004. | 🟠 | Verificado en código |
+| **N-DRY-05** | 4 archivos sin newline final: `googleDrive.js`, `riskEvaluatorRunner.test.js`, `consensusEngine.test.js`, `riskEvaluator.test.js`. Cosmético. | 🟢 | Verificado en código |
+| **N-CI-05** | `actions/checkout@v4` y `actions/setup-node@v4` deprecadas (warning "Node.js 20 is deprecated"). Bump a v5+ opcional. | 🟢 | Confirmado por log de Actions (run 40967148872) |
+| **N-INDEX-01** | `index.html` viewport declara `maximum-scale=1.0, user-scalable=no`, bloqueando el zoom táctil. Viola WCAG 2.1 SC 1.4.4. | 🟡 | Verificado en código |
+| **N-PWA-03** | `index.html` enlaza a `/manifest.json` pero no se ha verificado su existencia ni contenido. La PWA no se instala si el manifest falta. | 🟠 | Pendiente de verificar |
+| **N-BITACORA-04** | Test de integración entre los 4 escritores de bitácora (runner, diario, on-demand, sara) no existe. **Bloqueada por N-DRY-03** (refactor para exponer la lógica como función). Sin test, H-BITACORA-02 sigue sin red de seguridad. | 🟠 | Verificado por ausencia; bloqueada |
+| **N-ARCH-02** | `parseNoaaStamp` duplicada en `SatelliteViewer.jsx` (sin validación de rangos) y en `src/lib/compartido/noaa.js`. `calcularContextoNiebla` duplicada en `riskEvaluator.js` y `riskEvaluatorRunner.mjs`. Viola ADR-004. | 🟡 | Verificado en código |
+| **N-AUTH-03** | El frontend no distingue roles. Cualquier clave válida en `SATRC_OPERADORES_JSON` autentica y da acceso completo a la Sala Operativa. Los roles existen solo en el backend para `generado_por`. | 🟡 | Verificado en código |
 
 ---
 
@@ -307,6 +317,8 @@ Estas prioridades están propuestas, no aprobadas. Se confirman antes de comenza
 | **PEND-06** | **¿Qué criterio operativo debe disparar N2 por niebla?** Opciones bajo DEC-011: (A) persistencia ≥ 4 h consecutivas; (B) ventana próxima 6 h en vez de 24 h; (C) niebla + otra condición; (D) niebla ≤ 1 km con persistencia ≥ 2 h; (E) híbrido. | Coordinación técnica y pastoral | P12 del 29/10/2026 |
 | **PEND-07** | **¿El `on.schedule` interno de `sara_cron.yml` es un respaldo deliberado o se elimina?** | Coordinación técnica | P7 del 29/10/2026 |
 | **PEND-08** | **¿Cómo debe resolverse N-MOTOR-09?** **RESUELTA el 29/10/2026 (Opción A).** Se conserva `HIDRO_TERMICO=0.15` y se elimina `TERMICO_HIDRO=0.10`. | Coordinación técnica y pastoral | P2 del 29/10/2026 |
+| **PEND-09** | **¿Cómo debe tratarse la escritura de `reporte_diocesano_vigente.json` y `bitacora_sara.json` cuando el primero tiene éxito y el segundo falla?** Opciones: (a) rollback; (b) orden invertido; (c) aceptar la inconsistencia con log persistente; (d) escritura transaccional en un único JSON. Bajo DEC-011, la opción debe ser verificable empíricamente y auditable. | Coordinación técnica y pastoral | Sesión 29/10/2026 (H-ONDEMAND-09, N-ONDEMAND-04) |
+| **PEND-10** | **¿Cómo se alinean los subtipos de `tipo_amenaza` entre el motor, la documentación (§9.4 de `03_MOTOR_RIESGO.md`) y los prompts (`REGLAS_MULTIVECTOR` en `promptsMultivector.js`)?** Opciones: (a) alinear código a docs; (b) alinear docs a código; (c) mapeo intermedio en el orquestador. Requiere test de contrato. | Coordinación técnica y pastoral | Sesión 29/10/2026 (N-MOTOR-29, N-MOTOR-05, N-RUNNER-VECTOR-CONTRACT) |
 
 ---
 
