@@ -40,11 +40,63 @@ describe('EstadoDiocesanoSchemas', () => {
       expect(res.success).toBe(true);
     });
 
-    it('acepta evaluaciones: null (modo degradado)', () => {
-      const payload = { ...payloadBlobValido, evaluaciones: null };
-      const res = EstadoDiocesanoBlobSchema.safeParse(payload);
-      expect(res.success).toBe(true);
-    });
+      it('acepta evaluaciones: null (modo degradado)', () => {
+        const payload = { ...payloadBlobValido, evaluaciones: null };
+        const res = EstadoDiocesanoBlobSchema.safeParse(payload);
+        expect(res.success).toBe(true);
+      });
+
+      it('PEND-06: acepta payload con contexto.niebla activo', () => {
+        const payload = {
+          ...payloadBlobValido,
+          evaluaciones: [{
+            ...payloadBlobValido.evaluaciones[0],
+            contexto: {
+              niebla: {
+                activa: true,
+                visibilidadMinKm: 0.2,
+                persistenciaHoras: 2,
+                periodo: 'MADRUGADA',
+                ventana: { inicio: '00:00', fin: '01:00', duracionHoras: 2 }
+              }
+            }
+          }]
+        };
+        const res = EstadoDiocesanoBlobSchema.safeParse(payload);
+        expect(res.success).toBe(true);
+      });
+
+      it('PEND-06: acepta payload SIN contexto (retrocompatibilidad)', () => {
+        const payload = {
+          ...payloadBlobValido,
+          evaluaciones: [{
+            ...payloadBlobValido.evaluaciones[0]
+            // sin contexto
+          }]
+        };
+        const res = EstadoDiocesanoBlobSchema.safeParse(payload);
+        expect(res.success).toBe(true);
+      });
+
+      it('PEND-06: acepta contexto.niebla.activa=false con campos en null', () => {
+        const payload = {
+          ...payloadBlobValido,
+          evaluaciones: [{
+            ...payloadBlobValido.evaluaciones[0],
+            contexto: {
+              niebla: {
+                activa: false,
+                visibilidadMinKm: null,
+                persistenciaHoras: 0,
+                periodo: null,
+                ventana: { inicio: null, fin: null, duracionHoras: 0 }
+              }
+            }
+          }]
+        };
+        const res = EstadoDiocesanoBlobSchema.safeParse(payload);
+        expect(res.success).toBe(true);
+      });
 
     it('rechaza evaluaciones vacías []', () => {
       const payload = { ...payloadBlobValido, evaluaciones: [] };

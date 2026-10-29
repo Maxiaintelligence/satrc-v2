@@ -174,6 +174,24 @@ describe('crossThreatOrchestrator.js', () => {
     expect(res).toHaveProperty('municipio');
   });
 
+  it('6.bis. PEND-06: propaga contexto.niebla del motor hidrológico al nivel superior', () => {
+    const loc = mockLocalidad({
+      zona_id: 'HUA',
+      topografia: { altitud_msnm: 1500, pendiente_max_deg: 10, relieve: 'MESETA', twi: 10 }
+    });
+    // Niebla solo en 168-169 (00:00 y 01:00)
+    const serie = mockSerieCompleta({ lluvia: 0, temp: 15, sensacion: 15, rafagas: 20 }).map((h, i) => ({
+      ...h,
+      visibility_km: (i === 168 || i === 169) ? 0.3 : 20
+    }));
+    const res = evaluarMultiamenaza(loc, serie);
+    expect(res).toHaveProperty('contexto');
+    expect(res.contexto.niebla.activa).toBe(true);
+    expect(res.contexto.niebla.periodo).toBe('MADRUGADA');
+    expect(res.contexto.niebla.persistenciaHoras).toBe(2);
+    expect(res.nivel_alerta_global).toBe(1);
+  });
+
   it('7. Fallback: Sin datos, retorna N1', () => {
     const loc = mockLocalidad();
     const serie = []; // Array vacío, no un objeto

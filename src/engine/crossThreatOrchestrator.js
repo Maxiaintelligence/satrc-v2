@@ -310,6 +310,9 @@ export function evaluarMultiamenaza(localidad, serieHoraria, contexto = {}) {
       tempMinimaC: resTermico.datos_tecnicos?.temp_min_c || null
     },
     protocolo: "Consulte al coordinador de Cáritas",
-    sin_datos_regionales: resHidro.sin_datos_regionales || false
+    sin_datos_regionales: resHidro.sin_datos_regionales || false,
+    // PEND-06 (29/10/2026): la niebla ya no dispara nivel. Se propaga como
+    // contexto informativo para SARA y la UI. Proviene del motor hidrológico.
+    contexto: resHidro.contexto || { niebla: { activa: false, visibilidadMinKm: null, persistenciaHoras: 0, periodo: null, ventana: { inicio: null, fin: null, duracionHoras: 0 } } }
   };
 }

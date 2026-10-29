@@ -61,14 +61,30 @@ const EvaluacionSchema = z.object({
     termico: z.number(),
     convectivo: z.number()    
   }).optional(),
-  datos_disponibles_por_vector: z.object({ // 👈 NUEVO
+  datos_disponibles_por_vector: z.object({
     hidrologico: z.boolean(),
     viento: z.boolean(),
     termico: z.boolean(),
     convectivo: z.boolean()
   }).optional(),
   acciones_operativas: z.array(z.string()).optional(),
-  diagnosticos_por_vector: z.record(z.any()).optional()
+  diagnosticos_por_vector: z.record(z.any()).optional(),
+
+  // PEND-06 (29/10/2026): la niebla es contexto informativo, no dispara nivel.
+  // Se declara como opcional para retrocompatibilidad con payloads anteriores.
+  contexto: z.object({
+    niebla: z.object({
+      activa: z.boolean(),
+      visibilidadMinKm: z.number().nullable(),
+      persistenciaHoras: z.number().nonnegative(),
+      periodo: z.enum(['MADRUGADA', 'MAÑANA', 'TARDE', 'NOCHE', 'MIXTO']).nullable(),
+      ventana: z.object({
+        inicio: z.string().nullable(),
+        fin: z.string().nullable(),
+        duracionHoras: z.number().nonnegative()
+      })
+    }).optional()
+  }).optional()
 }).passthrough(); // Permite campos extra en la evaluación
 
 // 2. Schema para el Blob (lo que guarda el runner)
