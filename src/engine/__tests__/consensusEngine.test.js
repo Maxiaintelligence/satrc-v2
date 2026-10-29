@@ -255,4 +255,40 @@ describe('generarConsensoDeterminista', () => {
     });
   });
 
+  // N-FETCH-01 (29/10/2026): blindaje de la premisa estructural del motor.
+  // Todo el pipeline (riskEvaluator, windEvaluator, thermalEvaluator,
+  // convectiveEvaluator, calcularContextoNiebla, reportesRegionales) asume
+  // que serie[168] es la medianoche local del día de emisión. Si Open-Meteo
+  // cambia la política de alineación (ej. hora actual en vez de medianoche),
+  // las reglas se desplazan silenciosamente. Este test detecta la regresión
+  // contra el fixture real capturado el 21-22/10/2026.
+  it('fixture real: la serie está alineada a medianoche local (N-FETCH-01)', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const rutaFixture = path.join(__dirname, 'fixtures', 'openmeteo_sample.json');
+    const fixture = JSON.parse(fs.readFileSync(rutaFixture, 'utf-8'));
+
+    // 1. Zona horaria y offset
+    expect(fixture.timezone).toBe('America/Mexico_City');
+    expect(fixture.utc_offset_seconds).toBe(-21600); // UTC-6 sin DST
+
+    // 2. Estructura de 240 horas
+    expect(fixture.hourly.time).toHaveLength(240);
+
+    // 3. Alineación midnight en los índices críticos
+    expect(fixture.hourly.time[0]).toMatch(/T00:00$/);   // inicio de la serie
+    expect(fixture.hourly.time[144]).toMatch(/T00:00$/); // inicio de "ayer"
+    expect(fixture.hourly.time[168]).toMatch(/T00:00$/); // inicio de "hoy"
+    expect(fixture.hourly.time[192]).toMatch(/T00:00$/); // inicio de "mañana"
+    expect(fixture.hourly.time[239]).toMatch(/T23:00$/); // fin de la serie
+
+    // 4. Consecutividad (no hay huecos entre horas)
+    for (let i = 1; i < fixture.hourly.time.length; i++) {
+      const horaActual = parseInt(fixture.hourly.time[i].slice(11, 13), 10);
+      const horaAnterior = parseInt(fixture.hourly.time[i - 1].slice(11, 13), 10);
+      const esperada = (horaAnterior + 1) % 24;
+      expect(horaActual).toBe(esperada);
+    }
+  });
+
 });

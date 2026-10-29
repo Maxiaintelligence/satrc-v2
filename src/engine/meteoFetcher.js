@@ -43,6 +43,21 @@ export async function consultarModelosDeterministas(lat, lon) {
       throw new Error(`Error en API meteorológica: Código HTTP ${respuesta.status}`);
     }
     const datos = await respuesta.json();
+
+    // N-FETCH-01 (29/10/2026): el motor asume que serie[168] es la medianoche
+    // local del día de emisión. Si Open-Meteo cambia la política de alineación,
+    // todas las ventanas de 24h del motor se desplazan silenciosamente. Se
+    // emite un warn al log del runner para detectar la regresión. No se
+    // lanza excepción para no romper la corrida (el motor sigue funcionando
+    // con la alineación que venga, aunque el resultado se desplace).
+    if (!datos.hourly?.time?.[0]?.endsWith('T00:00')) {
+      console.warn(
+        `⚠️ [N-FETCH-01] La serie de Open-Meteo no comienza a medianoche: ` +
+        `${datos.hourly?.time?.[0] || 'null'}. El motor asume alineación midnight. ` +
+        `Verificar política de Open-Meteo.`
+      );
+    }
+
     return {
       exito: true,
       coordenadas: { lat, lon },
