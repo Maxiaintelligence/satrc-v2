@@ -74,7 +74,7 @@ Severidad: 🔴 crítica · 🟠 alta · 🟡 media · 🟢 baja. El esfuerzo es
 |---|---|---|---|---|
 | **N-UI-01** | **El Monitor Público no muestra el semáforo N1–N4 al público en días tranquilos.** Cuando `estado_ligero.json` viene con `evaluaciones: []` (días sin N3/N4), `MonitorPublico.jsx` busca la localidad en `[]`, no la encuentra, `evaluacionLocal = null` y **no renderiza el bloque 2.bis (semáforo + desglose por vector)**. El usuario ve solo el texto hardcodeado de la "Síntesis Comunitaria" sin semáforo real. Bajo DEC-011 esto es "gris silencioso": el ciudadano no distingue "no hay N3/N4" de "no hay datos del motor". | 🟡 | Bajo | Abierta |
 | H-UI-22 | El disclaimer menciona ECMWF y el gráfico lee un campo `ecmwf` que el motor no consulta. **Confirmado en `MonitorPublico.jsx` línea 286**: `crearRutaLinea('ecmwf')` lee`detalle_modelos.temp.ecmwf`, que no existe en el consenso. La línea cae al fallback `h.temperatura_c`, mostrando el valor consensuado 3 veces superpuesto. | 🟡 | Bajo | Confirmada, abierta |
-| **H-UI-02** | ~~El bloque 'Síntesis de Situación Comunitaria' usaba `if/else` con `lluviaTotalDia >= 20`.~~ **CERRADA el 29/10/2026 (Commit `03a91a6`).** El bloque ahora usa `evaluacionLocal?.contexto?.niebla` (línea 478 de `MonitorPublico.jsx`). Prioriza: nivel >= 3 → mensaje del nivel; nivel <= 2 + niebla → mensaje contextual; nivel <= 2 sin niebla → estabilidad. Coherente con el semáforo principal en todos los casos. | 🟡 | Bajo | ✅ **Cerrada** |
+| **H-UI-02** | ~~El bloque 'Síntesis de Situación Comunitaria' usaba `if/else` con `lluviaTotalDia >= 20`.~~ **CERRADA el 29/10/2026.** El Monitor Público ahora usa `generarPronosticoComunario` (motor heurístico en `textoComunitario.js`) que evalúa multiamenaza, variaciones deterministas y pestañas temporales. | 🟡 | Bajo | ✅ **Cerrada** |
 | H-UI-07 | Las secciones I a VI no tienen guardas para contenido vacío. | 🟢 | Bajo | Abierta |
 | H-UI-08 | El borde de la sección 0 siempre se muestra en verde. | 🟢 | Bajo | Abierta |
 | H-UI-09 | `TextoEnriquecido` no maneja todo el markdown. | 🟢 | Bajo | Abierta |
@@ -82,6 +82,7 @@ Severidad: 🔴 crítica · 🟠 alta · 🟡 media · 🟢 baja. El esfuerzo es
 | H-UI-13 | El banner del SMN no se actualiza solo. | 🟢 | Bajo | Abierta |
 | H-UI-14 | El banner del SMN no tiene respaldo si `/api/smn` falla. | 🟢 | Bajo | Abierta |
 | H-UI-23 | `DisclaimerModal` tiene una rama que nunca se ejecuta (`abierto === undefined`). **Confirmado en código:** `MonitorPublico.jsx` siempre pasa `abierto`, la rama del `useEffect` con `abierto === undefined` es código muerto en producción. | 🟢 | Bajo | Confirmada, abierta |
+| **H-UI-24** | **El Monitor Público no inyecta el aviso del SMN al pronóstico comunitario.** La función `generarPronosticoComunitario` acepta un parámetro `alertaSMN`, pero `MonitorPublico.jsx` le pasa `null` (el componente `OfficialAlertBanner` consume la API, pero el Monitor no). | 🟡 | Bajo | Abierta |
 
 ### 2.4 Arquitectura, operación y almacenamiento
 

@@ -11,6 +11,8 @@
 > - **§10 reformulada** con las deudas confirmadas por la auditoría, marcando las que están bloqueadas por PEND-06/PEND-08 y las que deben corregirse en el mismo lote.
 > - **§11 ampliada** con el orden correcto de implementación de los fixes: primero motor (H-MOTOR-05), después prompts (H-PROMPT-06/09/10), después H-REPORTE-02.
 
+**Nota del 29/10/2026:** Aunque SARA utiliza Groq para los reportes oficiales, el "Pronóstico Comunitario" del Monitor Público (la tarjeta de texto que ve el ciudadano) **no usa IA**. Utiliza un motor heurístico determinista en el frontend (`src/lib/compartido/textoComunitario.js`) diseñado para ser rápido, variado y libre de dependencias externas.
+
 ---
 
 ## 1. Qué es SARA

@@ -646,6 +646,17 @@ Se aplicaron 3 fixes más tras el cierre de los 5 commits del bloque PEND-06:
 
 **Nueva lección (H-TEST-19):** ante un error de API externa, no asumir la causa. El 429 de Groq parecía saturación por cantidad de llamadas. La prueba directa desde PowerShell (aislada) fue exitosa. El 429 real fue por concurrencia inmediata (2 llamadas en 5s), no por volumen.
 
+### 7.21 Motor de Pronóstico Comunitario Determinista (Monitor Público)
+
+- **Síntoma:** El Monitor Público mostraba textos robóticos y artificiales (hardcodeados en `if/else` con `lluviaTotalDia >= 20`), que no reflejaban las condiciones reales (viento, frío, niebla) y no cambiaban por día.
+- **Causa:** Falta de integración del motor de riesgo con el texto del frontend.
+- **Solución:** Se creó la función `generarPronosticoComunitario` en `src/lib/compartido/textoComunitario.js`. Es un motor heurístico multiamenaza que:
+  1. Evalúa los 4 vectores (N1 a N4).
+  2. Integra datos de Open-Meteo (lluvia, viento, frío, niebla).
+  3. Varía el texto determinísticamente (semilla: Localidad + Fecha + Pestaña).
+  4. Se conectó a `MonitorPublico.jsx` reemplazando el bloque estático.
+- **Verificación:** `npm run build` verde, prueba local de 3 pestañas (Hoy, Mañana, Pasado) con textos diferentes y gramaticalmente correctos.
+
 ---
 
 ## 8. Lecciones consolidadas
@@ -668,6 +679,7 @@ Se aplicaron 3 fixes más tras el cierre de los 5 commits del bloque PEND-06:
 | **H-PROCESO-03** | **Un filtro que devuelve vacío no es evidencia de ausencia de datos.** Antes de concluir "no hay X", verificar con una consulta sin filtros y cruzar con otra fuente. Los datos de Apps Script pueden tener encoding distinto al esperado (falso negativo de PowerShell en P5b del 29/10/2026). | Sesión 29/10/2026 |
 | **H-TEST-16** | **Las cifras de estado ("167 pruebas en verde", "51 advertencias") envejecen mal.** Toda cifra de baseline debe incluir la fecha, el comando y el HEAD en que se verificó. Cuando cambia el código sin actualizar la cifra, la documentación miente. | P0 del 29/10/2026 |
 | **H-TEST-17** | **Un script de diagnóstico debe discriminar la hipótesis o no es un test.** El primer escenario de P2 usó `zona_id: PMN`, activó la Regla 1 (Protección Altiplano), y el resultado fue indistinguible de la calma. Cambiar a `zona_id: HUA` permitió discriminar. Refuerza H-TEST-06. | P2 del 29/10/2026 |
+| **H-TEST-20** | Un modelo de lenguaje no es la única forma de generar texto humano. La heurística determinista (semilla basada en fecha + ID) permite textos variados, sin latencia y sin costo de API. | Monitor Público (29/10/2026) |
 
 ---
 
