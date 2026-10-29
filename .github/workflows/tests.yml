@@ -24,3 +24,21 @@ jobs:
 
       - name: Ejecutar Tests con Vitest
         run: npm test
+
+      - name: Verificar sintaxis de backend (node --check)
+        run: |
+          node --check api/sara.js
+          node --check api/smn.js
+          node --check api/latest-gif.js
+          node --check api/reporte-ondemand.js
+          node --check api/disparar-workflow.js
+          node --check api/auth-operativo.js
+          node --check scripts/ejecutar_sara_autonomo.mjs
+          node --check scripts/reportes/reporteDiario.mjs
+          node --check scripts/engine/riskEvaluatorRunner.mjs
+
+      - name: Lint (oxlint)
+        run: npm run lint
+
+      - name: Build (vite)
+        run: npm run build
