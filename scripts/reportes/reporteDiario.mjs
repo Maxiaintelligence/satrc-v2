@@ -353,15 +353,28 @@ export async function generarReporteDiario({
     throw new Error("Groq devolvió formato inválido");
   }
 
+  // FIX N-PROMPT-JSON-01 (29/10/2026): Groq a veces devuelve las claves en español
+  const mapeoClaves = {
+    'Sección 0': 'seccion_0_decision', 'Seccion 0': 'seccion_0_decision',
+    'Sección I': 'seccion_I_atmosfera', 'Seccion I': 'seccion_I_atmosfera',
+    'Sección II': 'seccion_II_focos_sierra', 'Seccion II': 'seccion_II_focos_sierra',
+    'Sección III': 'seccion_III_condiciones_altiplano', 'Seccion III': 'seccion_III_condiciones_altiplano',
+    'Sección IV': 'seccion_IV_evolucion', 'Seccion IV': 'seccion_IV_evolucion',
+    'Sección V': 'seccion_V_recomendaciones_pastorales', 'Seccion V': 'seccion_V_recomendaciones_pastorales',
+    'Sección VI': 'seccion_VI_deslinde', 'Seccion VI': 'seccion_VI_deslinde'
+  };
+  for (const [claveOriginal, claveEstandar] of Object.entries(mapeoClaves)) {
+    if (reporteJSON[claveOriginal] !== undefined && reporteJSON[claveEstandar] === undefined) {
+      reporteJSON[claveEstandar] = reporteJSON[claveOriginal];
+      delete reporteJSON[claveOriginal];
+    }
+  }
+
   // 6. Parche N22 (mojibake)
   const secciones = [
-    'seccion_0_decision',
-    'seccion_I_atmosfera',
-    'seccion_II_focos_sierra',
-    'seccion_III_condiciones_altiplano',
-    'seccion_IV_evolucion',
-    'seccion_V_recomendaciones_pastorales',
-    'seccion_VI_deslinde'
+    'seccion_0_decision', 'seccion_I_atmosfera', 'seccion_II_focos_sierra',
+    'seccion_III_condiciones_altiplano', 'seccion_IV_evolucion',
+    'seccion_V_recomendaciones_pastorales', 'seccion_VI_deslinde'
   ];
   for (const clave of secciones) {
     if (typeof reporteJSON[clave] === 'string') {
