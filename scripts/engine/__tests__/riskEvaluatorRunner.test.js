@@ -156,4 +156,53 @@ describe('riskEvaluatorRunner — gemelo del runner (H4.1)', () => {
       });
     });
   });
+
+  describe('Test 4 — Divergencia 1: api7DiasPrevios con serie < 168h', () => {
+    it('runner retorna 0, frontend retorna 15.0', () => {
+      const localidad = mockLocalidad();
+      const serieCorta = mockSerie({ horas: 100, lluvia_mm: 0 });
+      const resRunner = evaluarLocalidadRunner(localidad, serieCorta, { alertaSMN: null, zonaSinDatos: false });
+      const resFrontend = evaluarLocalidad(localidad, serieCorta, { alertaSMN: null });
+
+      expect(resRunner.impactoSistemico.apiPrevio7DiasMm).toBe(0);
+      expect(resFrontend.impactoSistemico.apiPrevio7DiasMm).toBe(15.0);
+    });
+  });
+
+  describe('Test 5 — Divergencia 2: eventoActual con serie < 192h', () => {
+    it('runner no evalúa el evento (0 mm), frontend evalúa las primeras 24h del slice', () => {
+      const localidad = mockLocalidad();
+      const serieCorta = mockSerie({ horas: 100, lluvia_mm: 2.0 });
+      const resRunner = evaluarLocalidadRunner(localidad, serieCorta, { alertaSMN: null, zonaSinDatos: false });
+      const resFrontend = evaluarLocalidad(localidad, serieCorta, { alertaSMN: null });
+
+      expect(resRunner.impactoSistemico.lluviaEvento24hMm).toBe(0);
+      expect(resFrontend.impactoSistemico.lluviaEvento24hMm).toBe(48);
+      expect(resRunner.nivel_alerta).toBe(1);
+      expect(resFrontend.nivel_alerta).toBe(2);
+    });
+  });
+
+  describe('Test 6 — Divergencia 4: Regla 4 graduada por poblacion aguas arriba', () => {
+    it('con poblacion < 50k y lluvia 35-64mm, el runner asigna N4 (fijo) y el frontend N3 (graduado)', () => {
+      const localidad = mockLocalidad({
+        zona_id: 'HUA',
+        topografia: { altitud_msnm: 400, pendiente_max_deg: 8, relieve: 'MESETA', twi: 13 },
+        hidrologia: {
+          subcuenca_cve: 'RH27Bb',
+          subcuenca_nom: 'R. Necaxa',
+          posicion: 'BAJA',
+          distancia_cauce_km: 0.5,
+          tc_horas: 6,
+          poblacion_aguas_arriba: 10000
+        }
+      });
+      const serie = mockSerie({ lluvia_mm: 2.0, temperatura_c: 18 });
+      const resRunner = evaluarLocalidadRunner(localidad, serie, { alertaSMN: null, zonaSinDatos: false });
+      const resFrontend = evaluarLocalidad(localidad, serie, { alertaSMN: null });
+
+      expect(resRunner.nivel_alerta).toBe(4);
+      expect(resFrontend.nivel_alerta).toBe(3);
+    });
+  });
 });
