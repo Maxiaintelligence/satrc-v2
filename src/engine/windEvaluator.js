@@ -80,18 +80,24 @@ export function evaluarViento(localidad, serieHoraria) {
   const umbralN3 = esAltitudAlta ? 70 : 65;
   const umbralN4 = esAltitudAlta ? 95 : 90;
 
+  // N-MOTOR-36 (29/10/2026): la comparación usa vEqFinal (ráfaga normalizada
+  // por densidad y rugosidad), pero el texto al operador antes decía rafagaMax
+  // (real). En zonas bajas el factor de rugosidad puede elevar vEqFinal por
+  // encima del umbral mientras rafagaMax queda por debajo, produciendo frases
+  // incoherentes como "ráfagas de 42 km/h superan el umbral de 45".
+  // Se muestran ambos valores para que el operador pueda auditar.
   if (vEqFinal >= umbralN4) {
     nivel = 4;
     titulo = "Emergencia por Vientos Huracanados";
-    causa = `Ráfagas de ${rafagaMax.toFixed(1)} km/h superan el umbral de ${umbralN4} km/h. Colapso estructural inminente.`;
+    causa = `Ráfaga real de ${rafagaMax.toFixed(1)} km/h (equivalente a nivel del mar: ${vEqFinal.toFixed(1)} km/h) supera el umbral de ${umbralN4} km/h. Colapso estructural inminente.`;
   } else if (vEqFinal >= umbralN3) {
     nivel = 3;
     titulo = "Alerta por Vientos Fuertes";
-    causa = `Ráfagas de ${rafagaMax.toFixed(1)} km/h superan el umbral de ${umbralN3} km/h. Riesgo de caída de árboles y techos.`;
+    causa = `Ráfaga real de ${rafagaMax.toFixed(1)} km/h (equivalente a nivel del mar: ${vEqFinal.toFixed(1)} km/h) supera el umbral de ${umbralN3} km/h. Riesgo de caída de árboles y techos.`;
   } else if (vEqFinal >= umbralN2) {
     nivel = 2;
     titulo = "Vigilancia por Ráfagas Moderadas";
-    causa = `Ráfagas de ${rafagaMax.toFixed(1)} km/h superan el umbral de ${umbralN2} km/h. Precaución con objetos ligeros.`;
+    causa = `Ráfaga real de ${rafagaMax.toFixed(1)} km/h (equivalente a nivel del mar: ${vEqFinal.toFixed(1)} km/h) supera el umbral de ${umbralN2} km/h. Precaución con objetos ligeros.`;
   }
 
   // Nivel continuo para el Orquestador (Ej: si vEq es 44.9, da 1.99)
