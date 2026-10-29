@@ -1,14 +1,22 @@
 # SatRC V2.0 — Historial de bugs, hitos y lecciones
 
-> **Versión del documento:** 2.5 (28/10/2026)
+> **Versión del documento:** 2.6 (29/10/2026)
 > **Propósito:** registro cronológico de los problemas resueltos, los hitos cerrados y las lecciones aprendidas. Cada entrada indica síntoma, causa, solución, verificación y commit.
 > **Regla:** un bug entra aquí solo cuando está resuelto. Lo pendiente va a `06_PENDIENTES.md`.
+> **Cambios de esta versión:**
+> - Agrega **§7 — Sesión 29/10/2026: Auditoría empírica P0–P12**. Registra el proceso, los hallazgos y las verificaciones de la sesión de diagnóstico sin resolver código de producción.
+> - **Corrige §6.1** (H-VIENTO-01): el cierre anterior afirmaba erróneamente que el código no implementa factor de rugosidad. El código sí lo implementa. Se conserva el texto original por trazabilidad histórica y se agrega nota correctiva.
+> - **Actualiza §8** con tres lecciones nuevas: `H-PROCESO-03`, `H-TEST-16`, `H-TEST-17`.
+> - **Actualiza §9** con la sesión 29/10/2026.
+> - **Corrige H-DOC-BASELINE-01/02:** el conteo real de `npm test` es 165 pass + 2 rojos obsoletos; el conteo real de `npm run lint` es 55 advertencias, 0 errores. Las cifras anteriores (167 verdes, 51 advertencias) eran incorrectas.
+> - Los hallazgos confirmados por pruebas empíricas (H-REPORTE-02, H-REPORTE-03, H-PROMPT-06, H-MOTOR-05, H-DIAG-04, N-MOTOR-09, N-MOTOR-11, N-MOTOR-13, N-MOTOR-14, N-MOTOR-15, N-CRON-05, N-CRON-06, H-PKG-01) **NO se registran aquí como resueltos**; se registran en `06_PENDIENTES.md` como deudas confirmadas. Este documento solo registra el proceso y las lecciones.
+> - **Refutación documentada de N-MOTOR-12** (hipótesis sobre umbral de niebla).
 
 ---
 
 ## 0. Cómo leer los identificadores
 
-Los hitos se nombran con la etapa cuando puede haber confusión. Esta versión separa las colisiones que tenía el historial anterior:
+Los hitos se nombran con la etapa cuando puede haber confusión. Esta versión mantiene la separación que tenía el historial anterior:
 
 | Prefijo | Significado | Ejemplo |
 |---|---|---|
@@ -16,10 +24,13 @@ Los hitos se nombran con la etapa cuando puede haber confusión. Esta versión s
 | `E4-` | Hito de Etapa 4 (multiamenaza) | `E4-H6.4a` |
 | `E5-` | Hito de Etapa 5 (integración multivectorial) | `E5-H5.0.2b` |
 | Sin prefijo | Bugs con identificador propio (N-, H-) | `N27`, `H-MOTOR-06` |
+| `P#` | Prueba empírica de una sesión de auditoría | `P9` (§7, sesión 29/10/2026) |
+| `N-*` | Deuda nueva no catalogada en versiones previas | `N-MOTOR-09` |
+| `H-PROCESO-*` | Lección de metodología o proceso | `H-PROCESO-03` |
 
 **Nota de renombrado:** en versiones anteriores, `H5` se usaba tanto para la Etapa 3 (N18) como para la Etapa 5 (H5.0 a H5.8). Las entradas conservan su texto original y se etiquetan con el prefijo correspondiente en el encabezado.
 
-**Lecciones:** los identificadores `H-TEST-*` se usan en `06_PENDIENTES.md` y en las entradas de este archivo. El identificador `H-TEST-06` significa "verificar la aritmética del escenario antes de asumir un error" en todo el proyecto. La lección sobre fixtures reales, que antes también se llamaba `H-TEST-06`, pasa a ser `H-TEST-10`.
+**Lecciones:** los identificadores `H-TEST-*`, `H-E4-LEC` y `H-PROCESO-*` se usan en `06_PENDIENTES.md` y en las entradas de este archivo. El identificador `H-TEST-06` significa "verificar la aritmética del escenario antes de asumir un error" en todo el proyecto.
 
 ---
 
@@ -32,7 +43,8 @@ Los hitos se nombran con la etapa cuando puede haber confusión. Esta versión s
 | Etapa 4 (H6.1 a H6.7) | 21 a 22 de octubre de 2026 | Motor multiamenaza en producción. Tag `etapa-4-cerrada` (commit `29009fe`) |
 | Etapa 5 (H5.0 a H5.8) | 22 de octubre de 2026 | Integración multivectorial en interfaz, bitácora y prompts |
 | Migración a Drive | 27 de octubre de 2026 | Suspensión de Vercel Blob y migración de emergencia |
-| **Rescate y Auditoría** | **28 de octubre de 2026** | **Resolución del incidente de producción (RESPUESTA_EN_VIVO), fix de Zod, auditoría documental completa** |
+| Rescate y Auditoría | 28 de octubre de 2026 | Resolución del incidente de producción (`RESPUESTA_EN_VIVO`), fix de Zod, auditoría documental completa |
+| **Auditoría empírica** | **29 de octubre de 2026** | **Baseline verificado (P0), 5 hipótesis críticas confirmadas con pruebas P1–P5, 3 pruebas adicionales P6–P12 confirman causa raíz de H-MOTOR-05 y refutan N-MOTOR-12. Sin cambios en código de producción. Diagnóstico cerrado para planificación de fixes.** |
 
 ---
 
@@ -182,7 +194,7 @@ Objetivo: cerrar deuda, establecer pruebas y documentar. Sin funciones nuevas.
 - **Solución:** fixture de 240 horas con datos reales de Pachuca, y siete pruebas que lo usan.
 - **Hallazgo:** el consenso produce un arreglo de objetos, pero los evaluadores esperan un objeto de arreglos. La conversión se hace en el orquestador, y las pruebas la replican.
 - **Commits:** `6fdc414` (fixture) y `2b86e47` (pruebas); confirmados en `git log`.
-- **Lección:** `H-TEST-10`. Este identificador reemplaza al `H-TEST-06` que tenía esta lección en el historial anterior.
+- **Lección:** `H-TEST-10`.
 
 ### E4-H-CIERRE — Cierre de Etapa 4
 - **Estado:** cerrada a nivel funcional. Quedan abiertos H6.6 *(Nota 28/10/2026: H6.6 se cerró en Etapa 5, ver 6.1)*, H7 y H-ARCH-01 (ver `06_PENDIENTES.md`).
@@ -259,7 +271,7 @@ Objetivo: cerrar deuda, establecer pruebas y documentar. Sin funciones nuevas.
 - **Síntoma:** El motor convectivo y térmico (nevada) nunca disparaban en producción. Los niveles por vector quedaban atascados en 1.0.
 - **Causa:** El runner usaba una copia local de `generarConsensoDeterminista` que solo producía 9 variables. Descartaba las 8 variables de Etapa 4 solicitadas a Open-Meteo.
 - **Solución:** Se eliminó la copia local (92 líneas) y se importó el consenso compartido (`src/engine/consensusEngine.js`).
-- **Verificación:** Test de importación (Commit 1) pasó de rojo a verde. 
+- **Verificación:** Test de importación (Commit 1) pasó de rojo a verde.
 - **Commit:** `6a72bdc`.
 
 #### H-MULTI-04 — El orquestador destruía los ceros reales
@@ -309,7 +321,7 @@ Objetivo: cerrar deuda, establecer pruebas y documentar. Sin funciones nuevas.
 - **Síntoma H-MOTOR-07:** El motor hidrológico leía `wind_speed_10m` en lugar de `viento_kmh`, por lo que la Regla 1 nunca detectaba vientos > 40 km/h.
 - **Síntoma H-CONV-03:** El motor convectivo disparaba alertas N3 por "Downburst" con valores de CAPE muy bajos, generando falsos positivos (Apan, Almoloya).
 - **Solución:** Se cambió el campo de viento en `riskEvaluator.js` y se agregó `capeMax > 1000` en `convectiveEvaluator.js`.
-- **Verificación:** 167 tests en verde. Apan bajó de N3 a N1, Almoloya de N3 a N2.
+- **Verificación:** 167 tests en verde (cifra histórica; ver corrección en §7.2 con la cifra real del 29/10/2026). Apan bajó de N3 a N1, Almoloya de N3 a N2.
 - **Commits:** `d248fdb`.
 
 ### Crisis de Vercel Blob y Migración a Google Drive (27 al 28/10/2026)
@@ -326,10 +338,12 @@ Esta sección documenta el incidente de producción más grave desde la creació
 ### 6.1 Aclaraciones Históricas y Cierres Formales
 
 **H-VIENTO-01 (Cierre formal)**
-- **Síntoma:** la especificación original del evaluador de viento incluía un suavizado de 3 horas y un factor de rugosidad.
-- **Causa:** el código **nunca implementó** ni el suavizado (solo extrae el máximo de 24h) ni el factor de rugosidad.
-- **Solución:** cierre como **documental**. Se actualiza la especificación para reflejar el código real (DEC-010). No requiere cambio de código.
+- **Síntoma original (versión 28/10/2026):** la especificación original del evaluador de viento incluía un suavizado de 3 horas y un factor de rugosidad.
+- **Causa (versión 28/10/2026):** el código **nunca implementó** ni el suavizado (solo extrae el máximo de 24h) ni el factor de rugosidad.
+- **Solución (versión 28/10/2026):** cierre como **documental**. Se actualiza la especificación para reflejar el código real (DEC-010). No requiere cambio de código.
 - **Fecha de registro:** 28/10/2026.
+
+> **Nota de corrección del 29/10/2026 (ver §7.15):** la afirmación "el código nunca implementó el factor de rugosidad" es **incorrecta**. La verificación empírica P0–P12 confirma que `windEvaluator.js` **sí implementa** factor de rugosidad (LADERA=1.1, LOMA=1.05). Solo el suavizado de 3 h está ausente. H-VIENTO-01 permanece cerrado como **documental por el suavizado**, pero la causa y consecuencia del cierre están mal redactadas. La corrección formal se registra en §7.15 y se propaga a `03_MOTOR_RIESGO.md` §5.1 al cierre del próximo hito.
 
 **Aclaración sobre H6.6**
 - **Estado real:** cerrado en Etapa 5.
@@ -384,7 +398,217 @@ Tras el rescate, se realizó una auditoría empírica de los 11 documentos funda
 
 ---
 
-## 7. Lecciones consolidadas
+## 7. Sesión 29/10/2026 — Auditoría empírica P0–P12
+
+### 7.1 Propósito y metodología
+
+Sesión de diagnóstico sin cambios en código de producción. Se ejecutaron **13 pruebas empíricas** en el entorno local con PowerShell, siguiendo el protocolo de 4 niveles de `00_METODOLOGIA.md` Fase 6:
+
+1. **Nivel 1 (endpoints):** consultas a `/api/sara` y `/api/smn` cuando aplique.
+2. **Nivel 2 (almacenamiento):** lectura real de Google Drive vía Apps Script.
+3. **Nivel 3 (runner):** consulta a la API de GitHub Actions y a logs de corridas.
+4. **Nivel 4 (contratos Zod):** ejecución directa de los schemas con payloads controlados.
+
+**Regla aplicada:** ninguna prueba escribe en producción. Todas son de lectura o de ejecución local. Cada hipótesis es falsable y se contrasta con el código o con datos reales antes de emitir veredicto.
+
+**Ubicación de los hallazgos:** los **hallazgos confirmados** se registran en `06_PENDIENTES.md` §2 como deudas activas. Este documento solo registra el **proceso**, las **lecciones** y las **correcciones documentales** que derivan de la auditoría.
+
+### 7.2 P0 — Baseline verificado (corrección documental)
+
+- **Propósito:** establecer la cifra real de `npm test`, `npm run lint` y `npm run build` antes de emitir cualquier veredicto sobre el estado del sistema.
+- **Comando:** `npm test`, `npm run lint`, `npm run build` ejecutados sobre el HEAD `1281d43` (`docs: registra el cierre de H-SARA-01/03/04 en historial y pendientes`).
+- **Resultado real:**
+  - `npm test`: **165 pass + 2 rojos conocidos** en 17 archivos. Los dos rojos son `estadoDiocesanoSchema.test.js` "rechaza evaluaciones vacías []" y `regresionFase1.test.js` Test 5 "rechaza payload sin evaluaciones". Ambos fallan por el cambio del commit `3053e29` que relajó el `.min(1)` para aceptar `[]` en días tranquilos, **sin actualizar los tests en el mismo commit**. Viola `00_METODOLOGIA.md` Fase 5.
+  - `npm run lint`: **55 advertencias, 0 errores**. Las 4 adicionales respecto a la cifra anterior (51) corresponden a `react(set-state-in-effect)` y `react(purity)` en componentes React, no solo `no-unused-vars`.
+  - `npm run build`: verde, 853.44 kB / 201.79 kB gzip. Warning benigno de chunk > 500 kB.
+- **Discrepancia documental detectada:** `07_GUIA_OPERACION.md` §5 y `LEEME_PRIMERO.md` §2 decían "167 pruebas en verde" y "51 advertencias". Las cifras reales son distintas.
+- **Corrección registrada:** `06_PENDIENTES.md` §2.9 **H-DOC-BASELINE-01** y **H-DOC-BASELINE-02**. La corrección de las cifras en `07_GUIA_OPERACION.md` §5 y `LEEME_PRIMERO.md` §2 se hará al cierre del próximo hito.
+- **Veredicto:** baseline documentado. Los 2 rojos del baseline son evidencia de que el cambio de schema del 28/10/2026 dejó tests obsoletos sin actualizar. **No es un bug del código**, es deuda documental y de proceso.
+- **Lección:** `H-TEST-16`.
+
+### 7.3 P1 — Verificación de N-PKG-01 (Zod 4 `.errors`)
+
+- **Hipótesis:** `ejecutar_sara_autonomo.mjs` usa `validacion.error.errors`, campo eliminado en Zod 4. Si Zod rechaza el paqueteMaestro, el log imprime `undefined` en lugar del detalle.
+- **Comando:** invocación directa de `EstadoDiocesanoBlobSchema.safeParse` con payload inválido (`totalNivel4: -1`) desde PowerShell + `Select-String` sobre el runner.
+- **Resultado:**
+  - Zod instalado: **4.6.5**.
+  - `ejecutar_sara_autonomo.mjs:635` usa `validacion.error.errors` (confirmado).
+  - `safeParse` con payload inválido: `success: false`, `error.issues: 1`, `error.errors: UNDEFINED`.
+  - Log del runner imprime `❌ [ZOD] El paqueteMaestro no cumple el schema: undefined` y `process.exit(1)` en la línea siguiente.
+- **Veredicto:** **H-PKG-01 CONFIRMADA.** Pero **reclasificada de 🔴 crítica a 🟠 alta**: el workflow falla en rojo (no es fallo silencioso), el diagnóstico es degradado (no dice qué campo falló).
+- **Registro:** `06_PENDIENTES.md` §2.4 H-PKG-01.
+
+### 7.4 P2 — Verificación de N-MOTOR-09 (acoplamiento duplicado)
+
+- **Hipótesis:** el orquestador suma dos veces el acoplamiento hidro-térmico (`HIDRO_TERMICO: 0.15` y `TERMICO_HIDRO: 0.10`) sobre el mismo producto `(rH−1)(rT−1)`. Si es verdadera, el `riesgo_continuo` real es mayor que el que predice `03_MOTOR_RIESGO.md` §9.1.
+- **Comando:** script Node local que construye una localidad en `HUA` (2400 msnm), con serie de 192 h (`lluvia: 0.5 mm/h`, `sensación: -2 °C`, `ráfagas: 15 km/h`, `acceso: CARRETERA_FEDERAL`) y ejecuta `evaluarMultiamenaza`. Compara `riesgo_continuo` real con dos predicciones: la fórmula doc §9.1 (con un solo γ hidro-térmico) y la fórmula del código actual (con dos γ sumados).
+- **Resultado:**
+  - `niveles_por_vector: { hidro: 2.97, viento: 1.00, térmico: 2.88, convectivo: 1.05 }`.
+  - `riesgo_continuo` real = **3.90**.
+  - Predicción doc §9.1 (un solo par): **3.5255**.
+  - Predicción código (par duplicado): **3.8959**.
+  - `Coincide con doc? false`. `Coincide con código? true`.
+- **Veredicto:** **N-MOTOR-09 CONFIRMADA.** El código sobreestima `+0.37` en este caso. **Naturaleza: diseño ambiguo, no bug.** ADR-005 lista ambos γ sin aclarar si es uno o dos términos. El código es consistente con la documentación vigente, pero la documentación vigente es contradictoria con DEC-011 (sobreestima).
+- **Registro:** `06_PENDIENTES.md` §2.2 N-MOTOR-09 + **PEND-08** en §6 (decisión pendiente).
+- **Corrección metodológica:** la primera ejecución de P2 usó `zona_id: PMN` y `rH = 1` por la Regla 1 (Protección Altiplano). El test no discriminaba porque todos los aportes eran cero. Se corrigió a `zona_id: HUA` y el test discrimina. Este patrón refuerza `H-TEST-06` (verificar la aritmética del escenario antes de asumir un error).
+
+### 7.5 P3 — Verificación de H-PROMPT-06 (diario sin regla 17)
+
+- **Hipótesis:** el `systemPrompt` del diario no tiene la regla 17 (control de emergencias), mientras que el on-demand sí la tiene.
+- **Comando:** `Select-String` sobre `scripts/reportes/reporteDiario.mjs` con el patrón de la regla 17 + control positivo sobre `api/reporte-ondemand.js`.
+- **Resultado:** diario → **0 coincidencias**. On-demand → **1 coincidencia** en la línea 189 con el texto `17. CONTROL ESTRICTO DE EMERGENCIAS: Si Nivel 4 = 0 y Nivel 3 = 0, BAJO NINGUNA CIRCUNSTANCIA uses "suspender actividades", "evacuar" o "emergencia"...`.
+- **Veredicto:** **H-PROMPT-06 CONFIRMADA.** Asimetría real entre diario y on-demand. Agrava H-REPORTE-02: cuando se arregle el diario, si no se corrige antes el prompt, el diario podría generar lenguaje de emergencia con semáforo en N1/N2.
+- **Registro:** `06_PENDIENTES.md` §2.6 H-PROMPT-06.
+
+### 7.6 P4 — Verificación de H-DRIVE-01 (log miente) y H-SCHEMA-01
+
+- **Hipótesis:** `escribirJSONBlob` devuelve `null` en fallo sin propagar; el runner imprime `✅ Publicación exitosa` ciegamente. Además, el runner no emite `schema_version` (H-SCHEMA-01).
+- **Comando:** lectura directa de `estado_ligero.json` y `estado_diocesano.json` desde Apps Script con `GOOGLE_SCRIPT_URL` del `.env.local`. Verificación del timestamp y del campo `schema_version`.
+- **Resultado:**
+  - `estado_ligero.json`: `actualizado_iso: 2026-10-29T01:03:45.451Z` (28/10 19:03 MX), `hora_local_mexico: 07:03 p.m.`, `semaforo: N4=0 N3=0 N2=227 N1=178`, `evaluaciones N3/N4: 0`, `zonas_sin_datos: (vacío)`.
+  - `estado_diocesano.json`: `actualizado_iso: 2026-10-29T01:03:45.451Z`, `evaluaciones: 405`, **`schema_version: (vacío)`**.
+- **Veredicto:**
+  - **H-DRIVE-01 reformulada como riesgo latente, no activo hoy.** La lectura y escritura de Drive funcionaron correctamente. Pero el `return null` silencioso sigue en el código. Un fallo futuro de Apps Script pasaría invisible. Se mantiene abierta como 🔴 crítica de riesgo latente.
+  - **H-SCHEMA-01 confirmada empíricamente.** El campo `schema_version` no se emite.
+  - **H-MOTOR-05 confirmada con datos de producción.** N2=227 (56 %) + N3=0 + N4=0 sobre 405 localidades es el patrón de sobreestimación documentado, y ahora hay evidencia de producción.
+- **Registro:** `06_PENDIENTES.md` §2.4 H-DRIVE-01 (reformulada) + §2.5 H-SCHEMA-01 (confirmada) + §2.2 H-MOTOR-05.
+
+### 7.7 P5 — Verificación de H-REPORTE-02 (diario no se guarda)
+
+- **Hipótesis:** el reporte diario automático nunca se ha generado porque `reporteDiario.mjs` llama `put()` a `@vercel/blob` sin token inyectado. El `catch` del runner lo absorbe y la corrida queda verde.
+- **Comando:** lectura de `reporte_diocesano_vigente.json` y `bitacora_sara.json` desde Drive + análisis de los orígenes de las entradas de bitácora.
+- **Resultado:**
+  - `reporte_diocesano_vigente.json`: `id_reporte: REP_ONDEMAND_1793229898815`, `origen: ON_DEMAND_OPERADOR`, `generado_por: Administrador`, `fecha_dia_mexico: 28 de octubre de 2026`, `hora_exacta_mexico: 05:24:58 p.m.`, `timestamp_iso_utc: 2026-10-28T23:24:58.815Z`.
+  - Bitácora: **23 entradas totales**. De ellas, **22 `PROGRAMADO_CRON`** y **1 `ON_DEMAND_OPERADOR`**. **0 entradas `PROGRAMADO_REPORTE_DIARIO`.**
+- **Veredicto:** **H-REPORTE-02 CONFIRMADA al 100 %.** En 23 horas de bitácora (27/10 20:45 → 28/10 19:03) se ejecutaron 22 corridas CRON y **0 reportes diarios entregados**. Al menos 11 de esas corridas ocurrieron después de las 6:00 MX y ninguna generó reporte diario.
+- **Consecuencia derivada:** **H-REPORTE-03 CONFIRMADA.** `debeGenerarReporteDiario` reintenta cada corrida post-6:00 porque no ve entrada de bitácora (el diario falla antes de registrarla). Eso son ~8-11 reintentos fallidos por día, invisibles.
+- **Registro:** `06_PENDIENTES.md` §2.4 H-REPORTE-02 (confirmada) + H-REPORTE-03 (nueva).
+
+### 7.8 P5b — Corrección metodológica (falso negativo del filtro PowerShell)
+
+- **Observación inicial:** al analizar la bitácora con un filtro PowerShell (`Where-Object { $_.origen_evento -like 'ON_DEMAND*' }`), el resultado fue vacío. Se interpretó como "0 entradas `ON_DEMAND`", lo que hubiera implicado que el reporte vigente `ON_DEMAND` había escrito el archivo sin escribir la bitácora (H-ONDEMAND-09 manifestada).
+- **Corrección:** la cronología completa de la bitácora (P6) mostró que **`SARA_LOG_20`** existe con `origen_evento: ON_DEMAND_OPERADOR`, fecha `28/10/2026 17:24:58`, y su `timestamp_iso_utc` **coincide exactamente** con el `reporte_diocesano_vigente.json` (`2026-10-28T23:24:58.815Z`). El filtro PowerShell anterior falló por encoding (posible mojibake de consola Windows), no por ausencia de datos.
+- **Veredicto:** **H-ONDEMAND-09 REFUTADA para el caso del 28/10/2026.** La bitácora existe, coincide con el reporte, y la cadena SHA-256 está íntegra. Se mantiene como riesgo latente en `06_PENDIENTES.md`, no como bug activo.
+- **Lección registrada:** **H-PROCESO-03** (§8).
+
+### 7.9 P6 — Verificación de la cadena SHA-256 de la bitácora
+
+- **Hipótesis:** la cadena SHA-256 está íntegra en producción tras 2 días de operación continua con mezcla de orígenes (`PROGRAMADO_CRON` + `ON_DEMAND_OPERADOR`).
+- **Comando:** lectura de los 23 eslabones de `bitacora_sara.json` y verificación secuencial de que `prev_hash` de cada entrada coincide con los primeros 16 caracteres de `hash_completo` de la entrada anterior.
+- **Resultado:** **23/23 eslabones íntegros.** `SARA_LOG_20` (`ON_DEMAND_OPERADOR`, 17:24:58) encadena con `SARA_LOG_19` (CRON, 15:37:28) y con `SARA_LOG_21` (CRON, 17:35:03). La mezcla de orígenes no rompió la cadena.
+- **Veredicto:** ADR-003 (bitácora con encadenamiento criptográfico) validado en producción. H-BITACORA-01 (fix del 24/10) funciona. **H-BITACORA-02 (concurrencia) no se ha manifestado.**
+- **Registro:** confirmación de ADR-003 + reformulación de H-BITACORA-02 como riesgo latente en `06_PENDIENTES.md`.
+
+### 7.10 P7 — Verificación de frecuencia de corridas (N-CRON-05 y N-CRON-06)
+
+- **Hipótesis:** el `sara_cron.yml` tiene `on.schedule` interno **y** el planificador externo `cron-job.org` dispara `/api/disparar-workflow`. Si ambos están activos, hay doble disparador no documentado.
+- **Comando:** consulta a la API de GitHub Actions (`/repos/Maxiaintelligence/satrc-v2/actions/workflows/sara_cron.yml/runs?per_page=60`) con `GITHUB_PAT` del `.env.local`. Análisis de `created_at`, `event`, `status`, `conclusion`.
+- **Resultado:**
+  - 60 corridas en 5 días (24-28/10).
+  - Por evento: **17 `schedule`** + **43 `workflow_dispatch`**.
+  - Por conclusión: **53 success** + **7 failure** (troubleshooting del 27/10 ya resuelto).
+  - Distribución diaria: 24/10: 5, 25/10: 13, 26/10: 11, 27/10: 20 (troubleshooting), 28/10: 11.
+  - Los `schedule` internos tienen **jitter masivo** (20:45, 23:56, 03:10, 06:35, 07:19, 11:00, 14:58, 17:21, 22:56).
+  - Los `workflow_dispatch` son **estables** (03:00, 06:00, 09:00, 12:00, 15:00, 18:00, 21:00).
+- **Veredicto:**
+  - **N-CRON-05 reformulada.** No es "3× la frecuencia" como estimé preliminarmente. Es **1.4-1.5× (11-12 corridas/día vs 8 planificadas)**. El `on.schedule` interno corre con jitter y es poco confiable. El `workflow_dispatch` externo es el disparador efectivo.
+  - **N-CRON-06 confirmada.** El `on.schedule` interno **no está documentado como activo** en `00_METODOLOGIA.md` Fase 4 ni en `07_GUIA_OPERACION.md` §1.2. Requiere decisión: ¿es respaldo deliberado o descuido?
+- **Registro:** `06_PENDIENTES.md` §2.4 N-CRON-05 y N-CRON-06 + **PEND-07** en §6 (decisión pendiente).
+- **Corrección metodológica:** la primera corrida de `gh run list` falló por `Unknown JSON field: "actor"`. Se cambió a la API directa con `Invoke-RestMethod`, que funcionó. **Confirmación de H-PROCESO-01** (verificación empírica con fallback).
+
+### 7.11 P9 — Verificación de H-MOTOR-05 / H-DIAG-04 (causa raíz de la sobreestimación de N2)
+
+- **Hipótesis:** la sobreestimación documentada como H-MOTOR-05 afecta a las zonas húmedas y tiene una causa raíz identificable.
+- **Comando:** lectura de `estado_diocesano.json` (405 localidades) y agrupación por `zona_id`, `diagnostico.titulo`, `vector_dominante`, `impactoSistemico.lluviaEvento24hMm`, `impactoSistemico.saturacionTotalSueloMm`, `impactoSistemico.visibilidadMinKm`.
+- **Resultado:**
+  - **Distribución por zona:** ACT, APN, PMS, TIZ al **0 % N2**. CHG, HUA, HYC, SPP, TUL, XIC, ZAC, ZAH al **100 % N2**. PMN al 30.8 %, ATG al 37.5 %.
+  - **Causa por título:** 217 "Vigilancia por Niebla Densa", 8 "Acoplamiento viento + convección — Nivel 2", 2 "Vigilancia por Ráfagas Moderadas".
+  - **Vector dominante:** 217 HIDROLOGICO, 10 VIENTO.
+  - **Distribución de `lluviaEvento24hMm`:** 169 con 0, 4 con 0.1, 32 con 0.2, 7 con 0.4, 15 con 0.5. **Ninguna N2 llegó a 8 mm.**
+  - **Distribución de `saturacionTotalSueloMm`:** **227 (todas) < 30 mm.**
+  - **Distribución de `visibilidadMinKm`:** **217 ≤ 2 km**, 10 > 5 km.
+- **Veredicto:** **H-MOTOR-05 + H-DIAG-04 CONFIRMADAS con causa raíz.** Las 217 N2 por niebla tienen `lluvia=0`, `saturación<30 mm` y `visibilidad≤2 km`. La Regla 6 dispara N2 por niebla sola. Precisión estimada de N2 en producción hoy: **~4.4 %** (10 legítimas de 227). Bajo DEC-011, esto es el efecto del niño que gritó lobo confirmado empíricamente.
+- **Además:** N-MOTOR-05-bis confirmada. SPP y HYC, ausentes de la lista original de H-MOTOR-05, están al 100 % en N2 hoy.
+- **Registro:** `06_PENDIENTES.md` §2.2 H-MOTOR-05 y H-DIAG-04 reformuladas con causa raíz + N-MOTOR-05-bis.
+
+### 7.12 P10 — Distribución exacta de visibilidad en las N2
+
+- **Hipótesis:** las 217 N2 por niebla podrían estar "justo en el umbral de 2 km" (fallback o valor por defecto) o tener dispersión real.
+- **Comando:** agrupación de `visibilidadMinKm` de las 227 N2 + min/max/prom por zona.
+- **Resultado:**
+  - Por valor: 90 con 0.18 km, 30 con 0.22 km, 36 con 0.26 km, 7 con 0.34 km, 54 con 0.36 km, 4 con 11.58 km (ATG), 6 con 23.96 km (PMN).
+  - Por zona: HUA/SPP/XIC: 0.18 km; CHG/HYC: 0.22 km; ZAC: 0.26 km; ZAH: 0.34 km; TUL: 0.36 km. ATG y PMN: 11-24 km (no es niebla, son N2 por otras causas).
+- **Veredicto:** **las 217 alertas de niebla tienen visibilidad ≤ 0.36 km, no "justo en el umbral".** Coherencia por zona (todas las localidades de una zona comparten el valor del nodo, esperado por ADR-001). **La Regla 6 dispara sobre niebla densa real, no sobre ruido de umbral.**
+- **Registro:** confirmación de H-MOTOR-05 con datos exactos en `06_PENDIENTES.md` §2.2.
+
+### 7.13 P11 — Verificación de N-MOTOR-11 (visibilidad solo GFS)
+
+- **Hipótesis:** la visibilidad no se consensúa porque ICON y GEM no la proveen.
+- **Comando:** consulta directa a Open-Meteo para Xicotepec (`lat: 20.27605861, lon: -97.95814361`) con `hourly=visibility` y `models=gfs_seamless,icon_seamless,gem_seamless`.
+- **Resultado:**
+  - `visibility_gfs_seamless`: **240 valores válidos**. `min: 60 m`, `max: 24,140 m`, `prom: 18,338 m`.
+  - `visibility_icon_seamless`: **240 valores `null`**.
+  - `visibility_gem_seamless`: **240 valores `null`**.
+  - `visibility` (sin sufijo): **no existe** en la respuesta.
+- **Veredicto:** **N-MOTOR-11 CONFIRMADA con evidencia dura.** La visibilidad **no puede ser consensuada** porque ICON y GEM no la proveen. El disparador del 95.6 % de las alertas N2 del sistema **depende de un único modelo**, contra ADR-002 (consenso determinista).
+- **Implicación bajo DEC-011:** la variable que más alertas N2 dispara no tiene redundancia. Es un punto único de fallo no documentado en `03_MOTOR_RIESGO.md` §4.2 ni en ADR-002.
+- **Registro:** `06_PENDIENTES.md` §2.2 N-MOTOR-11.
+
+### 7.14 P12 — Refutación de N-MOTOR-12 y confirmación de N-MOTOR-13 / N-MOTOR-14
+
+- **Hipótesis previa N-MOTOR-12:** el umbral de 2 km era alto para zonas húmedas y disparaba N2 por niebla habitual.
+- **Hipótesis previa N-MOTOR-13:** la Regla 6 usa `Math.min(ventana 24h)` sin persistencia, por lo que un solo valor bajo dispara N2 para toda la ventana.
+- **Hipótesis previa N-MOTOR-14:** el motor no distingue evento pasado de futuro.
+- **Comando:** consulta a Open-Meteo para el nodo de Xicotepec y análisis hora por hora de la ventana de 24 h de hoy.
+- **Resultado:**
+  - Horas con `visibilidad ≤ 2 km`: **2**.
+  - Horas con `visibilidad ≤ 1 km`: 2.
+  - Horas con `visibilidad ≤ 500 m`: 2.
+  - Detalle: 00:00 → 0.2 km, 01:00 → 0.5 km, **02:00 a 23:00 → todas > 6 km** (la mayoría > 17 km).
+- **Veredicto:**
+  - **N-MOTOR-12 REFUTADA.** Con datos reales, la niebla llega a 0.2 km, no está "justo en 2 km". Bajar el umbral a 1 km **no resolvería el problema** porque `min(24h) = 0.2 km` seguiría disparando N2. El problema es el criterio de agregación, no el umbral.
+  - **N-MOTOR-13 CONFIRMADA como causa raíz.** Un solo valor bajo de 2 h dispara N2 para toda la ventana de 24 h. El sistema emite "Vigilancia por Niebla Densa" a las 19:00 sin niebla actual.
+  - **N-MOTOR-14 CONFIRMADA.** El motor no distingue evento pasado de futuro. La niebla ocurrió hace 19 horas y sigue en N2.
+- **Registro:** `06_PENDIENTES.md` §2.2 N-MOTOR-13 + N-MOTOR-14 + N-MOTOR-15 + refutación de N-MOTOR-12 en §2.2 (sección de hipótesis refutadas). **PEND-06** en §6 (decisión pendiente sobre criterio operativo).
+
+### 7.15 Corrección de H-VIENTO-01 (cierre anterior erróneo)
+
+- **Contexto:** en §6.1 (sesión 28/10/2026), H-VIENTO-01 se cerró como documental afirmando: *"el código nunca implementó ni el suavizado (solo extrae el máximo de 24h) ni el factor de rugosidad"*.
+- **Verificación empírica del 29/10/2026 (lectura de código):** `src/engine/windEvaluator.js` líneas 43-45 **sí implementan factor de rugosidad**:
+
+let factorRugosidad = 1.0;
+if (relieve === 'LADERA' || relieve === 'CANADA') factorRugosidad = 1.1;
+else if (relieve === 'LOMA') factorRugosidad = 1.05;
+
+- **Corrección:** la afirmación de §6.1 es incorrecta. Solo el **suavizado de 3 h** está ausente. El factor de rugosidad **existe y está activo**.
+- **Estado de H-VIENTO-01:** permanece cerrado como documental **por el suavizado**, pero la causa y consecuencia están mal redactadas en §6.1 y en `03_MOTOR_RIESGO.md` §5.1.
+- **Acción registrada:** `06_PENDIENTES.md` §2.9 **H-DOC-HVIENTO-01** reformulada. La corrección de `03_MOTOR_RIESGO.md` §5.1 y del cierre de §6.1 de este documento se hará al cierre del próximo hito, en el mismo commit documental.
+- **Lección:** `H-TEST-13` reforzada (los scripts de verificación empírica no deben confundir "mención en código" con "implementación efectiva"; extraer siempre el contexto).
+
+### 7.16 Lo que NO se resuelve en esta sesión
+
+Ninguna de las 13 pruebas P0–P12 modificó código de producción. Todas fueron de **lectura o ejecución local**. En consecuencia:
+
+- **No hay commits de producción nuevos** en esta sesión. El HEAD sigue en `1281d43`.
+- **No se cierran bugs en `06_PENDIENTES.md`.** Los hallazgos confirmados se mantienen abiertos, pero ahora con evidencia empírica.
+- **No se actualiza el código de motor, runner, prompts ni adaptadores.** Los fixes se planifican a partir de esta auditoría, en commits atómicos posteriores, siguiendo `00_METODOLOGIA.md` Fase 2.5 (5 puntos por fix).
+- **Los 2 tests rojos del baseline siguen rojos.** Su corrección se hará junto con la actualización de cifras en `07_GUIA_OPERACION.md` §5 y `LEEME_PRIMERO.md` §2.
+
+### 7.17 Estado de los archivos de auditoría
+
+Durante la sesión se generaron archivos de auditoría en la raíz del repo que **no deben subirse** al repositorio:
+
+- `salida_test_baseline.txt`
+- `salida_lint_baseline.txt`
+- `salida_build_baseline.txt`
+
+Además de los archivos temporales de los scripts `test-p2-acoplamiento.mjs`, `test-visibilidad-openmeteo.mjs` y `test-persistencia-niebla.mjs`, **eliminados al cierre de cada prueba**.
+
+**Acción registrada:** `06_PENDIENTES.md` §2.9 **H-DOC-GIT-01** ampliada para incluir los 3 archivos de auditoría del 29/10/2026.
+
+---
+
+## 8. Lecciones consolidadas
 
 | ID | Lección | Origen |
 |---|---|---|
@@ -395,26 +619,35 @@ Tras el rescate, se realizó una auditoría empírica de los 11 documentos funda
 | H-TEST-09 | `npm test` no valida `api/` ni `scripts/`. Usar `node --check` antes del commit | Corrección de SMN |
 | H-TEST-10 | Las pruebas de integración deben usar datos reales de la API, no datos sintéticos | E4-H6.7 |
 | H-E4-LEC | Verificar las APIs externas con llamadas reales antes de codificar | E4-H-E4-01 |
-| **H-TEST-12** | Los documentos de arquitectura y motor de riesgo deben declarar explícitamente qué campo se emite y en qué nivel (top-level vs anidado), no solo el nombre del vector. | H-VIENTO-02 |
-| **H-TEST-13** | Los scripts de verificación empírica no deben confundir "mención en código" con "implementación efectiva". Extraer siempre el contexto. | T2, T4, B1 (Sesión 28/10) |
-| **H-TEST-14** | Antes de declarar que un campo no existe en el código, buscar variantes de nomenclatura (ej. `isoterma` vs `nivel_congelacion_m`). | T4b, T1 (Sesión 28/10) |
-| **H-TEST-15** | Los documentos de estado (`06_PENDIENTES`, `LEEME_PRIMERO`) deben revisarse contra el código antes de citarlos. La documentación puede estar desactualizada sin que nadie lo detecte. | G1, S13 (Sesión 28/10) |
+| H-TEST-12 | Los documentos de arquitectura y motor de riesgo deben declarar explícitamente qué campo se emite y en qué nivel (top-level vs anidado), no solo el nombre del vector. | H-VIENTO-02 |
+| H-TEST-13 | Los scripts de verificación empírica no deben confundir "mención en código" con "implementación efectiva". Extraer siempre el contexto. | T2, T4, B1 (Sesión 28/10) |
+| H-TEST-14 | Antes de declarar que un campo no existe en el código, buscar variantes de nomenclatura (ej. `isoterma` vs `nivel_congelacion_m`). | T4b, T1 (Sesión 28/10) |
+| H-TEST-15 | Los documentos de estado (`06_PENDIENTES`, `LEEME_PRIMERO`) deben revisarse contra el código antes de citarlos. La documentación puede estar desactualizada sin que nadie lo detecte. | G1, S13 (Sesión 28/10) |
 | **H-PROCESO-01** | Una auditoría documental completa requiere: (1) prueba empírica, (2) lectura del código fuente, (3) verificación de la cadena de consumidores. | Sesión 28/10/2026 |
 | **H-PROCESO-02** | Las URLs de infraestructura crítica (como `GOOGLE_SCRIPT_URL`) deben validarse por código (ej. que empiece con `script.google.com`) para evitar errores humanos de copy-paste de redirecciones. | Incidente 28/10/2026 |
+| **H-PROCESO-03** | **Un filtro que devuelve vacío no es evidencia de ausencia de datos.** Antes de concluir "no hay X", verificar con una consulta sin filtros y cruzar con otra fuente. Los datos de Apps Script pueden tener encoding distinto al esperado (falso negativo de PowerShell en P5b del 29/10/2026). | Sesión 29/10/2026 |
+| **H-TEST-16** | **Las cifras de estado ("167 pruebas en verde", "51 advertencias") envejecen mal.** Toda cifra de baseline debe incluir la fecha, el comando y el HEAD en que se verificó. Cuando cambia el código sin actualizar la cifra, la documentación miente. | P0 del 29/10/2026 |
+| **H-TEST-17** | **Un script de diagnóstico debe discriminar la hipótesis o no es un test.** El primer escenario de P2 usó `zona_id: PMN`, activó la Regla 1 (Protección Altiplano), y el resultado fue indistinguible de la calma. Cambiar a `zona_id: HUA` permitió discriminar. Refuerza H-TEST-06. | P2 del 29/10/2026 |
 
 ---
 
-## 8. Sesiones de trabajo
+## 9. Sesiones de trabajo
 
-El handover de cada sesión registraba el estado, los pendientes y cómo retomar el trabajo.
+El handover de cada sesión registra el estado, los pendientes y cómo retomar el trabajo.
 
 - **Sesión 22/10/2026:** Etapa 5 cerrada, corrección del SMN aplicada. Pendientes: H-SMN-WS, H6.6, H-ARCH-01.
 - **Sesión 28/10/2026:** Incidente de producción resuelto (`RESPUESTA_EN_VIVO`). 8 documentos fundacionales reescritos. Deudas reclasificadas bajo DEC-011. Sistema operativo (`origen: GOOGLE_DRIVE_ACTUALIZADO`). Pendientes inmediatos: H-REPORTE-02, H-DRIVE-01/04/05, H-SARA-01/03/04.
+- **Sesión 29/10/2026:** Auditoría empírica P0–P12 ejecutada. 5 hipótesis críticas confirmadas (H-PKG-01, N-MOTOR-09, H-PROMPT-06, H-DRIVE-01 latente, H-REPORTE-02) + 3 pruebas adicionales (P6 cadena íntegra, P7 doble disparador, P9 causa raíz de H-MOTOR-05) + refutación documentada de N-MOTOR-12 y confirmación de N-MOTOR-11/13/14/15. Sin cambios en código de producción (HEAD `1281d43`). Baseline corregido a 165 pass + 2 rojos y 55 advertencias. Corrección documental de H-VIENTO-01. Nuevas lecciones H-PROCESO-03, H-TEST-16, H-TEST-17. Nuevas decisiones pendientes PEND-06, PEND-07, PEND-08. **Ningún fix se ha aplicado aún; la sesión fue de diagnóstico y documentación.**
 
 ---
 
-## 9. Trazabilidad
+## 10. Trazabilidad
 
 - Los hashes de Etapa 5 y de los cierres de Etapa 4 se verificaron con `git log` el 22/10/2026.
 - Los hashes marcados con `<hash>` en versiones anteriores no están disponibles y no se consignan aquí.
-- Los commits de la sesión 28/10/2026 (`2a3e3e8`, `3053e29`) y la reescritura documental están consolidados en los commits `2a3e3e8` y `3053e29`.
+- Los commits de la sesión 28/10/2026 (`2a3e3e8`, `3053e29`, `b25d7c5`) y la reescritura documental están consolidados en el HEAD `1281d43`.
+- **La sesión 29/10/2026 no generó commits nuevos.** El HEAD sigue en `1281d43`. Los hallazgos confirmados se registran en `06_PENDIENTES.md` v2.8. Los commits de los fixes derivados (motor, runner, prompts, adaptadores) se registrarán en el historial al cierre de cada uno.
+
+---
+
+*Fin del documento.*

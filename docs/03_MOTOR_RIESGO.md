@@ -1,16 +1,18 @@
 # SatRC V2.0 — Motor de evaluación de riesgo
 
-> **Versión del documento:** 2.7 (28/10/2026)
+> **Versión del documento:** 2.8 (29/10/2026)
 > **Fuente de verdad:** el código. Este documento describe el comportamiento actual y señala donde las especificaciones de diseño no coinciden con él.
 > **Alcance:** motor hidrológico (Etapa 3), evaluadores de viento, térmico y convectivo, adaptador hidrológico y orquestador (Etapa 4), y el consenso de modelos que los alimenta.
 > **Cambios de esta versión:**
-> - Reformula §5.4 con la arquitectura de doble capa entre `windEvaluator.js` y `crossThreatOrchestrator.js`.
-> - Amplía §9.4 con la tabla de construcción del campo `tipo_amenaza`.
-> - Agrega H-VIENTO-02 (inconsistencia de contrato entre evaluadores) a §12.
-> - Reclasifica H-MOTOR-05 y H-DIAG-04 como críticas bajo DEC-011 (principio de precisión).
-> - Alinea referencias cruzadas con el nuevo `02_ARQUITECTURA.md` (existe §5 Fallback en vivo y §8 Contratos de datos).
-> - Actualiza la nota de re-auditoría de invierno a la fecha del 27/10/2026, coherente con `06_PENDIENTES.md` §2.9.
-> - Limpieza de codificación UTF-8 en el texto del documento.
+> - **Nota correctiva en §5.1:** H-VIENTO-01 se cerró erróneamente en 28/10/2026 diciendo que el código no implementa factor de rugosidad. **El código sí lo implementa** (`windEvaluator.js` líneas 43-45). Solo el suavizado de 3 h está ausente. Ver `04_HISTORIAL.md` §7.15.
+> - **Nota correctiva en §2.1 (Regla 6):** la Regla 6 dispara N2 por niebla usando `Math.min(ventana 24h)` sin persistencia. Confirmado empíricamente el 29/10/2026 (P9–P12): **217 de 227 N2 en producción** corresponden a "Vigilancia por Niebla Densa" con `lluvia=0` y `saturación<30 mm`. Bajo DEC-011, esto es el problema #1 del motor.
+> - **Nota correctiva en §4.2:** la visibilidad **no puede ser consensuada** porque ICON y GEM devuelven `null`. Solo GFS provee el dato. Confirmado por P11.
+> - **Nota correctiva en §7.2:** los subtipos convectivos del código (`CONVECTIVO_NORMAL`, `TORMENTA_DISPERSA`, `SUPERCELULA`) no coinciden con los nombres de §9.4 (`SIN_AMENAZA`, `CONVECTIVO`, `SUPER_CELULA`). Desalineación de contrato.
+> - **Nota correctiva en §9.2:** el acoplamiento hidro-térmico se cuenta **dos veces** (`0.15 + 0.10` sobre el mismo producto simétrico). Confirmado por P2. Requiere ADR de reemplazo (PEND-08).
+> - **Nota correctiva en §11:** el baseline real es **165 pass + 2 rojos obsoletos** en 17 archivos (no 167 verdes). Los 2 rojos son `estadoDiocesanoSchema.test.js` y `regresionFase1.test.js`, obsoletos por el commit `3053e29` que relajó el `.min(1)` sin actualizar tests.
+> - **Tabla §12 ampliada** con las deudas nuevas detectadas en la auditoría: N-MOTOR-01, N-MOTOR-05, N-MOTOR-08-bis, N-MOTOR-09, N-MOTOR-11, N-MOTOR-13, N-MOTOR-14, N-MOTOR-15, N-MOTOR-24, N-MOTOR-28, N-MOTOR-29, N-MOTOR-30, N-MOTOR-36.
+> - **N-MOTOR-12 refutada:** la hipótesis de que "el umbral de 2 km es alto" quedó refutada por P12 (niebla real de 0.2 km, no cercana al umbral).
+> - **H-MOTOR-05 y H-DIAG-04** reformuladas con causa raíz en `06_PENDIENTES.md` §2.2.
 
 ---
 
@@ -36,6 +38,17 @@ Hidrológico   Viento        Térmico        Convectivo
 
 **Regla de diseño:** el motor hidrológico (`riskEvaluator.js`) no se modifica. Los demás evaluadores se agregan alrededor de él.
 
+> **Nota del 29/10/2026 (auditoría P9–P12):**
+>
+> Estado real del motor en producción: la corrida del 28/10/2026 a las 19:03 MX publicó **N2=227, N3=0, N4=0** sobre 405 localidades. De esas 227 N2:
+>
+> - **217 (95.6 %)** son "Vigilancia por Niebla Densa" disparadas por la Regla 6 del motor hidrológico.
+> - Tienen `lluviaEvento24hMm = 0`, `saturacionTotalSueloMm < 30 mm` y `visibilidadMinKm ≤ 0.36 km`.
+> - Concentración geográfica: CHG, HUA, HYC, SPP, TUL, XIC, ZAC, ZAH al **100 %** de sus localidades. ACT, APN, PMS, TIZ al **0 %**.
+> - Precisión estimada de N2: **~4.4 %** (10 legítimas de 227).
+>
+> Bajo DEC-011, este es el problema #1 del motor. La causa raíz está desagregada en `06_PENDIENTES.md` §2.2: N-MOTOR-13 (`min(24h)` sin persistencia), N-MOTOR-11 (visibilidad solo GFS), N-MOTOR-14 (no distingue evento pasado de futuro), N-MOTOR-15 (OR sin contexto agravante). Bloqueado por **PEND-06** en `08_DECISIONES.md` (decisión sobre criterio operativo).
+
 ---
 
 ## 2. Motor hidrológico (Etapa 3)
@@ -57,7 +70,39 @@ Las reglas se aplican en orden. Cada una puede subir el nivel, nunca bajarlo.
 | 5 | Corte vial | Acceso por terracería o brecha, y (lluvia ≥ 20 mm o saturación ≥ 50 mm) | N3 |
 | 6 | Vigilancia | Lluvia ≥ 8 mm, o saturación ≥ 30 mm, o visibilidad ≤ 2 km (niebla) | N2 |
 
-**Nota (H-MOTOR-07 cerrado el 27/10/2026, commit d248fdb):** la Regla 1 leía erróneamente `h.wind_speed_10m` en lugar de `h.viento_kmh`, por lo que la protección del Altiplano nunca detectaba vientos altos. El código ahora está alineado con la serie del consenso.
+> **Nota (H-MOTOR-07 cerrado el 27/10/2026, commit `d248fdb`):** la Regla 1 leía erróneamente `h.wind_speed_10m` en lugar de `h.viento_kmh`, por lo que la protección del Altiplano nunca detectaba vientos altos. El código ahora está alineado con la serie del consenso.
+
+> **Nota correctiva del 29/10/2026 (auditoría P9–P12):**
+>
+> La Regla 6 es la causa raíz del 95.6 % de las alertas N2 actuales, y su comportamiento no corresponde a un evento real bajo DEC-011.
+>
+> **Mecánica exacta:** `riskEvaluator.js` línea 155 usa:
+>
+> ```text
+> if (nivelAlerta === 1 && (lluviaEfectiva24h >= 8.0 || saturacionTotalSuelo >= 30.0 || visibilidadMinKm <= 2.0))
+> ```
+>
+> Y `visibilidadMinKm` se calcula como `Math.min(...ventana 24h)` en `riskEvaluator.js` (sin persistencia, sin contexto, sin distinguir pasado/futuro).
+>
+> **Verificación empírica en Xicotepec (P12, 29/10/2026):**
+>
+> - Hoy la niebla ocurrió solo a las 00:00 (0.2 km) y 01:00 (0.5 km).
+> - A las 02:00 saltó a 24.1 km. El resto del día: > 6 km.
+> - El motor sigue emitiendo "Vigilancia por Niebla Densa" a las 19:00.
+> - **Un solo valor bajo de 2 horas dispara N2 para toda la ventana de 24 h.**
+>
+> **Causas raíz desagregadas en `06_PENDIENTES.md` §2.2:**
+>
+> - **N-MOTOR-13:** `min(24h)` sin persistencia. Es la causa raíz principal.
+> - **N-MOTOR-11:** la visibilidad solo la provee GFS (ICON y GEM devuelven `null`). Sin redundancia.
+> - **N-MOTOR-14:** el motor no distingue evento pasado de futuro. Niebla de 00:00 dispara alerta a las 19:00.
+> - **N-MOTOR-15:** la Regla 6 usa OR sin contexto agravante, a diferencia de las reglas 2–5 que exigen combinación de condiciones.
+>
+> **Hipótesis refutada (N-MOTOR-12):** la sospecha de que "el umbral de 2 km es alto para zonas húmedas" quedó refutada por P12. Con datos reales, la niebla llega a 0.2 km. Bajar el umbral a 1 km no resolvería el problema porque `min(24h) = 0.2` seguiría disparando N2. **El problema es el criterio de agregación, no el umbral.**
+>
+> **Fix bloqueado por PEND-06** en `08_DECISIONES.md`: decisión de coordinación técnica + pastoral sobre qué criterio operativo debe disparar N2 por niebla.
+>
+> **Nota adicional sobre el Altiplano:** la Regla 1 funciona correctamente. Las 5 zonas de Altiplano (ACT, APN, PMS, TIZ) están al 0 % N2 en producción hoy. La sobreclasificación es específica de las zonas de montaña.
 
 ### 2.2 Prioridad y diagnóstico
 
@@ -73,9 +118,14 @@ La saturación combina la lluvia antecedente y la lluvia de las próximas 24 hor
 saturación = API_7_días_previos + lluvia_efectiva_24h
 ```
 
-**API de 7 días:** suma ponderada de la lluvia de los días previos, con peso decreciente (`Math.pow(0.85, 8 - d)`).
+- **API de 7 días:** suma ponderada de la lluvia de los días previos, con peso decreciente (`Math.pow(0.85, 8 - d)`).
+- **Lluvia efectiva:** la lluvia pronosticada. Si hay aviso del SMN que aplica al estado de la localidad, se usa el máximo entre la lluvia pronosticada y el piso del aviso.
 
-**Lluvia efectiva:** la lluvia pronosticada. Si hay aviso del SMN que aplica al estado de la localidad, se usa el máximo entre la lluvia pronosticada y el piso del aviso.
+> **Nota del 29/10/2026 (auditoría cruzada):**
+>
+> - El campo `impactoSistemico.umbralFisicoDeslaveMm` **miente en auditoría.** `calcularUmbralDeslave` calcula un umbral dinámico (`65 - pendiente*0.85 - factorRelieve`, con piso 12) que **nunca se usa en las reglas**. Las Reglas 2 y 3 usan `65.0` fijo. El campo solo se guarda para el diagnóstico, pero no interviene en la decisión. Registrado como N-MOTOR-24 en `06_PENDIENTES.md` §2.11.
+> - **El piso del aviso SMN es una fuente de sobreestimación no catalogada bajo DEC-011.** La fórmula `Math.max(lluviaEfectiva, pisoSMN)` en `riskEvaluator.js` línea 71 puede inflar `lluviaEfectiva24h` a 25 mm aunque Open-Meteo solo dé 1 mm si hay aviso activo del SMN. Registrado como N-MOTOR-28 en `06_PENDIENTES.md` §2.11.
+> - **Regla 4 no pondera por `tc_horas`.** El umbral binario `poblacionAguasArriba >= 50000` no considera el tiempo de concentración de la cuenca. Sobrestima cuencas lentas (Zacatlán, tc=24) y subestima cuencas rápidas (Chahuatlán, tc=4.75). Registrado como N-MOTOR-08-bis en `06_PENDIENTES.md` §2.11.
 
 ### 2.4 Aviso del SMN
 
@@ -126,6 +176,27 @@ Las divergencias están documentadas en el comentario de cabecera de `riskEvalua
 | Máximo de los tres modelos | `cape`, `wind_speed_700hPa` |
 | GFS preferente | `freezing_level_height` (GEM devuelve nulo). Se expone como `nivel_congelacion_m` en el consenso. |
 
+> **Nota correctiva del 29/10/2026 (auditoría P11):**
+>
+> **La visibilidad no se consensúa porque ICON y GEM no la proveen.** Consulta directa a Open-Meteo para Xicotepec (29/10/2026):
+>
+> - `visibility_gfs_seamless`: **240 valores válidos** (min=60 m, max=24,140 m, prom=18,338 m).
+> - `visibility_icon_seamless`: **240 null**.
+> - `visibility_gem_seamless`: **240 null**.
+> - `visibility` (sin sufijo): no existe en la respuesta.
+>
+> **Implicación:** la variable que dispara el 95.6 % de las alertas N2 del sistema depende de un único modelo, sin redundancia ni contraste. Contra ADR-002 (consenso determinista).
+>
+> Registrado como N-MOTOR-11 en `06_PENDIENTES.md` §2.2. Bajo DEC-011, se debe considerar:
+>
+> - **(a)** Pedir solo GFS explícitamente para visibilidad y documentarlo como excepción de consenso.
+> - **(b)** Buscar un proveedor alternativo de visibilidad (NOAA, METAR de aeropuertos, cámaras).
+> - **(c)** Reformular la Regla 6 para no depender de una única variable en un único modelo.
+>
+> La decisión queda pendiente bajo PEND-06.
+>
+> **Además:** las ráfagas se consensúan con `Math.max(r_gfs, r_icon, r_gem)` en `consensusEngine.js` línea 91. Esta estrategia **no está autorizada por este documento** (que solo permite máximo para `cape` y `wind_speed_700hPa`). Sobrestima sistemáticamente el vector viento. Registrado como N-MOTOR-01 en `06_PENDIENTES.md` §2.11.
+
 ### 4.3 Nombres de variable en la respuesta
 
 Cuando se piden varios modelos, Open-Meteo agrega un sufijo con el nombre del modelo (`_gfs_seamless`, `_icon_seamless`, `_gem_seamless`). Si no se considera, el pipeline falla en silencio. El consenso expone los valores sin sufijo.
@@ -151,6 +222,24 @@ Las ráfagas se normalizan a una velocidad equivalente al nivel del mar, para qu
 v_eq = ráfaga × √(ρ / 1.225)                     velocidad equivalente
 ```
 
+> **Nota correctiva del 29/10/2026 (auditoría P0, verificación de H-VIENTO-01):**
+>
+> **El código SÍ implementa factor de rugosidad.** La versión anterior de este documento (v2.6 y v2.7) afirmaba que el factor de rugosidad no estaba implementado. Esa afirmación es falsa. Verificación directa de `windEvaluator.js` líneas 43-45:
+>
+> ```javascript
+> // 3. Factor de Rugosidad (Topografía)
+> // En laderas/cumbres el daño es mayor por exposición
+> let factorRugosidad = 1.0;
+> if (relieve === 'LADERA' || relieve === 'CANADA') factorRugosidad = 1.1;
+> else if (relieve === 'LOMA') factorRugosidad = 1.05;
+>
+> const vEqFinal = vEq * factorRugosidad;
+> ```
+>
+> Solo el **suavizado de 3 h** está ausente. H-VIENTO-01 sigue cerrado como documental por el suavizado, pero la causa y consecuencia del cierre están mal redactadas en `04_HISTORIAL.md` §6.1. Corrección formal registrada como H-DOC-HVIENTO-01 en `06_PENDIENTES.md` §2.9.
+>
+> **Corrección adicional:** la causa del diagnóstico de viento reporta `rafagaMax.toFixed(1)` (ráfaga real) en el texto al operador, no `vEqFinal` (ráfaga normalizada). Si `vEqFinal > umbral` pero `rafagaMax < umbral` (por densidad), el texto dice "ráfagas de X km/h superan el umbral de 95" con X < 95. Incoherente. Registrado como N-MOTOR-36 en `06_PENDIENTES.md` §2.11.
+
 ### 5.2 Umbrales
 
 El código usa umbrales que dependen de la altitud. Por encima de 2 200 msnm se suman 5 km/h a cada umbral (H6.4a), porque el viento basal de la sierra es más fuerte en esa zona.
@@ -161,7 +250,7 @@ El código usa umbrales que dependen de la altitud. Por encima de 2 200 msnm se 
 | N3 (alerta) | v_eq ≥ 65 km/h | v_eq ≥ 70 km/h |
 | N4 (emergencia) | v_eq ≥ 90 km/h | v_eq ≥ 95 km/h |
 
-**Nota de diseño:** la especificación original (11) descartaba el umbral por altitud y solo usaba la densidad. El código aplica ambos. Lo que vale es el código: ambos mecanismos coexisten.
+> **Nota de diseño:** la especificación original (11) descartaba el umbral por altitud y solo usaba la densidad. El código aplica ambos. Lo que vale es el código: ambos mecanismos coexisten.
 
 ### 5.3 Nivel continuo
 
@@ -175,13 +264,13 @@ Dentro de cada nivel, el valor continuo se calcula por la velocidad equivalente.
 
 El tope se aplicó en H6.4a después de detectar 47 localidades de Pachuca con N2 falso. Ver `04_HISTORIAL.md`.
 
-**Suavizado y rugosidad:** la especificación original (11) incluía un suavizado de 3 horas sobre la serie y un factor de rugosidad por relieve. El código no los implementa. Se cierra H-VIENTO-01 como documental: el código es la referencia (DEC-010), la especificación se corrige.
+**Suavizado y rugosidad:** la especificación original (11) incluía un suavizado de 3 horas sobre la serie y un factor de rugosidad por relieve. **El factor de rugosidad sí está implementado** (ver nota en §5.1). **El suavizado de 3 h no está implementado:** el código solo extrae el máximo de 24 h. Se cierra H-VIENTO-01 como documental solo por el suavizado.
 
 ### 5.4 Vector y diagnóstico: arquitectura de doble capa
 
 El evaluador emite tres subtipos según el nivel discreto. Esta es la única salida de `windEvaluator.js`:
 
-```js
+```javascript
 vector_dominante: nivel === 1 ? "VIENTO_NORMAL"
                               : (nivel === 4 ? "VIENTO_DESTRUCTIVO" : "VIENTO_FUERTE")
 ```
@@ -198,7 +287,7 @@ El orquestador no usa estos subtipos para el campo `vector_dominante` de nivel s
 
 - `dictamen.js` y `bitacora.js` consumen el `vector_dominante` top-level que emite el orquestador. Ambos esperan el valor `'VIENTO'` (sin sufijo) y funcionan correctamente.
 - Los prompts de SARA consumen el campo `tipo_amenaza` (que propaga `VIENTO_NORMAL`, `VIENTO_FUERTE` o `VIENTO_DESTRUCTIVO`), lo cual permite redactar el subtipo específico (por ejemplo, "ráfagas destructivas" para N4).
-- Diagnóstico: título y causa en español, que incluye la ráfaga real y la velocidad equivalente.
+- **Diagnóstico:** título y causa en español, que incluye la ráfaga real y la velocidad equivalente.
 
 ---
 
@@ -234,7 +323,7 @@ Se evalúa la ventana de 24 horas. El nivel final es el máximo entre el riesgo 
 
 ### 6.2 Nivel continuo
 
-**Estado:** H-TERM-01 cerrado el 24/10/2026 (commit 343f80d).
+**Estado:** H-TERM-01 cerrado el 24/10/2026 (commit `343f80d`).
 
 El nivel continuo respeta el contrato `[nivel, nivel + 0.99]` documentado en ADR-008 y §5.3. La fórmula vigente es:
 
@@ -258,15 +347,15 @@ nivel_continuo = nivel_final + peso_dominante × 0.99
 | Calor N3 (sensación 45 °C) | 3 | ≈ 3.98 |
 | Frío N2 + Calor N2 simultáneos (frío gana) | 2 | ≈ 2.88 |
 
-**Fórmula anterior (pre-fix, eliminada):** `1.0 + (nivelFrio - 1) * pesoFrio`. Producía valores fuera del rango del nivel discreto. Ejemplo: nevada N3 daba 2.64, que el orquestador leía como N2.
+> **Fórmula anterior (pre-fix, eliminada):** `1.0 + (nivelFrio - 1) * pesoFrio`. Producía valores fuera del rango del nivel discreto. Ejemplo: nevada N3 daba 2.64, que el orquestador leía como N2.
 
-**Re-auditoría de invierno pendiente:** en la verificación del 27/10/2026, las 405 localidades tenían `niveles_por_vector.termico = 1.0` (no hay frío en octubre). El impacto del fix en el semáforo se medirá en la primera corrida de invierno que dispare el térmico. Ver `06_PENDIENTES.md` §2.9.
+**Re-auditoría de invierno pendiente:** en la verificación del 27/10/2026, las 405 localidades tenían `niveles_por_vector.termico = 1.0` (no hay frío en octubre). El impacto del fix en el semáforo se medirá en la primera corrida de invierno que dispare el térmico. Ver `06_PENDIENTES.md` §2.10.
 
 ### 6.3 Vector
 
 Valores posibles: `FRIO_EXTREMO`, `HELADA_AGRICOLA`, `NEVADA`, `CALOR_EXTREMO`, o `TERMICO_NORMAL` cuando no hay riesgo.
 
-**Nota de nomenclatura:** la especificación original (12) usaba `FRIO` y `CALOR` como tipo de amenaza. El código usa los nombres descritos anteriormente. Bajo DEC-011 (precisión sobre cobertura), el subtipo específico es útil para que SARA oriente con lenguaje adecuado (nevada ≠ helada agrícola).
+> **Nota de nomenclatura:** la especificación original (12) usaba `FRIO` y `CALOR` como tipo de amenaza. El código usa los nombres descritos anteriormente. Bajo DEC-011 (precisión sobre cobertura), el subtipo específico es útil para que SARA oriente con lenguaje adecuado (nevada ≠ helada agrícola).
 
 ---
 
@@ -285,7 +374,9 @@ Valores posibles: `FRIO_EXTREMO`, `HELADA_AGRICOLA`, `NEVADA`, `CALOR_EXTREMO`, 
 | Potencial de desplome | CAPE máximo × (100 − humedad mínima en 700 hPa) / 100 | Potencial de downburst cuando el aire medio es seco |
 | Cizalladura | Diferencia máxima de viento entre niveles | Organización de la tormenta |
 
-**Discrepancia detectada (H-CONV-02, 24/10/2026):** el cálculo de la cizalladura usa `(vientos700[i] || 0) - (vientos10m[i] || 0)`, una diferencia escalar de velocidades sin dirección. Dos vientos de 40 km/h en direcciones opuestas dan `diff = 0`, pero la cizalladura vectorial real es máxima. Puede producir falsos negativos de downburst/supercélula en eventos con cambio de dirección. Corregir requiere agregar `wind_direction_10m` y `wind_direction_700hPa` al fetcher y al consenso. Ver `06_PENDIENTES.md` §2.2.
+> **Discrepancia detectada (H-CONV-02, 24/10/2026):** el cálculo de la cizalladura usa `(vientos700[i] || 0) - (vientos10m[i] || 0)`, una **diferencia escalar de velocidades sin dirección**. Dos vientos de 40 km/h en direcciones opuestas dan `diff = 0`, pero la cizalladura vectorial real es máxima. Puede producir falsos negativos de downburst/supercélula en eventos con cambio de dirección. Corregir requiere agregar `wind_direction_10m` y `wind_direction_700hPa` al fetcher y al consenso. Ver `06_PENDIENTES.md` §2.2.
+
+> **Nota adicional del 29/10/2026:** `Math.min(...humedades, 100)` con `humedades` conteniendo `null` devuelve `0` (no 100). El `potencialDesplome` se infla artificialmente. Sin cobertura de tests (N-TEST-08 en `06_PENDIENTES.md` §2.5). Registrado como N-MOTOR-06 en `06_PENDIENTES.md` §2.11.
 
 ### 7.2 Reglas
 
@@ -296,6 +387,20 @@ Valores posibles: `FRIO_EXTREMO`, `HELADA_AGRICOLA`, `NEVADA`, `CALOR_EXTREMO`, 
 | Supercélula | Potencial de desplome > 150 y cizalladura > 25 km/h y CAPE > 2 500 | 4 | `SUPERCELULA` |
 | Tormentas dispersas | Ninguna de las anteriores y CAPE > 800 | 2 | `CONVECTIVO` |
 | Estable | Ninguna de las anteriores | 1 | `SIN_AMENAZA` |
+
+> **Nota correctiva del 29/10/2026 (auditoría cruzada):** los subtipos del código **no coinciden** con los de §9.4.
+>
+> | Subtipo del código (`convectiveEvaluator.js`) | Subtipo documentado (§9.4) |
+> |---|---|
+> | `CONVECTIVO_NORMAL` | `SIN_AMENAZA` |
+> | `TORMENTA_DISPERSA` | `CONVECTIVO` |
+> | `SUPERCELULA` (sin guion bajo) | `SUPER_CELULA` (con guion bajo) |
+>
+> **Implicación directa:** el orquestador propaga `resConvectivo.vector_dominante` como `tipo_amenaza`. La regla 17 de `promptsMultivector.js` solo enumera los subtipos documentados (`SIN_AMENAZA`, `CONVECTIVO`, `GRANIZO`, `DOWNBURST`, `SUPER_CELULA`). Los subtipos del código no están cubiertos por R17. SARA no tiene instrucción de lenguaje para ellos.
+>
+> Registrado como N-MOTOR-05 en `06_PENDIENTES.md` §2.11. Bajo DEC-011, esto es **funcional**, no solo documental. Requiere decisión: alinear el código a la documentación o la documentación al código, y actualizar R17 en el mismo commit.
+
+> **Nota adicional sobre orden de evaluación:** el código sobreescribe subtipos en orden (granizo → downburst → supercélula → tormentas dispersas). Si coexisten condiciones, el subtipo final no refleja necesariamente la amenaza dominante. No documentado como decisión de diseño. Registrado como N-MOTOR-08 en `06_PENDIENTES.md` §2.11.
 
 ### 7.3 Nivel continuo
 
@@ -308,7 +413,7 @@ Se pondera con una sigmoide de la inestabilidad (centro 1 500 J/kg, pendiente 0.
 
 Estos rangos respetan el contrato `[nivel, nivel + 0.99]`.
 
-**Discrepancia de unidades:** la especificación original (13) define los umbrales de potencial de desplome en 50 000, 100 000 y 150 000. El código usa 100 y 150, porque su fórmula produce valores de ese orden. La especificación tiene un error de unidades. Corregirla y verificar con pruebas.
+> **Discrepancia de unidades:** la especificación original (13) define los umbrales de potencial de desplome en 50 000, 100 000 y 150 000. El código usa 100 y 150, porque su fórmula produce valores de ese orden. **La especificación tiene un error de unidades.** Corregirla y verificar con pruebas.
 
 ---
 
@@ -324,16 +429,18 @@ Usa una sigmoide centrada en 62 mm de saturación, con pendiente 0.5:
 
 | Nivel discreto del motor | Condición | Continuo |
 |---|---|---|
-| 3 | Pendiente ≥ 25° y saturación > 30 mm | 3 + 0.99 × proximidad |
-| 2 | Saturación > 20 mm | 2 + 0.99 × proximidad |
-| 4 | — | 4 |
+| 3 | Pendiente ≥ 25° y saturación > 30 mm | `3 + 0.99 × proximidad` |
+| 2 | Saturación > 20 mm | `2 + 0.99 × proximidad` |
+| 4 | — | `4` |
 | Otros | — | Sin cambio |
 
-**Discrepancia:** la especificación original (16) describía solo el caso N3, con escala 0.9 y un factor basado en la pendiente. El código aplica la sigmoide también al N2 y usa escala 0.99. Lo que vale es el código.
-
-**Ejemplo de la especificación con error aritmético:** la especificación afirma que una proximidad de 0.81 da 3.8. Con la fórmula de la especificación, el resultado es 3.73.
+> **Discrepancia:** la especificación original (16) describía solo el caso N3, con escala 0.9 y un factor basado en la pendiente. El código aplica la sigmoide también al N2 y usa escala 0.99. **Lo que vale es el código.**
+>
+> **Ejemplo de la especificación con error aritmético:** la especificación afirma que una proximidad de 0.81 da 3.8. Con la fórmula de la especificación, el resultado es 3.73.
 
 El campo `diagnostico` original se conserva sin cambios.
+
+> **Nota adicional del 29/10/2026:** `datos_tecnicos.proximidad_umbral_n4` se calcula siempre con `sigmoide(saturacion, 62.0, 0.5)`, incluso si el nivel no es N3. El campo miente en N1/N2/N4. Cosmético pero confuso para auditoría. Registrado como N-MOTOR-16 en `06_PENDIENTES.md` §2.11.
 
 ---
 
@@ -353,7 +460,7 @@ R = min(R, 4.0)
 
 Los pares son los que aparecen en la tabla de coeficientes de la sección 9.2. El término `(r − 1)` excluye la línea base de N1, que no aporta energía destructiva.
 
-**Nota bajo DEC-011:** el acoplamiento es aditivo, por lo tanto sobreestima cuando dos vectores moderados coexisten. Bajo el principio de precisión, los coeficientes γ deben validarse contra eventos reales antes de considerarse cerrados (PEND-03 en `08_DECISIONES.md`).
+> **Nota bajo DEC-011:** el acoplamiento es aditivo, por lo tanto sobreestima cuando dos vectores moderados coexisten. Bajo el principio de precisión, los coeficientes γ deben validarse contra eventos reales antes de considerarse cerrados (PEND-03 en `08_DECISIONES.md`).
 
 ### 9.2 Coeficientes γ (código)
 
@@ -365,7 +472,31 @@ Los pares son los que aparecen en la tabla de coeficientes de la sección 9.2. E
 | Térmico – Hidrológico | 0.10 |
 | Viento – Térmico | 0.05 |
 
-**Discrepancia:** la especificación original (14) usaba 0.15, 0.10, 0.25 y 0.05 para los mismos pares, y no incluía los dos últimos. El ADR-005 cita esa especificación como fuente. Corregir el ADR.
+> **Discrepancia:** la especificación original (14) usaba 0.15, 0.10, 0.25 y 0.05 para los mismos pares, y no incluía los dos últimos. El ADR-005 cita esa especificación como fuente. **Corregir el ADR.**
+
+> **Nota correctiva del 29/10/2026 (auditoría P2):**
+>
+> **El código aplica dos coeficientes sobre el mismo par físico simétrico.** `crossThreatOrchestrator.js` ejecuta:
+>
+> ```javascript
+> acoplamiento += calcularAcoplamiento(rH, rT, GAMMAS.HIDRO_TERMICO);   // 0.15
+> acoplamiento += calcularAcoplamiento(rT, rH, GAMMAS.TERMICO_HIDRO);   // 0.10
+> ```
+>
+> Como `(r1-1)*(r2-1)` es simétrico, ambas llamadas calculan el mismo producto. El acoplamiento hidro-térmico efectivo es **0.15 + 0.10 = 0.25**, no 0.15 ni 0.10.
+>
+> **Verificación empírica P2** (escenario `rH=2.97, rT=2.88, rV=rC=1.0`):
+>
+> - `riesgo_continuo` real = **3.90**.
+> - Predicción fórmula §9.1 (un solo par): **3.5255**.
+> - Predicción código (par duplicado): **3.8959**.
+> - ¿Coincide con doc? **false**. ¿Coincide con código? **true**.
+>
+> **Sobreestimación medida:** +0.37 en escenarios medios, +0.9 en escenarios altos. Puede empujar de N3 a N4 en casos donde doc §9.1 dejaría en N3.
+>
+> **Naturaleza: diseño ambiguo, no bug.** ADR-005 lista ambos γ sin aclarar si es uno o dos términos. El código es consistente con el ADR; **es el ADR el que es contradictorio con DEC-011.**
+>
+> Registrado como N-MOTOR-09 en `06_PENDIENTES.md` §2.2. Bloqueado por **PEND-08** en `08_DECISIONES.md`: decisión sobre cómo resolver la duplicación (un solo término, dos términos reinterpretados, o coeficiente fusionado calibrado).
 
 ### 9.3 Mapeo a nivel global
 
@@ -376,7 +507,7 @@ R ≥ 2.0 → N2
 R < 2.0 → N1
 ```
 
-**Discrepancia:** la especificación original usaba `Math.round`. El código usa los umbrales de arriba, que son distintos: por ejemplo, R = 1.6 da N1 en el código y N2 con `Math.round`.
+> **Discrepancia:** la especificación original usaba `Math.round`. El código usa los umbrales de arriba, que son distintos: por ejemplo, R = 1.6 da N1 en el código y N2 con `Math.round`.
 
 ### 9.4 Salida
 
@@ -406,7 +537,17 @@ R < 2.0 → N1
 
 **Regla de Etapa 5:** cuando el nivel global es N1, el vector dominante se marca `SIN_AMENAZA` y `tipo_amenaza` no se calcula. Sin esta regla aparecían falsos positivos de vientos y convección en localidades tranquilas.
 
-**Nota (H-ORQ-08, 24/10/2026):** `determinarVectorDominante()` usa `prioridad.indexOf(a)` sobre el array que se está mutando durante el `sort`. Funciona por casualidad en V8 moderno, pero es un anti-patrón frágil. Ver `06_PENDIENTES.md` §2.5.
+> **Nota (H-ORQ-08, 24/10/2026):** `determinarVectorDominante()` usa `prioridad.indexOf(a)` sobre el array que se está mutando durante el `sort`. Funciona por casualidad en V8 moderno, pero es un anti-patrón frágil. Ver `06_PENDIENTES.md` §2.5.
+
+> **Nota correctiva del 29/10/2026 (auditoría cruzada):**
+>
+> - Los subtipos reales del hidrológico no coinciden con esta tabla. `riskEvaluator.js` emite:
+>   - `tipoAmenaza: "ESTABLE"` en Regla 1 (aquí dice `PROTECCION_ALTIPLANO`).
+>   - `tipoAmenaza: "VIGILANCIA_NORMAL"` en Regla 6 (aquí dice `VIGILANCIA`).
+>   - Registrado como N-MOTOR-29 en `06_PENDIENTES.md` §2.11.
+> - Los subtipos reales del convectivo no coinciden con esta tabla. Ver §7.2. Registrado como N-MOTOR-05.
+>
+> **La tabla de esta sección es la especificación deseada, no la implementación real.** Bajo DEC-011, la desalineación es funcional porque R17 de los prompts solo cubre los subtipos documentados aquí. Requiere alineación código ↔ docs ↔ prompts en el mismo commit.
 
 ---
 
@@ -418,41 +559,81 @@ El paquete publicado por el runner contiene, por localidad, `nivel_alerta` (igua
 
 ## 11. Pruebas
 
-La suite se ejecuta con `npm test`. Resultado verificado el 27/10/2026: 17 archivos y 167 pruebas, todas en verde. El conteo cambia con el tiempo; actualizar esta cifra con cada cierre de hito. Las pruebas del motor están en `src/engine/__tests__/` y `scripts/engine/__tests__/`.
+La suite se ejecuta con `npm test`. **Baseline verificado el 29/10/2026** (HEAD `1281d43`, node v22.23.3, npm 10.9.9): **165 pass + 2 rojos conocidos** en 17 archivos.
 
-Cada campo nuevo que se publica debe tener una prueba que verifique su valor y su rango (lección H-TEST-05 en `04_HISTORIAL.md`). Los tests 9 a 14 de `thermalEvaluator.test.js` son el ejemplo del cumplimiento de esta regla en el cierre de H-TERM-01.
+**Los 2 rojos son obsoletos, no bugs del motor:**
+
+- `estadoDiocesanoSchema.test.js` "rechaza evaluaciones vacías []": el commit `3053e29` del 28/10/2026 relajó el `.min(1)` del schema para aceptar `[]` en días tranquilos (H-DRIVE-02). Los tests que validaban el comportamiento anterior no se actualizaron.
+- `regresionFase1.test.js` Test 5 "rechaza payload sin evaluaciones": mismo motivo.
+
+Las cifras "167 pruebas en verde" que aparecían en la versión anterior de este documento eran incorrectas. Corrección registrada como H-DOC-BASELINE-01 en `06_PENDIENTES.md` §2.9.
+
+Las pruebas del motor están en `src/engine/__tests__/` y `scripts/engine/__tests__/`. Cada campo nuevo que se publica debe tener una prueba que verifique su valor y su rango (lección H-TEST-05 en `04_HISTORIAL.md`). Los tests 9 a 14 de `thermalEvaluator.test.js` son el ejemplo del cumplimiento de esta regla en el cierre de H-TERM-01.
 
 **Contratos específicos cubiertos por pruebas:**
 
 - `thermalEvaluator.test.js`: 14 pruebas, incluidos los tests 9-14 que verifican el contrato `[nivel, nivel + 0.99]`.
-- `windEvaluator.test.js`: valida el contrato del evaluador de viento. En particular, `expect(res.vector_dominante).toBe('VIENTO_DESTRUCTIVO')` verifica que el subtipo emitido en N4 es el correcto.
+- `windEvaluator.test.js`: 11 pruebas, valida el contrato del evaluador de viento. En particular, `expect(res.vector_dominante).toBe('VIENTO_DESTRUCTIVO')` verifica que el subtipo emitido en N4 es el correcto.
 - `riskEvaluatorRunner.test.js`: 3 pruebas de paridad entre canónico y gemelo.
-- `consensusEngine.test.js` y `regresionMultifactor.test.js`: validan la presencia de `nivel_congelacion_m` y la estrategia GFS preferente.
-- `estadoDiocesanoSchema.test.js`: cobertura parcial de los campos del orquestador (ver H-TEST-11 sobre `datos_disponibles_por_vector`).
+- `consensusEngine.test.js` (16 pruebas) y `regresionMultifactor.test.js` (13 pruebas): validan la presencia de `nivel_congelacion_m` y la estrategia GFS preferente.
+- `estadoDiocesanoSchema.test.js`: 11 pruebas, cobertura parcial de los campos del orquestador. Ver H-TEST-11 sobre `datos_disponibles_por_vector`.
+
+> **Nota del 29/10/2026:** el test "Downburst N4" en `crossThreatOrchestrator.test.js` se llama así pero **el downburst no se dispara** (`shearMax = 20-10 = 10 < 15`). El N4 viene por acoplamiento convectivo-viento con `rC = 2.47, rV = 3.70`. El test valida el número pero no valida el subtipo `DOWNBURST`. Cobertura semántica insuficiente. Registrado como N-TEST-07 en `06_PENDIENTES.md` §2.5.
+
+> **Nota adicional:** `thermalEvaluator.test.js`, `crossThreatOrchestrator.test.js`, `consensusEngine.test.js` y `windEvaluator.test.js` usan `require('fs')` y `require('path')` en archivos ESM con `"type": "module"`. Vitest 5 provee polyfill, pero es frágil si se corre con `node --test` o `vitest --no-isolate`. Registrado como N-TEST-01 en `06_PENDIENTES.md` §2.5.
 
 ---
 
 ## 12. Discrepancias y deuda del motor
 
-| ID | Descripción | Estado |
-|---|---|---|
-| H-CONV-01 | Unidades erróneas en la especificación convectiva (§7.3) | Documental |
-| H-CONV-02 | Cizalladura escalar en lugar de vectorial (§7.1) | Abierta; requiere expandir el contrato del consenso |
-| H-ORQ-07 | Coeficientes γ y mapeo del orquestador distintos de la especificación (§9.2, §9.3) | Documental; el código es la referencia |
-| H-ORQ-08 | `determinarVectorDominante` con `indexOf` en `sort` (§9.4) | Abierta, cosmética |
-| H-MOTOR-01 | Gemelo del runner distinto del canónico (§3) | Abierta, V3.0 |
-| H-MOTOR-05 | Sobreclasificación de N2 en zonas húmedas (XIC, HUA, ZAC) | Abierta, **crítica bajo DEC-011** |
-| H-DIAG-04 | Motor no calibrado para XIC, HUA y ZAC | Abierta, **crítica bajo DEC-011** |
-| H-MOTOR-03 | El reporte diario exige 216 h; el runner usa 192 h | Abierta |
-| H-VIENTO-02 | Inconsistencia de contrato entre evaluadores: el hidrológico expone `diagnostico.tipoAmenaza` (camelCase, anidado) mientras que viento, térmico y convectivo exponen `vector_dominante` (snake_case, top-level). El orquestador maneja ambos casos y funciona, pero el contrato no es uniforme entre módulos (§9.4). | Abierta, baja, V3.0 |
+| ID | Descripción | Estado | Severidad bajo DEC-011 |
+|---|---|---|---|
+| H-CONV-01 | Unidades erróneas en la especificación convectiva (§7.3) | Documental | 🟢 |
+| H-CONV-02 | Cizalladura escalar en lugar de vectorial (§7.1) | Abierta; requiere expandir el contrato del consenso | 🟡 |
+| H-ORQ-07 | Coeficientes γ y mapeo del orquestador distintos de la especificación (§9.2, §9.3) | Documental; el código es la referencia | 🟢 |
+| H-ORQ-08 | `determinarVectorDominante` con `indexOf` en `sort` (§9.4) | Abierta, cosmética | 🟢 |
+| H-MOTOR-01 | Gemelo del runner distinto del canónico (§3) | Abierta, V3.0 | 🟡 |
+| **H-MOTOR-05** | **Sobreestimación crónica de N2 por niebla.** Confirmado empíricamente 29/10/2026: N2=227/405 (56 %), 217 por niebla, 8 zonas al 100 %. Precisión estimada N2: 4.4 %. Causa raíz desagregada en N-MOTOR-11/13/14/15. | Abierta, **crítica bajo DEC-011**. Bloqueada por PEND-06. | 🔴 |
+| **H-DIAG-04** | Motor no calibrado para XIC, HUA, ZAC. Confirmado empíricamente 29/10/2026: XIC 100 % N2, HUA 100 %, ZAC 100 %. Además N-MOTOR-05-bis: SPP 100 %, HYC 100 %, TUL 100 %, CHG 100 %, ZAH 100 %. | Abierta, **crítica bajo DEC-011**. Bloqueada por PEND-06. | 🔴 |
+| N-MOTOR-01 | Ráfagas se consensúan con `Math.max` en `consensusEngine.js` línea 91. §4.2 solo autoriza máximo para `cape` y `wind_speed_700hPa`. Sobrestima el vector viento sistemáticamente. | Abierta, confirmada por código | 🟠 |
+| N-MOTOR-05 | Subtipos convectivos del código (`CONVECTIVO_NORMAL`, `TORMENTA_DISPERSA`, `SUPERCELULA`) no coinciden con §9.4 (`SIN_AMENAZA`, `CONVECTIVO`, `SUPER_CELULA`). R17 de prompts solo cubre los documentados. | Abierta, confirmada por código | 🟠 |
+| N-MOTOR-05-bis | SPP y HYC también sobre-clasificadas al 100 % en N2. Ausentes de la lista original de H-MOTOR-05. | Abierta, confirmada por P9 | 🔴 |
+| N-MOTOR-06 | `Math.min(...humedades, 100)` con `null` en `humedad_700hpa` devuelve 0. Infla `potencialDesplome`. Sin cobertura de tests. | Abierta, confirmada por código | 🟡 |
+| N-MOTOR-08 | El orden de evaluación de subtipos convectivos sobreescribe GRANIZO → DOWNBURST → SUPERCELULA. Si coexisten condiciones, el subtipo final no refleja la amenaza dominante. No documentado como decisión. | Abierta, confirmada por código | 🟡 |
+| N-MOTOR-08-bis | Regla 4 (inundación) no pondera por `tc_horas`. Sobrestima cuencas lentas (Zacatlán tc=24) y subestima cuencas rápidas (Chahuatlán tc=4.75). | Abierta, confirmada por datos | 🟠 |
+| N-MOTOR-09 | Acoplamiento hidro-térmico contado dos veces (0.15 + 0.10 sobre el mismo producto simétrico). Confirmado por P2: sobreestima +0.37 en escenarios medios, +0.9 en altos. | Abierta, confirmada. Bloqueada por PEND-08. | 🟠 |
+| N-MOTOR-11 | La visibilidad no se consensúa porque ICON y GEM devuelven `null`. Solo GFS la provee. Contra ADR-002. | Abierta, confirmada por P11. Bloqueada por PEND-06. | 🟠 |
+| N-MOTOR-12 | **REFUTADA.** Hipótesis previa: "el umbral de 2 km es alto para zonas húmedas". Los datos reales de Xicotepec muestran niebla de 0.2 km. El problema es `min(24h)`, no el umbral. | Refutada por P12 | — |
+| N-MOTOR-13 | Regla 6 usa `Math.min(ventana 24h)` sin persistencia. Un solo valor bajo de 2 h dispara N2 para todo el día. Causa raíz principal de H-MOTOR-05. | Abierta, confirmada por P12. Bloqueada por PEND-06. | 🔴 |
+| N-MOTOR-14 | El motor no distingue evento pasado de futuro. Niebla de 00:00 dispara alerta a las 19:00. | Abierta, confirmada por P12. Bloqueada por PEND-06. | 🟠 |
+| N-MOTOR-15 | Regla 6 usa OR sin contexto agravante, a diferencia de las reglas 2–5 que exigen combinación. | Abierta, confirmada por P12. Bloqueada por PEND-06. | 🟠 |
+| N-MOTOR-16 | `proximidad_umbral_n4` se calcula siempre con `sigmoide(saturacion, 62.0, 0.5)`, incluso si el nivel no es N3. Campo miente en auditoría. | Abierta, confirmada por código | 🟢 |
+| N-MOTOR-24 | `calcularUmbralDeslave` calcula umbral dinámico que nunca se usa en las reglas (Reglas 2 y 3 usan 65.0 fijo). `umbralFisicoDeslaveMm` miente en auditoría. | Abierta, confirmada por código | 🟠 |
+| N-MOTOR-28 | El piso del aviso SMN (`Math.max(lluviaEfectiva, pisoSMN)`) es fuente de sobreestimación no catalogada bajo DEC-011. | Abierta, confirmada por código | 🟠 |
+| N-MOTOR-29 | `tipoAmenaza: "ESTABLE"` y `"VIGILANCIA_NORMAL"` del hidrológico no coinciden con §9.4 (`PROTECCION_ALTIPLANO`, `VIGILANCIA`). R17 no cubre los nombres del código. | Abierta, confirmada por código | 🟠 |
+| N-MOTOR-30 | `umbralFisicoDeslaveMm` reportado en el diagnóstico no coincide con el umbral (65.0) realmente usado en la decisión. Confunde auditoría. | Abierta, confirmada por código | 🟡 |
+| N-MOTOR-36 | La causa del diagnóstico de viento reporta `rafagaMax` (real), no `vEqFinal` (normalizada). El texto puede decir "ráfagas de X km/h superan el umbral de 95" con X < 95. Incoherente. | Abierta, confirmada por código | 🟡 |
+| H-MOTOR-03 | El reporte diario exige 216 h; el runner usa 192 h | Abierta | 🟢 |
+| H-VIENTO-02 | Inconsistencia de contrato entre evaluadores: el hidrológico expone `diagnostico.tipoAmenaza` (camelCase, anidado) mientras que viento, térmico y convectivo exponen `vector_dominante` (snake_case, top-level). El orquestador maneja ambos casos y funciona, pero el contrato no es uniforme entre módulos (§9.4). | Abierta, V3.0 | 🟢 |
+| H-DOC-HVIENTO-01 | H-VIENTO-01 mal cerrado en `04_HISTORIAL.md` §6.1. La versión 28/10/2026 afirmaba que el código no implementa factor de rugosidad. Falso: `windEvaluator.js` líneas 43-45 lo implementan. La corrección en `04_HISTORIAL.md` §7.15 ya está registrada; la corrección de este documento (§5.1, §5.3) ya está en esta versión 2.8. | Corregido en esta versión | 🟢 |
 
-**Reclasificación bajo DEC-011 (28/10/2026):** H-MOTOR-05 y H-DIAG-04 suben de 🟡 media a 🔴 crítica porque el principio de precisión sobre cobertura exige eliminar los falsos positivos conocidos. Ambas deudas se refieren a la sobreclasificación de N2 en zonas húmedas y deben abordarse en la primera ventana de trabajo del motor bajo el nuevo principio.
+**Reclasificación bajo DEC-011 (29/10/2026):** H-MOTOR-05, H-DIAG-04, N-MOTOR-05-bis, N-MOTOR-11, N-MOTOR-13, N-MOTOR-14, N-MOTOR-15 son críticas. Todas confirmadas empíricamente en producción. Bloqueadas por PEND-06 (criterio operativo para N2 por niebla) y PEND-08 (resolución del acoplamiento duplicado).
 
-**Cerrados en esta versión (27/10/2026):**
+**Cerradas o refutadas en esta versión:**
 
-- H-CONV-03: Falso positivo de Downburst con CAPE bajo (§7.2). Se exigió CAPE > 1000.
-- H-MOTOR-07: Regla 1 del Altiplano leía el campo de viento equivocado (§2.1).
-- H-TERM-01: Nivel continuo térmico fuera del contrato (commit 343f80d).
-- H-VIENTO-01: Suavizado no implementado en el código (documental).
+- **N-MOTOR-10:** cerrada como duplicada de N-MOTOR-13.
+- **N-MOTOR-12:** refutada por P12. El umbral de 2 km no es alto.
+- **H-VIENTO-01:** cerrada como documental solo por el suavizado. La afirmación "no implementa factor de rugosidad" era falsa. Corrección propagada en §5.1 y §5.3 de esta versión.
 
-Los detalles de cada ítem están en `06_PENDIENTES.md`.
+**Cerrados recientes (versión anterior, 27/10/2026):**
+
+- **H-CONV-03:** Falso positivo de Downburst con CAPE bajo (§7.2). Se exigió CAPE > 1000.
+- **H-MOTOR-07:** Regla 1 del Altiplano leía el campo de viento equivocado (§2.1).
+- **H-TERM-01:** Nivel continuo térmico fuera del contrato (commit `343f80d`).
+- **H-VIENTO-01:** Cierre como documental por el suavizado (ver nota correctiva arriba).
+
+Los detalles de cada ítem están en `06_PENDIENTES.md` §2.11 (deudas nuevas verificadas por código) y §2.2 (deudas activas confirmadas por pruebas empíricas P1–P12).
+
+---
+
+*Fin del documento.*
