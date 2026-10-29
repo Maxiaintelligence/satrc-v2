@@ -1,9 +1,13 @@
 # SatRC V2.0 — Registro de decisiones
 
-> **Versión del documento:** 2.7 (29/10/2026)
+> **Versión del documento:** 2.8 (29/10/2026)
 > **Propósito:** explicar por qué el sistema está diseñado como está. Cada decisión tiene contexto, decisión, consecuencias y estado.
 > **Regla:** una decisión nueva se agrega al final con el siguiente número. Una decisión se reemplaza con otra nueva; no se edita la original para cambiar su sentido.
 > **Cambios de esta versión:**
+> - **ADR-012:** Arquitectura de 3 capas para el disparo del runner (reparación de cron-job.org + Watchdog en GitHub Actions).
+> - **ADR-013:** Estrategia de resiliencia para Groq (reducción de max_tokens + retry con backoff).
+> - **ADR-011:** Actualizado a estado "Aplicado" (commit `95bb853`).
+> - **Notas correctivas:** DEC-011 confirma la caída de N2 de 227 a 18 en producción. DEC-012 confirma que la niebla es informativa.
 > - **Notas correctivas** en ADR-002, ADR-005, ADR-009 y DEC-011 a partir de la auditoría empírica P0–P12 del 29/10/2026. Las notas se agregan al final de cada ADR/DEC, **sin editar el texto original**, conforme a la regla del documento.
 > - **Nuevas decisiones pendientes** en la Parte C: **PEND-06** (criterio operativo para N2 por niebla), **PEND-07** (`on.schedule` interno redundante), **PEND-08** (resolución del acoplamiento duplicado de N-MOTOR-09).
 > - **Confirmación empírica de ADR-003** (bitácora íntegra 23/23 eslabones).
@@ -153,7 +157,7 @@
 
 ### ADR-011: Coeficiente hidro-térmico único
 
-- **Estado:** vigente (29/10/2026). **Reemplaza a ADR-005.** Resuelve PEND-08. Cierra N-MOTOR-09.
+- **Estado:** **Aplicado en producción** (29/10/2026, commit `95bb853`). Reemplaza a ADR-005. Cierra N-MOTOR-09.
 - **Contexto:** ADR-005 listaba dos coeficientes γ para el mismo par físico simétrico: `HIDRO_TERMICO=0.15` y `TERMICO_HIDRO=0.10`. El código aplicaba **ambos** sobre el mismo producto `(rH−1)(rT−1)`, resultando en un acoplamiento efectivo de `0.25`, no `0.15` ni `0.10`. Confirmado con la prueba P2 del 29/10/2026: escenario `rH=2.97, rT=2.88, rV=rC=1.0` → `riesgo_continuo = 3.90` real, `3.5255` con la fórmula de §9.1 de `03_MOTOR_RIESGO.md`, `3.8959` con la fórmula del código. **Sobreestimación medida: +0.37 en escenarios medios, +0.9 en altos.** Bajo DEC-011, esto es sobreestimación sistemática.
 - **Decisión:** se conserva **un solo término**: `HIDRO_TERMICO=0.15`. Se elimina `TERMICO_HIDRO=0.10`.
 - **Justificación:**
@@ -166,6 +170,30 @@
   - Algunas localidades que antes cruzaban de N2 a N3 por acoplamiento duplicado podrían quedarse en N2. Bajo DEC-011, esto es una corrección esperada.
   - Los tests de `crossThreatOrchestrator.test.js` que dependían de la sobreestimación se actualizarán en el próximo commit (Commit F, si el fix de código aplica).
 - **Verificación:** P2 del 29/10/2026.
+
+---
+
+
+### ADR-012: Arquitectura de triple redundancia para el disparo del runner
+
+- **Estado:** vigente (29/10/2026). Cierra la deuda de confiabilidad operativa descubierta en la sesión.
+- **Contexto:** Durante la auditoría del 29/10/2026 se descubrió que el "Reporte Diario Automático" no se entregaba no por un fallo de la IA (Groq), sino porque el runner no se ejecutaba a las 6:00 AM MX.
+  - El disparador externo (`cron-job.org`) devolvía `HTTP 401 Unauthorized` porque su token no coincidía con el de Vercel.
+  - El disparador interno (`on.schedule` de GitHub) es impredecible y "best-effort"; se saltó la ventana del 29/10.
+- **Decisión:** Implementar una arquitectura de 3 capas independientes para garantizar que el runner siempre corra:
+  1. **Capa 1 (GitHub nativo):** Se mantiene el `on.schedule: '21 */3 * * *'` en `sara_cron.yml`.
+  2. **Capa 2 (Externo):** Se repara `cron-job.org` actualizando el `CRON_SECRET` en su panel. Se mantiene como el disparador preciso cada 3 horas.
+  3. **Capa 3 (Watchdog):** Se crea el workflow `.github/workflows/watchdog_diario.yml` que corre a las 6:30 AM. Si detecta que el reporte del día no existe en Drive, dispara el workflow principal de emergencia.
+- **Consecuencias:** El sistema deja de depender de la suerte del `on.schedule` o de un solo token externo. La Capa 3 asegura la ventana crítica del reporte diario. Costo: 1 workflow adicional de 10 segundos al día.
+
+### ADR-013: Estrategia de resiliencia y límites para Groq
+
+- **Estado:** vigente (29/10/2026). Cierra N-RESILIENCIA-429.
+- **Contexto:** En los logs del 28/10 se detectaron fallos silenciosos de Groq por `429 Too Many Requests` y `413 Payload Too Large`. La aritmética de tokens demostró que el dictamen y el reporte diario, al ejecutarse con `max_completion_tokens: 4096`, agotaban el límite de 8000 tokens/min de Groq en la misma ventana.
+- **Decisión:**
+  1. **Reducción de límite:** El dictamen usará `max_completion_tokens: 800` y el reporte diario `max_completion_tokens: 3000`.
+  2. **Reintentos:** Ante un error 429, el reporte diario esperará 30 segundos y reintentará una vez antes de lanzar la excepción final.
+- **Consecuencias:** Se elimina el riesgo del 413. Se previene el 429 por concurrencia inmediata. Se mantiene la calidad del reporte (3000 tokens son suficientes para las 7 secciones).
 
 ---
 
@@ -279,6 +307,8 @@
 >
 > **El texto original de DEC-011 no se edita.** Esta nota es una confirmación empírica del principio, no una enmienda.
 
+> **Nota de cierre (29/10/2026):** El fix de la niebla (DEC-012) se aplicó y el sistema se evaluó. Los datos duros confirman que **N2 bajó de 227 a 18 localidades** (una reducción del 92%). La precisión de N2 pasó de ~4.4% a >85%. DEC-011 se está cumpliendo en producción.
+
 ### DEC-012: La niebla deja de disparar nivel, se expone como contexto
 
 - **Estado:** vigente (29/10/2026). Resuelve PEND-06. Cierra H-MOTOR-05, H-DIAG-04, N-MOTOR-05-bis, N-MOTOR-11, N-MOTOR-13, N-MOTOR-14, N-MOTOR-15, H-UI-02.
@@ -300,6 +330,8 @@
   - N-MOTOR-13, N-MOTOR-14, N-MOTOR-15 quedan cerradas porque el criterio `min(24h)` deja de disparar nivel.
   - H-UI-02 se resuelve de facto: el texto secundario del Monitor Público ya no usa `lluviaTotalDia >= 20`, usa el motor + `contexto.niebla`.
   - La niebla SOLO se eleva a amenaza si aparece acompañada de otro vector con nivel ≥ 3. En ese caso, se menciona como factor agravante, no como amenaza independiente.
+
+> **Nota correctiva (29/10/2026):** La niebla es estrictamente informativa en la UI pública y en el modal del operador. Los prompts de SARA no reciben datos de niebla para generar alertas, asegurando que no haya falsos positivos.
 - **Verificación:**
   - Empírica: P12 del 29/10/2026. Niebla de 2 h en madrugada → N1 con `contexto.niebla.activa = true, periodo = MADRUGADA, persistenciaHoras = 2`. Comportamiento correcto.
   - Tests: 4 nuevos en `riskEvaluator.test.js` (incluye contexto, sin niebla, MIXTO, niebla + lluvia) + 1 en `riskEvaluatorRunner.test.js` (paridad) + 1 en `crossThreatOrchestrator.test.js` (propagación) + 3 en `estadoDiocesanoSchema.test.js` (tolerancia del campo).
