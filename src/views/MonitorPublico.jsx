@@ -468,9 +468,49 @@ export default function MonitorPublico() {
               <span className="text-[10px] text-slate-500 font-mono">Orientación Comunitaria</span>
             </div>
             <p className="text-xs md:text-sm text-slate-200 leading-relaxed font-normal">
-              {Number(lluviaTotalDia) >= 20.0
-                ? `Vigilancia activa en ${localidadActiva.nombre} (${localidadActiva.municipio}): Previsión de ${lluviaTotalDia} mm acumulados con bancos de niebla densa en carreteras de montaña. Se recomienda extrema precaución en traslados hacia caminos de ${localidadActiva.vulnerabilidad?.acceso_vial?.toLowerCase() || 'terracería'} por reducción de adherencia.`
-                : `Condiciones de estabilidad en ${localidadActiva.nombre} (${localidadActiva.municipio}). Lluvia prevista de ${lluviaTotalDia} mm en el período de 24 horas, dentro de parámetros ordinarios para la cuenca. Actividades comunitarias y traslados sin restricciones de seguridad.`}
+              {(() => {
+                // PEND-06 (29/10/2026): la síntesis comunitaria usa el motor + contexto.niebla,
+                // no un umbral hardcodeado de lluvia. Prioridad:
+                //   1. Nivel >= 3: mensaje del nivel (alerta temprana o emergencia).
+                //   2. Nivel <= 2 y contexto.niebla.activa: mensaje contextual sobre la niebla.
+                //   3. Nivel <= 2 y sin niebla: mensaje de estabilidad.
+                const nivel = evaluacionLocal?.nivel_alerta ?? 1;
+                const niebla = evaluacionLocal?.contexto?.niebla;
+                const accesoVial = localidadActiva.vulnerabilidad?.acceso_vial?.toLowerCase() || 'terracería';
+                const nombre = localidadActiva.nombre;
+                const municipio = localidadActiva.municipio;
+
+                if (nivel >= 3) {
+                  const estado = nivel === 4 ? 'Emergencia' : 'Alerta temprana';
+                  return `${estado} en ${nombre} (${municipio}): ${evaluacionLocal?.diagnostico?.titulo || 'evento meteorológico activo'}. Siga las indicaciones de Protección Civil y de Cáritas Diocesana.`;
+                }
+
+                if (niebla?.activa === true) {
+                  const visTxt = niebla.visibilidadMinKm !== null && niebla.visibilidadMinKm !== undefined
+                    ? `visibilidad mínima de ${niebla.visibilidadMinKm} km`
+                    : 'visibilidad reducida';
+                  const durTxt = niebla.persistenciaHoras > 0
+                    ? `durante ${niebla.persistenciaHoras} ${niebla.persistenciaHoras === 1 ? 'hora' : 'horas'}`
+                    : '';
+
+                  const etiquetaPorPeriodo = {
+                    MADRUGADA: 'niebla de madrugada',
+                    'MAÑANA': 'niebla matinal',
+                    TARDE: 'niebla diurna inusual',
+                    NOCHE: 'niebla nocturna',
+                    MIXTO: 'niebla persistente'
+                  };
+                  const etiqueta = etiquetaPorPeriodo[niebla.periodo] || 'niebla';
+
+                  const extra = (niebla.periodo === 'NOCHE' || niebla.periodo === 'MIXTO')
+                    ? ' Extreme precauciones al conducir de noche en carreteras de montaña.'
+                    : '';
+
+                  return `Condiciones de estabilidad en ${nombre} (${municipio}), con ${etiqueta} ${durTxt} y ${visTxt}. Se recomienda precaución en traslados hacia caminos de ${accesoVial} por reducción de adherencia.${extra} Sin amenaza de nivel N3/N4 en este momento.`;
+                }
+
+                return `Condiciones de estabilidad en ${nombre} (${municipio}). Lluvia prevista de ${lluviaTotalDia} mm en el período de 24 horas, dentro de parámetros ordinarios para la cuenca. Actividades comunitarias y traslados sin restricciones de seguridad.`;
+              })()}
             </p>
           </div>
         </div>

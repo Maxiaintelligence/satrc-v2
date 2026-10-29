@@ -915,6 +915,51 @@ Documento oficial emitido para párrocos, brigadistas y autoridades de auxilio.
                 </div>
               </div>
 
+              {/* PEND-06: Contexto de niebla (informativo, no dispara nivel) */}
+              {comunidadDetalle?.contexto?.niebla?.activa === true && (
+                <div className="bg-cyan-950/30 border border-cyan-900/50 p-3.5 rounded-xl space-y-2">
+                  <p className="text-[10px] font-bold text-cyan-400 uppercase tracking-wider">
+                    Contexto de Niebla (Informativo)
+                  </p>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                    <div className="bg-slate-800/60 p-2.5 rounded-lg border border-slate-700/60">
+                      <div className="text-[10px] text-slate-400 uppercase font-semibold">Período</div>
+                      <div className="text-sm font-bold text-white mt-0.5">
+                        {comunidadDetalle.contexto.niebla.periodo || '--'}
+                      </div>
+                    </div>
+                    <div className="bg-slate-800/60 p-2.5 rounded-lg border border-slate-700/60">
+                      <div className="text-[10px] text-slate-400 uppercase font-semibold">Visibilidad mín.</div>
+                      <div className="text-sm font-bold text-white mt-0.5">
+                        {comunidadDetalle.contexto.niebla.visibilidadMinKm !== null
+                          ? `${comunidadDetalle.contexto.niebla.visibilidadMinKm} km`
+                          : '--'}
+                      </div>
+                    </div>
+                    <div className="bg-slate-800/60 p-2.5 rounded-lg border border-slate-700/60">
+                      <div className="text-[10px] text-slate-400 uppercase font-semibold">Persistencia</div>
+                      <div className="text-sm font-bold text-white mt-0.5">
+                        {comunidadDetalle.contexto.niebla.persistenciaHoras > 0
+                          ? `${comunidadDetalle.contexto.niebla.persistenciaHoras} h`
+                          : '--'}
+                      </div>
+                    </div>
+                    <div className="bg-slate-800/60 p-2.5 rounded-lg border border-slate-700/60">
+                      <div className="text-[10px] text-slate-400 uppercase font-semibold">Ventana</div>
+                      <div className="text-sm font-bold text-white mt-0.5">
+                        {comunidadDetalle.contexto.niebla.ventana?.inicio && comunidadDetalle.contexto.niebla.ventana?.fin
+                          ? `${comunidadDetalle.contexto.niebla.ventana.inicio}–${comunidadDetalle.contexto.niebla.ventana.fin}`
+                          : '--'}
+                      </div>
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-slate-300 italic leading-relaxed pt-1">
+                    La niebla es información contextual. Bajo DEC-011 no dispara nivel de alerta. Se menciona para orientar traslados, no para emitir alertas.
+                  </p>
+                </div>
+              )}
+
+
                             {/* Desglose por Vector (H5.7) */}
               {comunidadDetalle?.niveles_por_vector && (
                 <div className="bg-slate-900 border border-slate-800 p-3.5 rounded-xl space-y-3">
