@@ -1,9 +1,12 @@
 # SatRC V2.0 — Historial de bugs, hitos y lecciones
 
-> **Versión del documento:** 2.6 (29/10/2026)
+> **Versión del documento:** 2.7 (29/10/2026)
 > **Propósito:** registro cronológico de los problemas resueltos, los hitos cerrados y las lecciones aprendidas. Cada entrada indica síntoma, causa, solución, verificación y commit.
 > **Regla:** un bug entra aquí solo cuando está resuelto. Lo pendiente va a `06_PENDIENTES.md`.
 > **Cambios de esta versión:**
+> - **Sesión de cierre del 29/10/2026 (§7.22):** Se registran los 7 commits de blindaje (ADR-011, N-MOTOR-06, N-MOTOR-36, N-FETCH-01, N-RESILIENCIA-429) y la reparación de infraestructura (cron-job.org y Watchdog).
+> - **Actualización del baseline:** 179 pass + 0 rojos.
+> - **Nuevas lecciones de proceso:** H-PROCESO-04 (silencio por inejecución) y H-PROCESO-05 (falso positivo por script).
 > - Agrega **§7 — Sesión 29/10/2026: Auditoría empírica P0–P12**. Registra el proceso, los hallazgos y las verificaciones de la sesión de diagnóstico sin resolver código de producción.
 > - **Corrige §6.1** (H-VIENTO-01): el cierre anterior afirmaba erróneamente que el código no implementa factor de rugosidad. El código sí lo implementa. Se conserva el texto original por trazabilidad histórica y se agrega nota correctiva.
 > - **Actualiza §8** con tres lecciones nuevas: `H-PROCESO-03`, `H-TEST-16`, `H-TEST-17`.
@@ -659,6 +662,64 @@ Se aplicaron 3 fixes más tras el cierre de los 5 commits del bloque PEND-06:
 
 ---
 
+
+### 7.22 Sesión de Cierre 29/10/2026 — Blindaje del Motor, Infraestructura y Resiliencia
+
+Sesión de desarrollo senior enfocada en la "esencia matemática" del motor y la confiabilidad de la infraestructura. Se aplicaron 7 commits atómicos.
+
+#### A. Blindaje del Motor Matemático (Motor y Datos)
+
+1. **ADR-011 (commit `95bb853`) — Acoplamiento hidro-térmico único.**
+   - *Síntoma:* P2 confirmó que `riesgo_continuo` daba 3.9 en lugar de 3.53 en escenarios medios.
+   - *Causa:* `crossThreatOrchestrator.js` sumaba los coeficientes `HIDRO_TERMICO=0.15` y `TERMICO_HIDRO=0.10` sobre el mismo producto simétrico.
+   - *Solución:* Se eliminó `TERMICO_HIDRO`. El acoplamiento efectivo pasó de 0.25 a 0.15.
+   - *Verificación:* Prueba P2 ejecutada de nuevo: `riesgo_continuo = 3.53`, acoplamiento 0.56.
+
+2. **N-MOTOR-06 + bis (commit `426cc7e`) — Defensa contra null.**
+   - *Síntoma:* Falsos positivos de downburst (N3) cuando faltaba el dato de humedad.
+   - *Causa:* `Math.min(...humedades, 100)` con `null` devolvía 0, inflando el potencial de desplome.
+   - *Solución:* Se filtraron los `null` y se usó 100 como fallback para humedad; para nivel de congelación se usó `null` seguro (espesor de fusión).
+   - *Verificación:* 3 tests nuevos. El potencial de desplome bajó de 1500 a 0 en el caso de prueba.
+
+3. **N-MOTOR-36 (commit `b343165`) — Coherencia del diagnóstico de viento.**
+   - *Síntoma:* El texto decía "ráfagas de 42.0 km/h superan el umbral de 45" (siendo 42 < 45).
+   - *Causa:* El diagnóstico usaba `rafagaMax` (real) en lugar de `vEqFinal` (normalizada por densidad).
+   - *Solución:* Se muestra la ráfaga real y la equivalente a nivel del mar.
+   - *Verificación:* Test manual: la causa ahora dice "Ráfaga real de 42.0 km/h (equivalente a 45.8 km/h)...".
+
+4. **N-FETCH-01 (commit `c41fd0c`) — Blindaje de alineación midnight.**
+   - *Contexto:* Todo el motor asume que `serie[168]` es la medianoche local.
+   - *Solución:* Se agregó un test en `consensusEngine.test.js` que verifica la alineación del fixture real (índices 0, 144, 168, 192) y un `console.warn` en `meteoFetcher.js` si Open-Meteo cambia la política.
+
+5. **Reparación de Tests Obsoletos (commit `f6f4281`).**
+   - Se actualizaron 2 tests que esperaban el rechazo de `evaluaciones: []` (comportamiento viejo). Ahora validan el comportamiento `.nullable()` implementado en H-DRIVE-02.
+   - **Baseline final: 179 pass + 0 rojos.**
+
+#### B. Infraestructura de Disparo (El Cron no corría)
+
+Durante el diagnóstico del reporte diario, se descubrió que la causa raíz no era Groq, sino que el runner no se ejecutaba en las ventanas esperadas.
+
+1. **Reparación de `cron-job.org`:**
+   - *Síntoma:* El 100% de los disparos externos fallaban con `HTTP 401 Unauthorized`.
+   - *Causa:* El `CRON_SECRET` en `cron-job.org` estaba desactualizado respecto al de Vercel (probablemente tras la migración a Drive).
+   - *Solución:* Se actualizó el header `x-cron-secret` en la plataforma externa.
+   - *Verificación:* Un disparo manual devolvió `200 OK` y el workflow de GitHub se ejecutó exitosamente.
+
+2. **Creación del Watchdog en GitHub Actions (Capa 3):**
+   - *Contexto:* El `on.schedule` interno de GitHub es impredecible (se saltó la ventana del 29/10 a las 6:00 AM).
+   - *Solución:* Se creó `.github/workflows/watchdog_diario.yml` que corre a las 6:30 AM. Si el reporte no existe en Drive, dispara el workflow principal.
+   - *Verificación:* Al ejecutarse con el reporte ya presente, termina en verde sin duplicar.
+
+#### C. Resiliencia de Groq (429 y 413)
+
+1. **N-RESILIENCIA-429 (commit `a274db4`) — Blindaje de reporteDiario.mjs.**
+   - *Síntoma:* El diario fallaba silenciosamente con `429 Too Many Requests` y `413 Payload Too Large` (registrado en logs del 28/10).
+   - *Causa:* `max_completion_tokens: 4096` excedía el límite de tokens por minuto (8000) cuando coexistía con el dictamen, y el `try/catch` genérico ocultaba el error.
+   - *Solución:* Se redujo `max_completion_tokens` del diario a 3000 y del dictamen a 800 (evitando la reserva por defecto). Se agregó retry con backoff de 30s para el 429.
+   - *Verificación:* El reporte se generó correctamente tras el despliegue.
+
+---
+
 ## 8. Lecciones consolidadas
 
 | ID | Lección | Origen |
@@ -680,6 +741,9 @@ Se aplicaron 3 fixes más tras el cierre de los 5 commits del bloque PEND-06:
 | **H-TEST-16** | **Las cifras de estado ("167 pruebas en verde", "51 advertencias") envejecen mal.** Toda cifra de baseline debe incluir la fecha, el comando y el HEAD en que se verificó. Cuando cambia el código sin actualizar la cifra, la documentación miente. | P0 del 29/10/2026 |
 | **H-TEST-17** | **Un script de diagnóstico debe discriminar la hipótesis o no es un test.** El primer escenario de P2 usó `zona_id: PMN`, activó la Regla 1 (Protección Altiplano), y el resultado fue indistinguible de la calma. Cambiar a `zona_id: HUA` permitió discriminar. Refuerza H-TEST-06. | P2 del 29/10/2026 |
 | **H-TEST-20** | Un modelo de lenguaje no es la única forma de generar texto humano. La heurística determinista (semilla basada en fecha + ID) permite textos variados, sin latencia y sin costo de API. | Monitor Público (29/10/2026) |
+| **H-PROCESO-04** | **El silencio en la bitácora no siempre es un bug de lógica.** Puede significar que el proceso nunca se ejecutó (el cron no disparó). Antes de culpar al código, verificar que el disparador funciona. | Sesión 29/10/2026 |
+| **H-PROCESO-05** | **Un script de reemplazo de PowerShell puede dar falsos negativos por diferencias de saltos de línea (CRLF vs LF).** Usar Node.js (`fs.replace`) para ediciones masivas en el código. | Sesión 29/10/2026 |
+| **H-TEST-21** | **Los límites de los LLM (Groq) cuentan tokens reservados (prompt + max_completion_tokens) para la admisión.** Si reduces el max_tokens, evitas el error 413 y liberas margen para la ventana de 60s. | Sesión 29/10/2026 |
 
 ---
 
