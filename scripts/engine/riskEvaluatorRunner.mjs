@@ -35,6 +35,78 @@
  * @see docs/09_HALLAZGOS_ETAPA3.md (H-MOTOR-01)
  */
 
+/**
+ * Calcula el contexto de niebla (informativo, NO dispara nivel).
+ * PEND-06 (29/10/2026): paridad con el motor canónico `riskEvaluator.js`.
+ *
+ * @param {Array} serieZona - Serie de consenso de la zona (192+ horas).
+ * @returns {Object} { activa, visibilidadMinKm, persistenciaHoras, periodo, ventana }
+ */
+function calcularContextoNiebla(serieZona) {
+  const vacio = {
+    activa: false,
+    visibilidadMinKm: null,
+    persistenciaHoras: 0,
+    periodo: null,
+    ventana: { inicio: null, fin: null, duracionHoras: 0 }
+  };
+
+  if (!Array.isArray(serieZona) || serieZona.length < 192) {
+    return vacio;
+  }
+
+  const ventana = serieZona.slice(168, 192);
+
+  const horasNiebla = [];
+  for (let i = 0; i < ventana.length; i++) {
+    const h = ventana[i];
+    if (h.visibility_km !== undefined && h.visibility_km !== null && h.visibility_km <= 2.0) {
+      horasNiebla.push({ i, vis: h.visibility_km, horaAbsoluta: 168 + i });
+    }
+  }
+
+  if (horasNiebla.length === 0) return vacio;
+
+  const visMin = Math.min(...horasNiebla.map(x => x.vis));
+  const horaInicio = horasNiebla[0].horaAbsoluta % 24;
+  const horaFin = horasNiebla[horasNiebla.length - 1].horaAbsoluta % 24;
+
+  let maxConsecutivas = 1;
+  let actual = 1;
+  for (let i = 1; i < horasNiebla.length; i++) {
+    if (horasNiebla[i].i === horasNiebla[i - 1].i + 1) {
+      actual++;
+      if (actual > maxConsecutivas) maxConsecutivas = actual;
+    } else {
+      actual = 1;
+    }
+  }
+
+  function clasificarPeriodo(hora) {
+    if (hora < 6) return 'MADRUGADA';
+    if (hora < 12) return 'MAÑANA';
+    if (hora < 18) return 'TARDE';
+    return 'NOCHE';
+  }
+
+  const periodoInicio = clasificarPeriodo(horaInicio);
+  const periodoFin = clasificarPeriodo(horaFin);
+  const periodo = periodoInicio === periodoFin ? periodoInicio : 'MIXTO';
+
+  return {
+    activa: true,
+    visibilidadMinKm: parseFloat(visMin.toFixed(2)),
+    persistenciaHoras: maxConsecutivas,
+    periodo,
+    ventana: {
+      inicio: `${String(horaInicio).padStart(2, '0')}:00`,
+      fin: `${String(horaFin).padStart(2, '0')}:00`,
+      duracionHoras: maxConsecutivas
+    }
+  };
+}
+
+
 export function evaluarLocalidadRunner(localidad, serieZona, contexto = {}) {
   const { alertaSMN = null, zonaSinDatos = false } = contexto;
   const zonaId = localidad.zona_id;
@@ -122,7 +194,9 @@ export function evaluarLocalidadRunner(localidad, serieZona, contexto = {}) {
         causa = `Vía única de terracería/brecha vulnerable a corte total por lodo.`;
       }
 
-      if (nivel === 1 && (lluviaEfectiva24h >= 8.0 || saturacionSuelo >= 30.0 || visMinHoy <= 2.0)) {
+      // PEND-06 (29/10/2026): la niebla NO dispara nivel. Queda como contexto.
+      // Paridad con el motor canónico `riskEvaluator.js`.
+      if (nivel === 1 && (lluviaEfectiva24h >= 8.0 || saturacionSuelo >= 30.0)) {
         nivel = 2;
         vectorDominante = "VIGILANCIA_NORMAL";
 
@@ -130,15 +204,9 @@ export function evaluarLocalidadRunner(localidad, serieZona, contexto = {}) {
         if (lluviaEfectiva24h >= 8.0) {
           tituloDiagnostico = "Vigilancia por Precipitación Activa";
           causa = `Precipitación activa en las últimas 24h (${lluviaEfectiva24h} mm). Suelo húmedo en valles y lomas de transición.`;
-        } else if (saturacionSuelo >= 30.0) {
+        } else {
           tituloDiagnostico = "Vigilancia por Suelo Saturado";
           causa = `Suelo con humedad acumulada (${saturacionSuelo} mm de saturación). Sin lluvia activa, pero terreno sensible a nuevos eventos.`;
-        } else if (visMinHoy <= 2.0) {
-          tituloDiagnostico = "Vigilancia por Niebla Densa";
-          causa = `Visibilidad reducida a ${visMinHoy} km. Niebla densa en valles y lomas de transición.`;
-        } else {
-          tituloDiagnostico = "Vigilancia Preventiva";
-          causa = "Condiciones de vigilancia activa en la zona.";
         }
       }
     }
@@ -180,6 +248,9 @@ export function evaluarLocalidadRunner(localidad, serieZona, contexto = {}) {
       rafagaMaximaKmh: rafagaMaxHoy,
       visibilidadMinKm: visMinHoy
     },
-    protocolo: "Consulte al coordinador de Cáritas"
+    protocolo: "Consulte al coordinador de Cáritas",
+    contexto: {
+      niebla: calcularContextoNiebla(serieZona)
+    }
   };
 }

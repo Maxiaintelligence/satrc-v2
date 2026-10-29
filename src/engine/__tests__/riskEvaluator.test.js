@@ -210,16 +210,32 @@ describe('riskEvaluator — Las 6 reglas del motor', () => {
       expect(res.estado_alerta).toBe('VIGILANCIA');
     });
 
-    it('Niebla densa (visibilidad <= 2km) sin lluvia → N2 (N18)', () => {
+    it('Niebla densa SIN lluvia NI saturación NO dispara N2 bajo PEND-06 → N1 con contexto.niebla', () => {
       const localidad = mockLocalidad({
         zona_id: 'HUA',
         topografia: { altitud_msnm: 1500, pendiente_max_deg: 10, relieve: 'MESETA', twi: 10 }
       });
-      // Visibilidad 1.5km, sin lluvia → debe disparar N2 por niebla
+      // Visibilidad 1.5km, sin lluvia ni saturación → N1 (la niebla ya no dispara nivel)
       const serie = mockSerie({ lluvia_mm: 0, temperatura_c: 15, visibilidad_km: 1.5 });
       const res = evaluarLocalidad(localidad, serie, {});
+      expect(res.nivel_alerta).toBe(1);
+      expect(res.diagnostico.titulo).not.toMatch(/Niebla/i);
+      expect(res.contexto?.niebla?.activa).toBe(true);
+      expect(res.contexto?.niebla?.visibilidadMinKm).toBeLessThanOrEqual(2.0);
+    });
+
+    it('Niebla + lluvia >= 8mm SÍ dispara N2, y el disparador es la lluvia (no la niebla)', () => {
+      const localidad = mockLocalidad({
+        zona_id: 'HUA',
+        topografia: { altitud_msnm: 1500, pendiente_max_deg: 10, relieve: 'MESETA', twi: 10 }
+      });
+      // 0.5 mm/h × 24 = 12 mm de lluvia → dispara N2 por lluvia.
+      // La visibilidad de 1.5 km también existe, pero el disparador es la lluvia.
+      const serie = mockSerie({ lluvia_mm: 0.5, temperatura_c: 15, visibilidad_km: 1.5 });
+      const res = evaluarLocalidad(localidad, serie, {});
       expect(res.nivel_alerta).toBe(2);
-      expect(res.diagnostico.titulo).toMatch(/Niebla/i);
+      expect(res.diagnostico.titulo).toMatch(/Precipitación/i);
+      expect(res.diagnostico.titulo).not.toMatch(/Niebla/i);
     });
 
     it('Sin lluvia, sin niebla, sin saturación → N1', () => {
@@ -295,6 +311,54 @@ describe('riskEvaluator — Las 6 reglas del motor', () => {
       expect(res.diagnostico.titulo).toMatch(/Inundaci[oó]n/i);
     });
   });
+
+  describe('Contexto de niebla (PEND-06, informativo, no dispara nivel)', () => {
+    it('Niebla de 2 h en madrugada → nivel N1 + contexto.niebla.periodo = MADRUGADA', () => {
+      const localidad = mockLocalidad({
+        zona_id: 'HUA',
+        topografia: { altitud_msnm: 1500, pendiente_max_deg: 10, relieve: 'MESETA', twi: 10 }
+      });
+      const serie = mockSerie({ lluvia_mm: 0, temperatura_c: 15, visibilidad_km: 20 });
+      serie[168].visibility_km = 0.2;
+      serie[169].visibility_km = 0.5;
+      const res = evaluarLocalidad(localidad, serie, {});
+      expect(res.nivel_alerta).toBe(1);
+      expect(res.contexto.niebla.activa).toBe(true);
+      expect(res.contexto.niebla.periodo).toBe('MADRUGADA');
+      expect(res.contexto.niebla.persistenciaHoras).toBe(2);
+      expect(res.contexto.niebla.ventana.inicio).toBe('00:00');
+      expect(res.contexto.niebla.ventana.fin).toBe('01:00');
+    });
+
+    it('Sin niebla → contexto.niebla.activa = false', () => {
+      const localidad = mockLocalidad({
+        zona_id: 'HUA',
+        topografia: { altitud_msnm: 1500, pendiente_max_deg: 10, relieve: 'MESETA', twi: 10 }
+      });
+      const serie = mockSerie({ lluvia_mm: 0, temperatura_c: 15, visibilidad_km: 20 });
+      const res = evaluarLocalidad(localidad, serie, {});
+      expect(res.contexto.niebla.activa).toBe(false);
+      expect(res.contexto.niebla.periodo).toBeNull();
+    });
+
+    it('Niebla persistente que cruza madrugada y mañana → periodo MIXTO', () => {
+      const localidad = mockLocalidad({
+        zona_id: 'HUA',
+        topografia: { altitud_msnm: 1500, pendiente_max_deg: 10, relieve: 'MESETA', twi: 10 }
+      });
+      const serie = mockSerie({ lluvia_mm: 0, temperatura_c: 15, visibilidad_km: 20 });
+      // Niebla de 00:00 a 08:00 (índices 168-175): cruza MADRUGADA (00-05) y MAÑANA (06-11).
+      for (let i = 168; i <= 175; i++) serie[i].visibility_km = 0.3;
+      const res = evaluarLocalidad(localidad, serie, {});
+      expect(res.nivel_alerta).toBe(1);
+      expect(res.contexto.niebla.activa).toBe(true);
+      expect(res.contexto.niebla.periodo).toBe('MIXTO');
+      expect(res.contexto.niebla.persistenciaHoras).toBe(8);
+      expect(res.contexto.niebla.ventana.inicio).toBe('00:00');
+      expect(res.contexto.niebla.ventana.fin).toBe('07:00');
+    });
+  });
+
 
   describe('H-MOTOR-06 — Aviso SMN solo a estados afectados', () => {
     it('Localidad en Puebla + aviso solo para VER → NO eleva el piso de lluvia', () => {

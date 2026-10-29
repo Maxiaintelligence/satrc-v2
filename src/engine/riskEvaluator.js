@@ -33,6 +33,82 @@ function calcularAPI7DiasPrevios(serieHoraria) {
   return parseFloat(api.toFixed(1));
 }
 
+/**
+ * Calcula el contexto de niebla (informativo, NO dispara nivel).
+ * Desde PEND-06 (29/10/2026): bajo DEC-011, la niebla es información contextual
+ * que SARA expone en el reporte, no un disparador de alerta.
+ *
+ * @param {Array} serieHoraria - Serie completa de consenso (192+ horas).
+ * @returns {Object} { activa, visibilidadMinKm, persistenciaHoras, periodo, ventana }
+ *   - periodo: 'MADRUGADA' (00-05) | 'MAÑANA' (06-11) | 'TARDE' (12-17) | 'NOCHE' (18-23) | 'MIXTO' | null
+ *   - ventana: { inicio: 'HH:00', fin: 'HH:00', duracionHoras: number }
+ */
+function calcularContextoNiebla(serieHoraria) {
+  const vacio = {
+    activa: false,
+    visibilidadMinKm: null,
+    persistenciaHoras: 0,
+    periodo: null,
+    ventana: { inicio: null, fin: null, duracionHoras: 0 }
+  };
+
+  if (!Array.isArray(serieHoraria) || serieHoraria.length < 192) {
+    return vacio;
+  }
+
+  // Ventana de 24 h: índices 168-191 (próximas 24 h desde "ahora")
+  const ventana = serieHoraria.slice(168, 192);
+
+  const horasNiebla = [];
+  for (let i = 0; i < ventana.length; i++) {
+    const h = ventana[i];
+    if (h.visibility_km !== undefined && h.visibility_km !== null && h.visibility_km <= 2.0) {
+      horasNiebla.push({ i, vis: h.visibility_km, horaAbsoluta: 168 + i });
+    }
+  }
+
+  if (horasNiebla.length === 0) return vacio;
+
+  const visMin = Math.min(...horasNiebla.map(x => x.vis));
+  const horaInicio = horasNiebla[0].horaAbsoluta % 24;
+  const horaFin = horasNiebla[horasNiebla.length - 1].horaAbsoluta % 24;
+
+  // Persistencia: contar horas consecutivas máximas
+  let maxConsecutivas = 1;
+  let actual = 1;
+  for (let i = 1; i < horasNiebla.length; i++) {
+    if (horasNiebla[i].i === horasNiebla[i - 1].i + 1) {
+      actual++;
+      if (actual > maxConsecutivas) maxConsecutivas = actual;
+    } else {
+      actual = 1;
+    }
+  }
+
+  function clasificarPeriodo(hora) {
+    if (hora < 6) return 'MADRUGADA';
+    if (hora < 12) return 'MAÑANA';
+    if (hora < 18) return 'TARDE';
+    return 'NOCHE';
+  }
+
+  const periodoInicio = clasificarPeriodo(horaInicio);
+  const periodoFin = clasificarPeriodo(horaFin);
+  const periodo = periodoInicio === periodoFin ? periodoInicio : 'MIXTO';
+
+  return {
+    activa: true,
+    visibilidadMinKm: parseFloat(visMin.toFixed(2)),
+    persistenciaHoras: maxConsecutivas,
+    periodo,
+    ventana: {
+      inicio: `${String(horaInicio).padStart(2, '0')}:00`,
+      fin: `${String(horaFin).padStart(2, '0')}:00`,
+      duracionHoras: maxConsecutivas
+    }
+  };
+}
+
 export function evaluarLocalidad(localidad, serieHoraria, contexto = {}) {
   const umbralDeslave = calcularUmbralDeslave(localidad);
   const apiPrevio = calcularAPI7DiasPrevios(serieHoraria);
@@ -170,8 +246,12 @@ export function evaluarLocalidad(localidad, serieHoraria, contexto = {}) {
     }
 
     // --- REGLA DE VIGILANCIA PREVENTIVA EN VALLES DE TRANSICIÓN ──► NIVEL 2 AMARILLO ---
-    // Si hay lluvia activa (8 a 30 mm) o bancos de niebla en valles/lomas suaves (10° a 24°), activa legítimamente Nivel 2
-    if (nivelAlerta === 1 && (lluviaEfectiva24h >= 8.0 || saturacionTotalSuelo >= 30.0 || visibilidadMinKm <= 2.0)) {
+    // PEND-06 (29/10/2026): la niebla YA NO dispara nivel.
+    // Bajo DEC-011 (precisión sobre cobertura), la niebla es información contextual
+    // que SARA expone en el reporte, no un disparador de alerta. Se calcula en
+    // contexto.niebla al final de esta función.
+    // Disparadores vigentes de N2: lluvia efectiva >= 8 mm, o saturación >= 30 mm.
+    if (nivelAlerta === 1 && (lluviaEfectiva24h >= 8.0 || saturacionTotalSuelo >= 30.0)) {
       nivelAlerta = 2; // AMARILLO VIGILANCIA
 
       // N20: identificar el disparador real de la vigilancia
@@ -179,15 +259,9 @@ export function evaluarLocalidad(localidad, serieHoraria, contexto = {}) {
       if (lluviaEfectiva24h >= 8.0) {
         tituloN2 = "Vigilancia por Precipitación Activa";
         causaN2 = `Precipitación activa en las últimas 24h (${lluviaEfectiva24h.toFixed(1)} mm). Suelo húmedo en valles y lomas de transición.`;
-      } else if (saturacionTotalSuelo >= 30.0) {
+      } else {
         tituloN2 = "Vigilancia por Suelo Saturado";
         causaN2 = `Suelo con humedad acumulada (${saturacionTotalSuelo} mm de saturación). Sin lluvia activa, pero terreno sensible a nuevos eventos.`;
-      } else if (visibilidadMinKm <= 2.0) {
-        tituloN2 = "Vigilancia por Niebla Densa";
-        causaN2 = `Visibilidad reducida a ${visibilidadMinKm.toFixed(1)} km. Niebla densa en valles y lomas de transición.`;
-      } else {
-        tituloN2 = "Vigilancia Preventiva";
-        causaN2 = "Condiciones de vigilancia activa en la zona.";
       }
 
       diagnostico = {
@@ -254,6 +328,9 @@ export function evaluarLocalidad(localidad, serieHoraria, contexto = {}) {
       esLaderaHabitada: esLadera,
       esRiberaVulnerable: distRio <= 0.8
     },
-    protocolo: "Consulte al coordinador de Cáritas"
+    protocolo: "Consulte al coordinador de Cáritas",
+    contexto: {
+      niebla: calcularContextoNiebla(serieHoraria)
+    }
   };
 }

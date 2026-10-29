@@ -135,6 +135,15 @@ describe('riskEvaluatorRunner — gemelo del runner (H4.1)', () => {
           }),
           serie: mockSerie({ lluvia_mm: 1.0, temperatura_c: 15 }),
           esperadoNivel: 3
+        },
+        {
+          nombre: 'Niebla sin lluvia ni saturación → N1 en ambos (PEND-06)',
+          localidad: mockLocalidad({
+            zona_id: 'HUA',
+            topografia: { altitud_msnm: 1500, pendiente_max_deg: 10, relieve: 'MESETA', twi: 10 }
+          }),
+          serie: mockSerie({ lluvia_mm: 0, temperatura_c: 15, visibilidad_km: 1.5 }),
+          esperadoNivel: 1
         }
       ];
 
