@@ -468,6 +468,7 @@ async function ejecutarSARA() {
         body: JSON.stringify({
           model: "openai/gpt-oss-120b",
           temperature: 0.1,
+          max_completion_tokens: 800, // N-REPORTE-06: Evita que Groq reserve ~2048 tokens por defecto
           response_format: { type: "json_object" },
           messages: [
             { role: "system", content: `Eres SARA, Meteoróloga de Cáritas Pastoral Social en la Arquidiócesis de Tulancingo. Hora oficial de México: ${horaMexicoStr}.

@@ -318,29 +318,58 @@ export async function generarReporteDiario({
     focosCriticos: focos
   });
 
-  // 5. Llamar a Groq
+  // 5. Llamar a Groq (con retry para 429 y límite de tokens ajustado)
   console.log('   Llamando a Groq...');
-  const respuestaGroq = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-    method: "POST",
-    signal: AbortSignal.timeout(TIMEOUT_GROQ_MS),
-    headers: {
-      "Authorization": `Bearer ${apiKeyGroq.trim()}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      model: "openai/gpt-oss-120b",
-      temperature: 0.1,
-      max_completion_tokens: 4096, // 🔥 FIX H8.5: Asegura cierre del JSON en reporte diario
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt }
-      ]
-    })
-  });
+  const MAX_REINTENTOS_DIARIO = 1;
+  const DELAY_REINTENTO_MS = 30000; // 30 segundos
+  let respuestaGroq = null;
+  let ultimoErrorDiario = null;
 
-  if (!respuestaGroq.ok) {
-    throw new Error(`Groq API HTTP ${respuestaGroq.status}`);
+  for (let intento = 1; intento <= MAX_REINTENTOS_DIARIO + 1; intento++) {
+    try {
+      respuestaGroq = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        signal: AbortSignal.timeout(TIMEOUT_GROQ_MS),
+        headers: {
+          "Authorization": `Bearer ${apiKeyGroq.trim()}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          model: "openai/gpt-oss-120b",
+          temperature: 0.1,
+          max_completion_tokens: 3000, // N-REPORTE-06: Reducido de 4096 a 3000 para evitar 413
+          response_format: { type: "json_object" },
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt }
+          ]
+        })
+      });
+
+      if (respuestaGroq.status === 429) {
+        if (intento <= MAX_REINTENTOS_DIARIO) {
+          console.warn(`   [N28] Groq 429 (intento ${intento}/${MAX_REINTENTOS_DIARIO + 1}). Reintentando en ${DELAY_REINTENTO_MS / 1000}s...`);
+          await new Promise(r => setTimeout(r, DELAY_REINTENTO_MS));
+          continue;
+        }
+        throw new Error(`Groq API HTTP 429 (agotados ${MAX_REINTENTOS_DIARIO} reintentos)`);
+      }
+
+      if (!respuestaGroq.ok) {
+        throw new Error(`Groq API HTTP ${respuestaGroq.status}`);
+      }
+
+      break; // Éxito, salir del bucle
+    } catch (e) {
+      ultimoErrorDiario = e;
+      if (intento > MAX_REINTENTOS_DIARIO || respuestaGroq?.status !== 429) {
+        throw e;
+      }
+    }
+  }
+
+  if (!respuestaGroq || !respuestaGroq.ok) {
+    throw ultimoErrorDiario || new Error("Fallo desconocido en Groq");
   }
 
   const dataGroq = await respuestaGroq.json();
