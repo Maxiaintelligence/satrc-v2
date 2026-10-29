@@ -201,8 +201,31 @@ describe('riskEvaluatorRunner — gemelo del runner (H4.1)', () => {
       const resRunner = evaluarLocalidadRunner(localidad, serie, { alertaSMN: null, zonaSinDatos: false });
       const resFrontend = evaluarLocalidad(localidad, serie, { alertaSMN: null });
 
-      expect(resRunner.nivel_alerta).toBe(4);
+      expect(resRunner.nivel_alerta).toBe(3);
       expect(resFrontend.nivel_alerta).toBe(3);
+    });
+  });
+
+  describe("Test 7 — Divergencia 4: Regla 4 graduada a N4 por poblacion aguas arriba", () => {
+    it("con poblacion >= 50k y lluvia 35-64mm, ambos motores asignan N4", () => {
+      const localidad = mockLocalidad({
+        zona_id: "HUA",
+        topografia: { altitud_msnm: 400, pendiente_max_deg: 8, relieve: "MESETA", twi: 13 },
+        hidrologia: {
+          subcuenca_cve: "RH27Bb",
+          subcuenca_nom: "R. Necaxa",
+          posicion: "BAJA",
+          distancia_cauce_km: 0.5,
+          tc_horas: 6,
+          poblacion_aguas_arriba: 60000
+        }
+      });
+      const serie = mockSerie({ lluvia_mm: 2.0, temperatura_c: 18 });
+      const resRunner = evaluarLocalidadRunner(localidad, serie, { alertaSMN: null, zonaSinDatos: false });
+      const resFrontend = evaluarLocalidad(localidad, serie, { alertaSMN: null });
+
+      expect(resRunner.nivel_alerta).toBe(4);
+      expect(resFrontend.nivel_alerta).toBe(4);
     });
   });
 });

@@ -181,10 +181,14 @@ export function evaluarLocalidadRunner(localidad, serieZona, contexto = {}) {
       }
 
       if (distRio <= 0.8 && twi >= 12.0 && lluviaEfectiva24h >= 35.0 && !esAltiplano) {
-        nivel = Math.max(nivel, 4);
-        vectorDominante = "INUNDACION_FLUVIAL";
-        tituloDiagnostico = "Desbordamiento e Inundación Ribereña";
-        causa = `Comunidad ribereña a ${distRio} km del cauce en punto de convergencia de flujo.`;
+        const poblacionAguasArriba = localidad.hidrologia.poblacion_aguas_arriba || 0;
+        const severidadFluvial = (lluviaEfectiva24h >= 65.0 || poblacionAguasArriba >= 50000) ? 4 : 3;
+        if (severidadFluvial >= nivel) {
+          nivel = severidadFluvial;
+          vectorDominante = "INUNDACION_FLUVIAL";
+          tituloDiagnostico = "Desbordamiento e Inundación Ribereña";
+          causa = `Comunidad ribereña a ${distRio} km del cauce en punto de convergencia de flujo.`;
+        }
       }
 
       if (esTerraceria && (lluviaEfectiva24h >= 20.0 || saturacionSuelo >= 50.0) && nivel < 3) {
