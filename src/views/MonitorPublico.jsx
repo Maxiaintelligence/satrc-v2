@@ -462,14 +462,14 @@ export default function MonitorPublico() {
             <Bot className="w-5 h-5 text-amber-400" />
           </div>
           <div className="space-y-1">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs font-black text-amber-400 uppercase tracking-wide">
-                Diagnóstico de Situación • Agente SARA
+                SARA: Sistema de Alerta y Riesgos Atmosféricos
               </span>
               <span className="text-[10px] text-slate-500 font-mono">Orientación Comunitaria</span>
             </div>
             <p className="text-xs md:text-sm text-slate-200 leading-relaxed font-normal">
-              {generarPronosticoComunitario(localidadActiva, evaluacionLocal, datosConsenso, null)}
+              {generarPronosticoComunitario(localidadActiva, evaluacionLocal, datosConsenso, null, pestanaActiva)}
             </p>
           </div>
         </div>

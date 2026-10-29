@@ -2,12 +2,12 @@
  * Genera el pronóstico comunitario textual para el Monitor Público.
  * P15 (29/10/2026): Motor heurístico multiamenaza, determinista y con variaciones.
  */
-export function generarPronosticoComunitario(localidad, evaluacion, datosConsenso, alertaSMN) {
+export function generarPronosticoComunitario(localidad, evaluacion, datosConsenso, alertaSMN, pestanaActiva = 'hoy') {
   if (!localidad) return "";
   
   const nombre = localidad.nombre;
   const hoy = new Date().toISOString().slice(0, 10);
-  const semillaStr = nombre + hoy + (evaluacion?.nivel_alerta || 1);
+  const semillaStr = nombre + hoy + (evaluacion?.nivel_alerta || 1) + pestanaActiva;
 
   function elegirVariante(seed, totalVariantes) {
     let hash = 0;
@@ -57,8 +57,12 @@ export function generarPronosticoComunitario(localidad, evaluacion, datosConsens
 
   // 3. CLIMA MULTIVARIABLE (N1)
   let lluvia24h = 0, rafagaMax = 0, tempMin = 99, hayNiebla = false;
-  if (datosConsenso && datosConsenso.length >= 192) {
-    const ventana = datosConsenso.slice(168, 192);
+  if (datosConsenso && datosConsenso.length >= 240) {
+    let inicioVentana = 168;
+    if (pestanaActiva === 'manana') inicioVentana = 192;
+    if (pestanaActiva === 'pasado') inicioVentana = 216;
+    
+    const ventana = datosConsenso.slice(inicioVentana, inicioVentana + 24);
     lluvia24h = ventana.reduce((acc, h) => acc + (h.lluvia_mm || 0), 0);
     rafagaMax = Math.max(...ventana.map(h => h.rafagas_kmh || 0));
     tempMin = Math.min(...ventana.map(h => h.temperatura_c || 99));
