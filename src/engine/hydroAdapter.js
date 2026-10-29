@@ -51,6 +51,13 @@ export function evaluarHidrologico(localidad, serieHoraria, contexto = {}) {
     nivelContinuo = 4.0;
   }
 
+  // N-MOTOR-16: el campo proximidad_umbral_n4 solo tiene sentido cuando la sigmoide
+  // de N3 se aplicó al nivel continuo. En N1/N2/N4 se reporta null.
+  // Condición idéntica al if de la línea 36.
+  const proximidadSoloN3 = resOriginal.nivel_alerta === 3 && pendiente >= 25 && saturacion > 30
+    ? parseFloat(sigmoide(saturacion, 62.0, 0.5).toFixed(2))
+    : null;
+
   // 4. Retornar el objeto preservando todo el diagnóstico original
   return {
     ...resOriginal,
@@ -59,7 +66,7 @@ export function evaluarHidrologico(localidad, serieHoraria, contexto = {}) {
     datos_tecnicos: {
       saturacion_suelo_mm: parseFloat(saturacion.toFixed(1)),
       pendiente_grados: parseFloat(pendiente.toFixed(1)),
-      proximidad_umbral_n4: parseFloat(sigmoide(saturacion, 62.0, 0.5).toFixed(2))
+      proximidad_umbral_n4: proximidadSoloN3
     }
   };
 }

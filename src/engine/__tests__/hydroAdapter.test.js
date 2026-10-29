@@ -137,4 +137,49 @@ describe('hydroAdapter.js', () => {
     expect(res.nivel_alerta).toBe(1);
     expect(res.nivel_alerta_continuo).toBe(1.0);
   });
+
+  it('7. proximidad_umbral_n4 es null en N1', () => {
+    const loc = mockLocalidad();
+    const serie = mockSerie({ lluvia_mm: 0 });
+    const res = evaluarHidrologico(loc, serie);
+    expect(res.nivel_alerta).toBe(1);
+    expect(res.datos_tecnicos.proximidad_umbral_n4).toBeNull();
+  });
+
+  it('8. proximidad_umbral_n4 es null en N2', () => {
+    const loc = mockLocalidad();
+    // 0.5 mm/h × 24h = 12 mm → Regla 6 dispara N2 (lluvia >= 8mm)
+    const serie = mockSerie({ lluvia_mm: 0.5 });
+    const res = evaluarHidrologico(loc, serie);
+    expect(res.nivel_alerta).toBe(2);
+    expect(res.datos_tecnicos.proximidad_umbral_n4).toBeNull();
+  });
+
+  it('9. proximidad_umbral_n4 es null en N4', () => {
+    const loc = mockLocalidad({
+      zona_id: 'HUA',
+      topografia: { altitud_msnm: 1500, pendiente_max_deg: 50, relieve: 'LADERA', twi: 13 }
+    });
+    // 5 mm/h × 24h = 120 mm → Regla 2 dispara N4 (pendiente >= 45°, saturación >= 65mm)
+    const serie = mockSerie({ lluvia_mm: 5.0 });
+    const res = evaluarHidrologico(loc, serie);
+    expect(res.nivel_alerta).toBe(4);
+    expect(res.datos_tecnicos.proximidad_umbral_n4).toBeNull();
+  });
+
+  it('10. proximidad_umbral_n4 es número entre 0 y 1 en N3 por deslave moderado', () => {
+    const loc = mockLocalidad({
+      zona_id: 'HUA',
+      topografia: { altitud_msnm: 1500, pendiente_max_deg: 30, relieve: 'LADERA', twi: 10 }
+    });
+    // 3 mm/h × 24h = 72 mm → Regla 3 dispara N3 (pendiente 25-44°, saturación >= 65mm)
+    const serie = mockSerie({ lluvia_mm: 3.0 });
+    const res = evaluarHidrologico(loc, serie);
+    expect(res.nivel_alerta).toBe(3);
+    expect(res.datos_tecnicos.proximidad_umbral_n4).not.toBeNull();
+    expect(typeof res.datos_tecnicos.proximidad_umbral_n4).toBe('number');
+    expect(res.datos_tecnicos.proximidad_umbral_n4).toBeGreaterThanOrEqual(0);
+    expect(res.datos_tecnicos.proximidad_umbral_n4).toBeLessThanOrEqual(1);
+  });
+
 });
