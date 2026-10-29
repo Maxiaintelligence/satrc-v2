@@ -22,7 +22,7 @@
 import { put, list } from '@vercel/blob';
 import { repararMojibake } from '../../src/lib/compartido/mojibake.js';
 import { construirBloqueRegional } from '../../src/lib/compartido/regionales.js';
-import { REGLAS_MULTIVECTOR } from '../../src/lib/compartido/promptsMultivector.js';
+import { REGLAS_MULTIVECTOR, REGLAS_CONTEXTO_NIEBLA } from '../../src/lib/compartido/promptsMultivector.js';
 import { calcularNuevaEntradaBitacora } from '../../src/lib/compartido/bitacora.js';
 
 const TIMEOUT_GROQ_MS = 45000; // 45s (el reporte es más largo que el on-demand)
@@ -175,7 +175,9 @@ REGLAS OBLIGATORIAS:
 14. Si el bloque "DATOS REGIONALES" menciona ZONAS SIN DATOS, decláralo explícitamente en la sección I.
 15. FORMATO CON VIÑETAS: usa viñetas en las secciones 0, II, III, IV y V.
 ${REGLAS_MULTIVECTOR}
-16. Responde ÚNICAMENTE un objeto JSON con las 7 secciones exactas:
+17. CONTROL ESTRICTO DE EMERGENCIAS: Si Nivel 4 = 0 y Nivel 3 = 0, BAJO NINGUNA CIRCUNSTANCIA uses "suspender actividades", "evacuar" o "emergencia". Usa lenguaje de precaución y vigilancia.
+${REGLAS_CONTEXTO_NIEBLA}
+18. Responde ÚNICAMENTE un objeto JSON con las 7 secciones exactas:
 
 {
   "seccion_0_decision": "DECISIÓN OPERATIVA del día: fenómeno principal, zonas afectadas, acción inmediata. Máximo 3 líneas.",
@@ -211,6 +213,14 @@ SEMÁFORO DIOCESANO ACTUAL (sobre 405 localidades):
 - Nivel 1 (Estables): ${semaforo?.totalNivel1 ?? 0} localidades
 
 COMUNIDADES CRÍTICAS BAJO TENSIÓN (N3-N4): ${JSON.stringify(focosCriticos || [])}.
+
+CONTEXTO DE NIEBLA (informativo, no dispara alerta): ${JSON.stringify(
+  (focosCriticos || []).map(f => ({
+    localidad: f.nombre,
+    municipio: f.municipio,
+    niebla: f.contexto?.niebla || null
+  })).filter(x => x.niebla?.activa === true)
+)}.
 
 Devuelve la respuesta en formato JSON estricto.`;
 }

@@ -2,7 +2,7 @@ import crypto from 'crypto';
 import { leerJSONBlob, escribirJSONBlob } from '../src/lib/compartido/googleDrive.js';
 import { repararMojibake } from '../src/lib/compartido/mojibake.js';
 import { normalizarDatosRegionales, construirBloqueRegional } from '../src/lib/compartido/regionales.js';
-import { REGLAS_MULTIVECTOR } from '../src/lib/compartido/promptsMultivector.js';
+import { REGLAS_MULTIVECTOR, REGLAS_CONTEXTO_NIEBLA } from '../src/lib/compartido/promptsMultivector.js';
 
 const BLOQUE_GENESIS = "0000000000000000000000000000000000000000000000000000000000000000";
 const MAX_REGISTROS_BITACORA = 500;
@@ -190,6 +190,8 @@ REGLAS:
 
 ${REGLAS_MULTIVECTOR}
 
+${REGLAS_CONTEXTO_NIEBLA}
+
 Responde ÚNICAMENTE un objeto JSON con las 7 secciones exactas.`;
 
     const userPrompt = `Fecha y hora de emisión: ${fechaDiaMexico} a las ${horaExactaMexico}.
@@ -207,6 +209,14 @@ SEMÁFORO DIOCESANO ACTUAL (sobre 405 localidades):
 - Nivel 1 (Estables): ${resumenSeveridad?.totalNivel1 ?? 0} localidades
 
 COMUNIDADES CRÍTICAS BAJO TENSIÓN (N3-N4): ${JSON.stringify(focosCriticos || [])}.
+
+CONTEXTO DE NIEBLA (informativo, no dispara alerta): ${JSON.stringify(
+  (focosCriticos || []).map(f => ({
+    localidad: f.nombre,
+    municipio: f.municipio,
+    niebla: f.contexto?.niebla || null
+  })).filter(x => x.niebla?.activa === true)
+)}.
 
 Devuelve la respuesta en formato JSON estricto.`;
 
