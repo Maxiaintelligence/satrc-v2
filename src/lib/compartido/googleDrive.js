@@ -16,6 +16,7 @@ export async function leerJSONBlob(nombreArchivo) {
   }
 }
 
+// --- INICIO DEL NUEVO BLOQUE ---
 export async function escribirJSONBlob(nombreArchivo, contenido) {
   const url = process.env.GOOGLE_SCRIPT_URL;
   if (!url) throw new Error("Falta GOOGLE_SCRIPT_URL");
@@ -34,6 +35,6 @@ export async function escribirJSONBlob(nombreArchivo, contenido) {
     return await res.json();
   } catch (e) {
     console.error(`Error escribiendo ${nombreArchivo} en Drive:`, e.message);
-    return null;
+    throw e;
   }
 }
