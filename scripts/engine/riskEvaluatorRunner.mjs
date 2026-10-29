@@ -12,8 +12,8 @@
  *  1. `api7DiasPrevios`: runner retorna 0 si serie < 168h; frontend retorna 15.0.
  *  2. `eventoActual`: runner retorna [] si serie < 192h; frontend retorna serie.slice(0, 24).
  *  3. `calcularUmbralDeslave`: frontend lo calcula dinámicamente; runner NO lo calcula.
- *  4. Regla 4 (inundación fluvial): frontend gradúa N3/N4 según `poblacionAguasArriba`;
- *     runner SIEMPRE asigna N4 (sin usar `poblacionAguasArriba`).
+ *  4. Regla 4 (inundación fluvial): frontend y runner gradúan N3/N4 según `poblacionAguasArriba`.
+ *     Alineado el 29/10/2026 (commit `e442efb`).
  *  5. `tiempos`: runner hardcodea `{ inicio: "En curso", picoMaximo: "Periodo activo" }`;
  *     frontend calcula `{ inicio, picoMaximo, crestaImpacto }` desde `horaPico`/`horaInicio`.
  *  6. Shape de retorno: runner expone `vector_dominante`, `sin_datos_regionales`,

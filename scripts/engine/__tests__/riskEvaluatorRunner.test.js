@@ -183,8 +183,8 @@ describe('riskEvaluatorRunner — gemelo del runner (H4.1)', () => {
     });
   });
 
-  describe('Test 6 — Divergencia 4: Regla 4 graduada por poblacion aguas arriba', () => {
-    it('con poblacion < 50k y lluvia 35-64mm, el runner asigna N4 (fijo) y el frontend N3 (graduado)', () => {
+  describe('Test 6 — Regla 4 graduada a N3 con poblacion < 50k (alineada 29/10/2026)', () => {
+    it('con poblacion < 50k y lluvia 35-64mm, ambos motores asignan N3', () => {
       const localidad = mockLocalidad({
         zona_id: 'HUA',
         topografia: { altitud_msnm: 400, pendiente_max_deg: 8, relieve: 'MESETA', twi: 13 },
@@ -206,7 +206,7 @@ describe('riskEvaluatorRunner — gemelo del runner (H4.1)', () => {
     });
   });
 
-  describe("Test 7 — Divergencia 4: Regla 4 graduada a N4 por poblacion aguas arriba", () => {
+  describe('Test 7 — Regla 4 graduada a N4 con poblacion >= 50k', () => {
     it("con poblacion >= 50k y lluvia 35-64mm, ambos motores asignan N4", () => {
       const localidad = mockLocalidad({
         zona_id: "HUA",
