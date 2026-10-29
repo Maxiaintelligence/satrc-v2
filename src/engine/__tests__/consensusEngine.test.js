@@ -291,4 +291,76 @@ describe('generarConsensoDeterminista', () => {
     }
   });
 
+  it('cape_jkg filtra nulls de GEM antes de aplicar Math.max (N-TEST-11)', () => {
+    const fs = require('fs');
+    const path = require('path');
+
+    // 1. Cargar fixture real de Open-Meteo
+    const fixture = JSON.parse(
+      fs.readFileSync(
+        path.join(__dirname, 'fixtures', 'openmeteo_sample.json'),
+        'utf-8'
+      )
+    );
+
+    // 2. Extraer las tres series de CAPE por modelo
+    const gfs = fixture.hourly.cape_gfs_seamless;
+    const icon = fixture.hourly.cape_icon_seamless;
+    const gem = fixture.hourly.cape_gem_seamless;
+
+    expect(gfs).toBeDefined();
+    expect(icon).toBeDefined();
+    expect(gem).toBeDefined();
+
+    // 3. Precondición: el fixture debe ejercitar el caso
+    //    (si el fixture se regenera y pierde el patrón, este test debe fallar)
+    const gemNulls = gem.filter(v => v === null).length;
+    const horasConGemNullYAlgunoValido = [];
+    for (let i = 0; i < gem.length; i++) {
+      if (gem[i] === null && (Number.isFinite(gfs[i]) || Number.isFinite(icon[i]))) {
+        horasConGemNullYAlgunoValido.push(i);
+      }
+    }
+
+    expect(gemNulls, 'el fixture debe tener al menos un null en GEM').toBeGreaterThan(0);
+    expect(
+      horasConGemNullYAlgunoValido.length,
+      'el fixture debe tener horas con GEM null y GFS o ICON válido'
+    ).toBeGreaterThan(0);
+
+    // 4. Construir la serie y verificar las 240 horas
+    const serie = generarConsensoDeterminista(fixture.hourly);
+    expect(serie).toHaveLength(240);
+
+    serie.forEach((h, i) => {
+      const gfsV = gfs[i];
+      const iconV = icon[i];
+      const gemV = gem[i];
+
+      const validos = [gfsV, iconV, gemV].filter(
+        v => v !== null && v !== undefined && Number.isFinite(v)
+      );
+
+      if (validos.length === 0) {
+        expect(h.cape_jkg, `posición ${i}: sin válidos → null`).toBeNull();
+      } else {
+        const esperado = parseFloat(Math.max(...validos).toFixed(1));
+        expect(h.cape_jkg, `posición ${i}`).toBe(esperado);
+      }
+    });
+
+    // 5. Diagnóstico legible: las 5 primeras horas del patrón conocido [3,4,5,6,7]
+    //    (Prueba C confirmó que son los primeros índices con GEM null y GFS/ICON válidos)
+    const horasDiagnostico = [3, 4, 5, 6, 7];
+    horasDiagnostico.forEach(i => {
+      expect(gem[i], `fixture gem[${i}] debe ser null`).toBeNull();
+      expect(
+        Number.isFinite(gfs[i]) || Number.isFinite(icon[i]),
+        `posición ${i}: GFS o ICON debe ser finito`
+      ).toBe(true);
+      const esperado = parseFloat(Math.max(gfs[i], icon[i]).toFixed(1));
+      expect(serie[i].cape_jkg, `posición ${i} (GEM null)`).toBe(esperado);
+    });
+  });
+
 });
