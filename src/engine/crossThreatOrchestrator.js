@@ -11,12 +11,14 @@ import { evaluarConvectivo } from './convectiveEvaluator.js';
 
 // Matriz de coeficientes de acoplamiento (gamma)
 // Representa la sinergia entre amenazas (0 = no interactúan, 1 = máxima interacción)
+// ADR-011 (29/10/2026): se eliminó TERMICO_HIDRO=0.10 porque duplicaba el par
+// simétrico con HIDRO_TERMICO=0.15. El acoplamiento efectivo hidro-térmico
+// pasa de 0.25 a 0.15 (-40 % de sobreestimación). Ver 08_DECISIONES.md.
 const GAMMAS = {
-  HIDRO_VIENTO: 0.20,    // Suelo saturado + viento = Árboles caídos (N3)
-  HIDRO_TERMICO: 0.15,   // Lluvia + frío = Vías congeladas (N3)
+  HIDRO_VIENTO: 0.20,      // Suelo saturado + viento = Árboles caídos (N3)
+  HIDRO_TERMICO: 0.15,     // Lluvia + frío = Vías congeladas (N3)
   CONVECTIVO_VIENTO: 0.30, // Tormenta + viento = Downburst (N4)
-  TERMICO_HIDRO: 0.10,   // Calor + sequía = Estrés hídrico
-  VIENTO_TERMICO: 0.05   // Viento frío = Sensación térmica extrema
+  VIENTO_TERMICO: 0.05     // Viento frío = Sensación térmica extrema
 };
 
 /**
@@ -136,11 +138,13 @@ export function evaluarMultiamenaza(localidad, serieHoraria, contexto = {}) {
   let nivelBase = Math.max(rH, rV, rT, rC);
 
   // 5. Términos de Acoplamiento No Lineal
+  // ADR-011 (29/10/2026): el acoplamiento hidro-térmico se aplica UNA sola vez
+  // (HIDRO_TERMICO=0.15). La versión anterior sumaba también TERMICO_HIDRO=0.10
+  // sobre el mismo producto simétrico, sobreestimando +0.37 en escenarios medios.
   let acoplamiento = 0;
   acoplamiento += calcularAcoplamiento(rH, rV, GAMMAS.HIDRO_VIENTO);
   acoplamiento += calcularAcoplamiento(rH, rT, GAMMAS.HIDRO_TERMICO);
   acoplamiento += calcularAcoplamiento(rC, rV, GAMMAS.CONVECTIVO_VIENTO);
-  acoplamiento += calcularAcoplamiento(rT, rH, GAMMAS.TERMICO_HIDRO);
   acoplamiento += calcularAcoplamiento(rV, rT, GAMMAS.VIENTO_TERMICO);
 
   // 6. Riesgo Total
