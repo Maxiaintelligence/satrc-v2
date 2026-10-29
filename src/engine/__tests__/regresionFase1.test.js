@@ -211,8 +211,11 @@ describe('Regresión Fase 1 — riskEvaluator', () => {
       expect(validacion.success).toBe(false);
     });
 
-    it('rechaza payload sin evaluaciones', () => {
-      const payloadInvalido = {
+    it('acepta payload con evaluaciones vacías [] (días tranquilos, H-DRIVE-02)', () => {
+      // H-DRIVE-02 (commit 3053e29, 28/10/2026): el schema acepta [] y null
+      // para representar días sin localidades en N3/N4. Antes exigía .min(1).
+      // Ver 04_HISTORIAL.md §6.2 y 02_ARQUITECTURA.md §7.
+      const payloadValido = {
         timestamp_iso: '2026-10-20T12:00:00Z',
         hora_local_mexico: '12:00 p.m.',
         semaforo: {
@@ -221,11 +224,11 @@ describe('Regresión Fase 1 — riskEvaluator', () => {
           totalNivel2: 0,
           totalNivel1: 0
         },
-        evaluaciones: [] // inválido: min(1)
+        evaluaciones: []
       };
 
-      const validacion = EstadoDiocesanoBlobSchema.safeParse(payloadInvalido);
-      expect(validacion.success).toBe(false);
+      const validacion = EstadoDiocesanoBlobSchema.safeParse(payloadValido);
+      expect(validacion.success).toBe(true);
     });
 
     it('acepta un payload válido mínimo', () => {

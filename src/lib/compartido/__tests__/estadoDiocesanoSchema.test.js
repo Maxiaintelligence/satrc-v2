@@ -98,10 +98,13 @@ describe('EstadoDiocesanoSchemas', () => {
         expect(res.success).toBe(true);
       });
 
-    it('rechaza evaluaciones vacías []', () => {
+    it('acepta evaluaciones vacías [] (días tranquilos, H-DRIVE-02)', () => {
+      // H-DRIVE-02 (commit 3053e29, 28/10/2026): el schema acepta [] y null
+      // para representar días sin localidades en N3/N4. Antes exigía .min(1).
+      // Ver 04_HISTORIAL.md §6.2 y 02_ARQUITECTURA.md §7.
       const payload = { ...payloadBlobValido, evaluaciones: [] };
       const res = EstadoDiocesanoBlobSchema.safeParse(payload);
-      expect(res.success).toBe(false);
+      expect(res.success).toBe(true);
     });
 
     it('rechaza semáforo negativo', () => {
