@@ -131,8 +131,8 @@ Severidad: 🔴 crítica · 🟠 alta · 🟡 media · 🟢 baja. El esfuerzo es
 
 ### 2.5 Pruebas y calidad
 
-> **Baseline verificado el 29/10/2026 (Cierre de sesión, HEAD d66e800):**
-> - `npm test` → **194 pass + 0 rojos** en 18 archivos. Incluye: 179 previos + 6 googleDrive.test.js (H-DRIVE-01) + 3 divergencias del gemelo (N-TEST-02) + 1 CAPE nulls GEM (N-TEST-11) + 1 umbralFisicoDeslaveMm (N-MOTOR-30) + 4 proximidad_umbral_n4 (N-MOTOR-16). Los 2 rojos obsoletos de schema fueron actualizados en el commit `f6f4281`. Los 3 tests nuevos (N-MOTOR-06 + bis) y el test de N-FETCH-01 están en verde.
+> **Baseline verificado el 29/10/2026 (Cierre de sesión, HEAD 4543fce):**
+> - `npm test` → **195 pass + 0 rojos** en 18 archivos. Incluye: 179 previos + 6 googleDrive.test.js (H-DRIVE-01) + 3 divergencias del gemelo (N-TEST-02) + 1 CAPE nulls GEM (N-TEST-11) + 1 umbralFisicoDeslaveMm (N-MOTOR-30) + 4 proximidad_umbral_n4 (N-MOTOR-16) + 1 Test 7 Regla 4 graduada N4 (H-MOTOR-01 divergencia 4). Los 2 rojos obsoletos de schema fueron actualizados en el commit `f6f4281`. Los 3 tests nuevos (N-MOTOR-06 + bis) y el test de N-FETCH-01 están en verde.
 > - `npm run lint` → **57 advertencias, 0 errores**.
 > - `npm run build` → verde, 853.44 kB / 201.79 kB gzip.
 

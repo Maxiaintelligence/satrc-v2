@@ -745,6 +745,8 @@ Los fixes de Clase 1 (precisión) y Clase 3 (DRY) quedan pendientes por requerir
 | 5 | `8c4cf42` | Test CAPE con nulls intermitentes de GEM | (nuevo: N-TEST-11) | 188 → 189 |
 | 6 | `1505624` | `umbralFisicoDeslaveMm` reporta 65.0 | N-MOTOR-30 | 189 → 190 |
 | 7 | `d66e800` | `proximidad_umbral_n4` = null fuera de N3 | (nuevo: N-MOTOR-16) | 190 → 194 |
+| 8 | `e442efb` | Regla 4 graduada por `poblacionAguasArriba` (N3/N4) | (cerró: H-MOTOR-01 divergencia 4) | 194 → 195 |
+| 9 | `4543fce` | Corrige comentarios y nombres de tests desactualizados | (chore, sin ID) | 195 → 195 |
 
 ### Cierres formales
 
@@ -764,9 +766,31 @@ Los siguientes IDs se crearon durante la sesión de auditoría del 29/10 para ca
 - **N-TEST-11** (`8c4cf42`): test que verifica el filtro de nulls de GEM en `consensusEngine.js` sobre las 240 horas del fixture real.
 - **N-MOTOR-16** (`d66e800`): `proximidad_umbral_n4` reporta `null` fuera de N3. 4 tests nuevos (N1, N2, N3, N4).
 
+
+### Extensión — Alineación de Regla 4 (misma sesión, 29/10/2026)
+
+Tras el cierre original del 29/10/2026, se detectó que la única divergencia del gemelo del runner que afectaba el **nivel publicado** era la divergencia 4: el runner asignaba N4 fijo en Regla 4 (inundación fluvial), mientras el frontend graduaba N3/N4 según `poblacionAguasArriba`. Bajo DEC-011, esto producía falsos positivos N4 en cuencas con `poblacionAguasArriba < 50000` y lluvia 35-64 mm. El Test 6 (`c276e59`) ya documentaba la divergencia empíricamente.
+
+**Commit 8 (`e442efb`):**
+- `riskEvaluatorRunner.mjs` L183-188: reemplazado `nivel = Math.max(nivel, 4)` por la lógica graduada (N4 si `lluviaEfectiva24h >= 65 || poblacionAguasArriba >= 50000`, N3 en otro caso), con `if (severidadFluvial >= nivel)` para paridad con `riskEvaluator.js` L226-227.
+- `riskEvaluatorRunner.test.js`: Test 6 corregido de `runner N4, frontend N3` a `runner N3, frontend N3`. Test 7 nuevo que blinda la rama N4 con `poblacionAguasArriba >= 50000`.
+- Baseline: 194 → 195 pass.
+
+**Commit 9 (`4543fce`):**
+- Corrección de comentarios y nombres de tests desactualizados tras `e442efb`.
+- `riskEvaluatorRunner.mjs` L15-16: comentario de cabecera actualizado a "frontend y runner gradúan N3/N4 según `poblacionAguasArriba`. Alineado el 29/10/2026".
+- `riskEvaluatorRunner.test.js` L186, L187, L209: textos de `describe`/`it()` de Test 6 y Test 7 alineados al comportamiento actual (sin "Divergencia 4" obsoleto).
+- Baseline: 195 → 195 pass (sin cambio funcional).
+
+**Impacto consolidado bajo DEC-011:**
+- Nivel publicado por Regla 4 con `poblacionAguasArriba < 50000` + lluvia 35-64 mm: **N3** (antes N4 falso positivo).
+- Divergencias del gemelo resueltas: **1 de 7** (la única que afectaba nivel). Las otras 6 son de forma y están cubiertas por los tests 1, 2, 4 y 5.
+- `H-MOTOR-01` pasa de "Abierta, V3.0" a "**Parcialmente cerrada** (divergencia 4 alineada; 6 de forma)".
+
+---
 ### Verificación
 
-- **Baseline final:** 194 pass + 0 rojos, 57 warnings, 0 errores a HEAD `d66e800`.
+- **Baseline final:** 195 pass + 0 rojos, 57 warnings, 0 errores a HEAD `4543fce`.
 - **Workflows verdes:** 7/7 (`40951960626`, `40954827559`, `40955545327`, `40962949010`, `40964186871`, `40967148872`, `40968402003`).
 - **`headSha` coincide** en cada uno con el commit local.
 
