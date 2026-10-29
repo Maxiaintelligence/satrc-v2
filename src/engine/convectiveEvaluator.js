@@ -56,15 +56,22 @@ export function evaluarConvectivo(localidad, serieHoraria) {
 
   // 2. Estadísticos de la ventana
   const capeMax = Math.max(...capes, 0);
-  const humedadMin = Math.min(...humedades, 100);
+  // N-MOTOR-06 (29/10/2026): filtrar nulls antes de Math.min.
+  // Math.min(null, 100) devuelve 0 en JS, inflando el potencial de desplome
+  // a capeMax. Sin datos de humedad en capas medias, asumimos aire húmedo
+  // (humedadMin = 100) bajo DEC-011: "sin datos = sin downburst".
+  const humedadesValidas = humedades.filter(h => h != null && Number.isFinite(h));
+  const humedadMin = humedadesValidas.length > 0 ? Math.min(...humedadesValidas) : 100;
   const lluviaTotal = lluvias.reduce((a, b) => a + b, 0);
   const nivelesValidos = nivelesCongelacion.filter(n => n != null);
   const nivelCongelacionMin = nivelesValidos.length ? Math.min(...nivelesValidos) : null;
 
   // 3. Cálculo del Espesor de la Capa de Fusión (Granizo)
   // El granizo llega intacto si la capa cálida entre el nivel de congelación y el suelo es delgada.
-  const espesorFusion = nivelCongelacionMin - altitud;
-  const hayRiesgoGranizo = capeMax > 1000 && espesorFusion < 1000 && lluviaTotal > 5;
+  // N-MOTOR-06-bis (29/10/2026): si nivelCongelacionMin es null (GFS también falla),
+  // espesorFusion debe ser null, no -altitud (que daría un falso positivo de granizo).
+  const espesorFusion = nivelCongelacionMin !== null ? (nivelCongelacionMin - altitud) : null;
+  const hayRiesgoGranizo = espesorFusion !== null && capeMax > 1000 && espesorFusion < 1000 && lluviaTotal > 5;
 
   // 4. Cálculo del Potencial de Downburst
   // Si el aire en capas medias es seco, la lluvia se evapora, enfría la masa y se desploma.
@@ -132,8 +139,8 @@ export function evaluarConvectivo(localidad, serieHoraria) {
     datos_tecnicos: {
       cape_max_jkg: parseFloat(capeMax.toFixed(0)),
       humedad_700hpa_min: parseFloat(humedadMin.toFixed(0)),
-      espesor_capa_fusion_m: parseFloat(espesorFusion.toFixed(0)),
-      nivel_congelacion_m: parseFloat(nivelCongelacionMin.toFixed(0)),
+      espesor_capa_fusion_m: espesorFusion !== null ? parseFloat(espesorFusion.toFixed(0)) : null,
+      nivel_congelacion_m: nivelCongelacionMin !== null ? parseFloat(nivelCongelacionMin.toFixed(0)) : null,
       lluvia_total_24h_mm: parseFloat(lluviaTotal.toFixed(1)),
       potencial_desplome: parseFloat(potencialDesplome.toFixed(0)),
       cizalladura_max_kmh: parseFloat(shearMax.toFixed(1)),

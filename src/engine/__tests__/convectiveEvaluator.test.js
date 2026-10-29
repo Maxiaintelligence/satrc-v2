@@ -116,6 +116,37 @@ describe('convectiveEvaluator.js', () => {
     expect(res.datos_tecnicos).toBeDefined();
   });
 
+    describe('N-MOTOR-06 / N-MOTOR-06-bis — defensa contra null (29/10/2026)', () => {
+      it('N-MOTOR-06: humedad_700hpa null en toda la ventana → humedadMin=100, sin downburst', () => {
+        const loc = mockLocalidad(2000);
+        const serie = mockSerie({ cape: 1500, humedad700: null, lluvia: 5, viento700: 30, viento10: 10 });
+        const res = evaluarConvectivo(loc, serie);
+        expect(res.vector_dominante).not.toBe('DOWNBURST');
+        expect(res.datos_tecnicos.humedad_700hpa_min).toBe(100);
+        expect(res.datos_tecnicos.potencial_desplome).toBe(0);
+      });
+
+      it('N-MOTOR-06: humedad_700hpa parcial con nulls → usa el mínimo de las válidas', () => {
+        const loc = mockLocalidad(2000);
+        const serie = mockSerie({ cape: 1500, humedad700: 30, lluvia: 5, viento700: 30, viento10: 10 });
+        // Corromper la mitad de la ventana con null
+        serie.humedad_700hpa = serie.humedad_700hpa.map((v, i) => (i >= 168 && i < 180) ? null : v);
+        const res = evaluarConvectivo(loc, serie);
+        expect(res.datos_tecnicos.humedad_700hpa_min).toBe(30);
+        expect(res.datos_tecnicos.potencial_desplome).toBeGreaterThan(0);
+      });
+
+      it('N-MOTOR-06-bis: nivel_congelacion_m null → espesorFusion=null, sin falso granizo', () => {
+        const loc = mockLocalidad(2000);
+        const serie = mockSerie({ cape: 1200, lluvia: 15, nivelCongelacion: null, humedad700: 70, viento700: 25, viento10: 10 });
+        const res = evaluarConvectivo(loc, serie);
+        expect(res.vector_dominante).not.toBe('GRANIZO');
+        expect(res.nivel_alerta).toBeLessThan(3);
+        expect(res.datos_tecnicos.espesor_capa_fusion_m).toBeNull();
+        expect(res.datos_tecnicos.nivel_congelacion_m).toBeNull();
+      });
+    });
+
     describe('H-CONV-03 — Calibración de Downburst (CAPE mínimo)', () => {
     it('No debe disparar Downburst con CAPE bajo (caso Apan: CAPE 560)', () => {
       const loc = mockLocalidad(2400);
