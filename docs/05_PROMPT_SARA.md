@@ -87,6 +87,7 @@ El código tiene 16 reglas numeradas en el diario y 11 en el on-demand. La tabla
 - **Regla 17 multivectorial (ver §4):** se inyecta vía `REGLAS_MULTIVECTOR` en los dos reportes y en el dictamen del runner.
 - **Regla de control de emergencias:** el diario **no** la tiene (H-PROMPT-06). Bajo DEC-011 es la deuda más crítica del bloque: sin ella, el reporte diario puede generar lenguaje de emergencia cuando el motor indica N1/N2.
 
+
 > **Confirmación empírica del 29/10/2026 (P3):**
 >
 > **H-PROMPT-06 CONFIRMADA.** `Select-String` con el patrón `CONTROL ESTRICTO|BAJO NINGUNA CIRCUNSTANCIA|regla 17|Regla 17|N4 = 0 y Nivel 3 = 0`:
@@ -313,7 +314,7 @@ Los subtipos específicos (`HELADA_AGRICOLA`, `NEVADA`, `GRANIZO`, `DOWNBURST`, 
 |---|---|---|---|---|
 | **H-PROMPT-03** | No hay pruebas automáticas de los prompts. | 🟡 | Abierta | — |
 | **H-PROMPT-05** | El dictamen del runner llama a Groq sin `max_completion_tokens`. Puede devolver JSON truncado o timeouts. | 🟠 | Abierta | — |
-| **H-PROMPT-06** | El `systemPrompt` del diario **no tiene la regla de control de emergencias**. **Confirmada por P3.** Bajo DEC-011, es crítico: el diario podría generar lenguaje de emergencia cuando el motor indica N1/N2. | 🔴 | **Confirmada, abierta** | Debe corregirse en el mismo lote que H-REPORTE-02. |
+| **H-PROMPT-06** | ~~El `systemPrompt` del diario no tiene la regla de control de emergencias.~~ **CERRADA el 29/10/2026 (commit `4204b80`).** La regla 17 se agregó al `systemPrompt` del diario en `scripts/reportes/reporteDiario.mjs` línea 178. Numeración alineada con on-demand. | 🔴 | ✅ **Cerrada** | P3 del 29/10/2026 |
 | **H-PROMPT-07** | La regla 10 del prompt (`<40 / 40-59 / ≥60`) usa umbrales más bajos que el motor (`45/65/90 +5 altitud`). Desfase de 5 a 30 km/h. | 🟢 | Abierta | — |
 | **H-PROMPT-08** | `promptsMultivector.js` implementa solo R17. Faltan R18, R19, R20. Se implementan en v2.0. | 🟠 | Abierta | Coordinar con N-MOTOR-05 y N-MOTOR-29. |
 | **H-PROMPT-09** | El `systemPrompt` del on-demand **no tiene la regla 12.bis** (coherencia Sección 0 ↔ Sección II). Riesgo de reintroducir el bug N29. | 🔴 | Abierta | — |
@@ -321,7 +322,10 @@ Los subtipos específicos (`HELADA_AGRICOLA`, `NEVADA`, `GRANIZO`, `DOWNBURST`, 
 | **H-REPORTE-02** | `reporteDiario.mjs` usa `@vercel/blob` sin token inyectado. Falla silenciosamente. **Confirmada por P5.** | 🔴 | **Confirmada, abierta** | Prioridad #2 después de H-MOTOR-05 (ver §6.3). |
 | **H-REPORTE-03** | `debeGenerarReporteDiario` reintenta 8×/día porque la bitácora nunca registra el intento. **Confirmada por P5.** | 🔴 | **Confirmada, abierta** | Se corrige al resolver H-REPORTE-02. |
 | **N-MOTOR-05** | Subtipos convectivos del código (`CONVECTIVO_NORMAL`, `TORMENTA_DISPERSA`, `SUPERCELULA`) no coinciden con los documentados en R17 (`SIN_AMENAZA`, `CONVECTIVO`, `SUPER_CELULA`). | 🟠 | **Confirmada, abierta** | Requiere alineación código ↔ docs ↔ prompts. |
-| **N-MOTOR-29** | Subtipos del hidrológico (`ESTABLE`, `VIGILANCIA_NORMAL`) no coinciden con §9.4 (`PROTECCION_ALTIPLANO`, `VIGILANCIA`). R17 no los cubre. **Especialmente crítico porque el 95.6 % de las N2 hoy son VIGILANCIA_NORMAL.** | 🟠 | **Confirmada, abierta** | Requiere alineación código ↔ docs ↔ prompts. |
+| **N-MOTOR-29** | Subtipos del hidrológico (`ESTABLE`, `VIGILANCIA_NORMAL`) no coinciden con §9.4 (`PROTECCION_ALTIPLANO`, `VIGILANCIA`). R17 no los cubre. **Especialmente crítico porque el 95.6 % de las N2 hoy son VIGILANCIA_NORMAL.** | 🟠 | **Confirmada, 
+abierta** | Requiere alineación código ↔ docs ↔ prompts. |
+
+**Nota del 29/10/2026:** H-PROMPT-06 cerrado con el commit `4204b80`. R18 (regla 18, `REGLAS_CONTEXTO_NIEBLA`) se agregó en `promptsMultivector.js` línea 26 e importada en `api/reporte-ondemand.js` línea 5 y `scripts/reportes/reporteDiario.mjs` línea 25. La regla se inyecta en ambos `systemPrompt` (líneas 193 y 179 respectivamente). Este cambio está registrado en §11.1 del orden de fixes.
 
 **Deudas cerradas o refutadas en esta versión:**
 

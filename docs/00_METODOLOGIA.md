@@ -89,6 +89,12 @@ Cada propuesta debe terminar con el comando exacto de Git para subir el cambio, 
 
 **Despliegue:** tras el push, confirmar en Vercel que el despliegue está en estado `Ready`.
 
+**Doble disparador del runner (ADR-010, 29/10/2026):** el proceso autónomo tiene **dos disparadores activos simultáneamente** como capa de seguridad deliberada:
+- **Primario:** `cron-job.org` externo invoca `/api/disparar-workflow` cada 3 h (timestamps exactos: 03:00, 06:00, 09:00, 12:00, 15:00, 18:00, 21:00 MX).
+- **Respaldo:** `on.schedule: '21 */3 * * *'` interno de `sara_cron.yml` (timestamps irregulares por jitter de GitHub Actions).
+
+Total efectivo: ~11-12 corridas/día. Documentado en `08_DECISIONES.md` ADR-010. Si `cron-job.org` falla o la URL externa se rompe, el respaldo interno mantiene el sistema actualizado. Bajo DEC-008, el margen de minutos de GitHub Actions es ~10 % del límite del plan gratuito. Revisar si el uso supera el 90 %.
+
 **CI:** confirmar que el workflow `tests.yml` pasa en verde.
 
 **Si el cambio toca el runner (`scripts/`):**

@@ -606,6 +606,32 @@ Además de los archivos temporales de los scripts `test-p2-acoplamiento.mjs`, `t
 
 **Acción registrada:** `06_PENDIENTES.md` §2.9 **H-DOC-GIT-01** ampliada para incluir los 3 archivos de auditoría del 29/10/2026.
 
+### 7.18 Fixes aplicados el 29/10/2026 (bloque PEND-06)
+
+Cinco commits ejecutados sobre `origin/main` tras la auditoría P0–P12. **Todos verificados en 4 niveles** (node --check, npm test, build, ejecución local con caso real).
+
+| # | Commit | Hash | Contenido | Verificación |
+|---|---|---|---|---|
+| 1 | Documental | `c9d72c8` | 7 documentos fundacionales alineados con auditoría | Revisión cruzada |
+| 2 | Fix motor | `6fd6120` | Regla 6 sin niebla como disparador. `calcularContextoNiebla` con período. Paridad canónico/runner. | `node --check` ok, `npm test` 169 pass, Xicotepec → N1 |
+| 3 | Fix orquestador | `aabdd30` | Propaga `contexto.niebla`. Zod tolera el campo nuevo. | `node --check` ok, `npm test` 173 pass |
+| 4 | Fix prompts | `4204b80` | SARA consume `contexto.niebla` (regla 18). H-PROMPT-06 cerrado (regla 17 en diario). | `node --check` ok, `npm test` 173 pass, grep de la constante en 3 archivos |
+| 5 | Fix UI | `03a91a6` | Monitor Público y Sala Operativa consumen `contexto.niebla`. H-UI-02 cerrado de facto. | `npm test` 173 pass, `npm run build` verde (856 kB), `npm run lint` 55 warn / 0 err |
+
+**Estado del baseline tras el bloque:** 173 pass + 2 rojos obsoletos. Los 2 rojos son los del commit `3053e29` (H-DRIVE-02) sin actualizar. **Ajenos a este bloque.**
+
+**Fix pendiente:** H-REPORTE-02 + H-REPORTE-03 (migrar `reporteDiario.mjs` a `googleDrive.js`). **No se resuelve en esta sesión.** Requiere una verificación previa de `debeGenerarReporteDiario` que no se hizo.
+
+### 7.19 Lecciones del bloque PEND-06 (agregar a §8)
+
+**H-PROCESO-04:** un test que falla no implica bug del código. Antes de tocar código de producción, verificar la aritmética del escenario del test. En el Commit A del 29/10/2026, un test nuevo esperaba `MIXTO` con una serie que no cruzaba el límite de período. El código era correcto; el test era incorrecto. Corrección: el test, no el código.
+
+**H-PROCESO-05:** un comando de verificación con patrón mal construido puede producir falsos negativos. En el Commit C del 29/10/2026, `Select-String -SimpleMatch '\$\{...\}'` buscó la cadena con barras invertidas literales en lugar de la cadena sin barras. El código estaba correcto; el comando estaba mal. Antes de concluir "el código no tiene X", verificar con una consulta que no tenga ambigüedad de patrón, o cruzar con otra fuente.
+
+**H-PROCESO-06:** los archivos de salida de verificación (`salida_*.txt` generados con `Tee-Object`) nunca deben quedar en el árbol de trabajo ni versionarse. `salida_lint.txt` y `salida_npm_test.txt` **estaban versionados** en `origin/main` antes de esta sesión. Se restauran al final. Requiere agregar `salida_*.txt` al `.gitignore` (H-DOC-GIT-01 se cierra en el Commit E).
+
+**H-PROCESO-07:** ante un `git status` ambiguo, ejecutar primero `git log -1` para confirmar el HEAD real. En el Commit D, el `git status` mostró "deleted: salida_*.txt" sin los archivos de UI modificados. Un `git log -1` reveló que el commit ya estaba hecho y que solo faltaba restaurar los 2 archivos de salida borrados. Asumir el estado sin verificar el HEAD produjo 3 intentos fallidos de commit inexistente.
+
 ---
 
 ## 8. Lecciones consolidadas

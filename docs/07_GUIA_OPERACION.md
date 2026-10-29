@@ -32,18 +32,22 @@
 
 ### 1.2 Proceso autónomo (GitHub Actions)
 
-**El runner tiene dos disparadores activos simultáneamente (confirmado por P7 el 29/10/2026):**
+**El runner tiene dos disparadores activos simultáneamente. Es una decisión de diseño, no un descuido. ADR-010.**
 
 | Disparador | Mecanismo | Frecuencia | Estabilidad |
 |---|---|---|---|
-| **Interno** | `on.schedule: '21 */3 * * *'` en `sara_cron.yml` | ~3.4 corridas/día (jitter masivo) | Timestamps irregulares: 20:45, 23:56, 03:10, 06:35, 07:19, 11:00, 14:58, 17:21, 22:56 |
-| **Externo** | `cron-job.org` → `/api/disparar-workflow` | ~8.6 corridas/día | Timestamps exactos: 03:00, 06:00, 09:00, 12:00, 15:00, 18:00, 21:00 |
+| **Primario (externo)** | `cron-job.org` → `/api/disparar-workflow` | ~8.6 corridas/día | Timestamps exactos: 03:00, 06:00, 09:00, 12:00, 15:00, 18:00, 21:00 |
+| **Respaldo (interno)** | `on.schedule: '21 */3 * * *'` en `sara_cron.yml` | ~3.4 corridas/día (jitter masivo) | Timestamps irregulares: 20:45, 23:56, 03:10, 06:35, 07:19, 11:00, 14:58, 17:21, 22:56 |
 
-**Total efectivo:** ~11-12 corridas/día en vez de las 8 planificadas originalmente.
+**Total efectivo:** ~11-12 corridas/día.
 
-**Estado de documentación:** el `on.schedule` interno **no estaba documentado como activo** hasta esta versión. La documentación anterior (Fase 4 de `00_METODOLOGIA.md`, §1.2 de este documento en v2.6) solo mencionaba el disparador externo.
+**Por qué dos disparadores:** resiliencia. Si `cron-job.org` falla o la URL externa se rompe, el `on.schedule` interno mantiene el sistema actualizado. Fue una capa de seguridad establecida en las primeras etapas del desarrollo.
 
-**Riesgo registrado:** `06_PENDIENTES.md` §2.4 **N-CRON-05** y **N-CRON-06**. Decisión pendiente: **PEND-07** en `08_DECISIONES.md`. Bajo DEC-011, más corridas = más estados publicados = más falsos positivos potenciales. Agrava H-MOTOR-05.
+**Trade-off:** consumo duplicado de minutos GitHub Actions y cuota de Apps Script. Bajo DEC-008, el margen es ~10 % del límite del plan gratuito. Si en el futuro el uso supera el 90 %, se puede reducir el `on.schedule` interno a 1×/día sin perder la capa de seguridad. Bajo DEC-011, más corridas = más estados publicados = más oportunidades de publicar falsos positivos. **Con H-MOTOR-05 cerrado (DEC-012, 29/10/2026), el riesgo de falsos positivos por frecuencia ya no aplica.**
+
+**Verificación:** P7 del 29/10/2026. 60 corridas en 5 días. 17 `schedule` + 43 `workflow_dispatch`.
+
+**Estado:** N-CRON-05 y N-CRON-06 **cerradas** como ADR-010. No requiere acción de código.
 
 **Workflows:**
 
@@ -478,11 +482,15 @@ Para emergencias operativas: comunicarse con la coordinación de Cáritas dioces
 
 Estas decisiones bloquean fixes que reducirían ruido en producción. Se registran aquí para que quien opera sepa qué esperar mientras se resuelven.
 
-| ID | Pregunta | Impacto operativo | Responsable |
+**Decisiones resueltas el 29/10/2026:**
+
+| ID | Pregunta | Resolución | Documento |
 |---|---|---|---|
-| **PEND-06** | ¿Qué criterio operativo debe disparar N2 por niebla? (persistencia, ventana próxima, contexto agravante, etc.) | Bloquea el fix de la sobreestimación de N2 que hoy afecta al 56 % de las localidades. Mientras no se resuelva, el semáforo seguirá mostrando N2 crónico en las 8 zonas de montaña identificadas (CHG, HUA, HYC, SPP, TUL, XIC, ZAC, ZAH). | Coordinación técnica y pastoral |
-| **PEND-07** | ¿El `on.schedule` interno de `sara_cron.yml` se mantiene como respaldo o se elimina? | Afecta el consumo de minutos de GitHub Actions y la cuota de Apps Script. Mientras no se resuelva, el runner corre ~11-12 veces/día en vez de 8. | Coordinación técnica |
-| **PEND-08** | ¿Cómo resolver N-MOTOR-09 (acoplamiento duplicado)? | Afecta la sobreestimación del orquestador en combinaciones hidro-térmicas. Confirmado empíricamente (P2): sobreestima +0.37 en escenarios medios y +0.9 en altos. | Coordinación técnica y pastoral |
+| PEND-06 | ¿Qué criterio operativo debe disparar N2 por niebla? | **Opción C enriquecida.** La niebla deja de disparar nivel. Se expone como `contexto.niebla` con período y persistencia. | **DEC-012** |
+| PEND-07 | ¿El `on.schedule` interno de `sara_cron.yml` se mantiene como respaldo o se elimina? | **Opción A.** Se mantienen ambos disparadores como capa de seguridad. | **ADR-010** |
+| PEND-08 | ¿Cómo resolver N-MOTOR-09 (acoplamiento duplicado)? | **Opción A.** Se conserva `HIDRO_TERMICO=0.15`, se elimina `TERMICO_HIDRO=0.10`. | **ADR-011** |
+
+**Decisiones pendientes (no resueltas):** PEND-03, PEND-04, PEND-05 (ver `08_DECISIONES.md` Parte C).
 
 ---
 

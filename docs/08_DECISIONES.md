@@ -137,6 +137,35 @@
 > **Acción registrada:**
 > - `06_PENDIENTES.md` §2.4 **N-CRON-05** y **N-CRON-06** (🟠 alta).
 > - **PEND-07** en la Parte C de este documento: decisión pendiente sobre si el `on.schedule` interno se mantiene como respaldo documentado o se elimina.
+>
+> **Resuelta el 29/10/2026 como ADR-010** (ver abajo).
+
+### ADR-010: Doble disparador del runner como capa de seguridad
+
+- **Estado:** vigente (29/10/2026). Resuelve PEND-07. Cierra N-CRON-05 y N-CRON-06.
+- **Contexto:** la auditoría P7 del 29/10/2026 confirmó que el sistema tiene dos disparadores activos simultáneamente: `on.schedule: '21 */3 * * *'` interno del `sara_cron.yml` (~3.4 corridas/día, jitter masivo, timestamps irregulares) + `cron-job.org` externo estable (~8.6 corridas/día, timestamps exactos). El total efectivo es ~11-12 corridas/día. **La documentación anterior solo mencionaba el externo.**
+- **Decisión:** los dos disparadores son **deliberados**. Fueron una capa de seguridad establecida en las primeras etapas del desarrollo, no un descuido. El `cron-job.org` es el primario (estable, predecible). El `on.schedule` interno es el respaldo (resiliencia ante fallo del externo).
+- **Consecuencias:**
+  - **Positivas:** resiliencia. Si `cron-job.org` falla o la URL externa se rompe, el sistema sigue actualizando el semáforo por el disparador interno.
+  - **Negativas:** consumo duplicado de minutos GitHub Actions (~1,440 min/mes vs 2,000 del plan gratuito, margen 10 %). Cuota de Apps Script más alta. Ruido en bitácora. Más estados publicados = más oportunidades de publicar falsos positivos (agravado por H-MOTOR-05 hasta que se cierre).
+  - **Mitigación:** se documenta el doble disparador en `00_METODOLOGIA.md` Fase 4 y en `07_GUIA_OPERACION.md` §1.2. Si en el futuro el uso supera el 90 % del límite del plan gratuito (DEC-008), se puede reducir el `on.schedule` interno a 1×/día sin perder la capa de seguridad.
+- **Verificación:** P7 del 29/10/2026. 60 corridas en 5 días. 17 `schedule` + 43 `workflow_dispatch`. Los timestamps del `workflow_dispatch` son exactos (03:00, 06:00, 09:00, 12:00, 15:00, 18:00, 21:00). Los del `schedule` tienen jitter (20:45, 23:56, 03:10, 06:35, 07:19, 11:00, 14:58, 17:21, 22:56).
+
+### ADR-011: Coeficiente hidro-térmico único
+
+- **Estado:** vigente (29/10/2026). **Reemplaza a ADR-005.** Resuelve PEND-08. Cierra N-MOTOR-09.
+- **Contexto:** ADR-005 listaba dos coeficientes γ para el mismo par físico simétrico: `HIDRO_TERMICO=0.15` y `TERMICO_HIDRO=0.10`. El código aplicaba **ambos** sobre el mismo producto `(rH−1)(rT−1)`, resultando en un acoplamiento efectivo de `0.25`, no `0.15` ni `0.10`. Confirmado con la prueba P2 del 29/10/2026: escenario `rH=2.97, rT=2.88, rV=rC=1.0` → `riesgo_continuo = 3.90` real, `3.5255` con la fórmula de §9.1 de `03_MOTOR_RIESGO.md`, `3.8959` con la fórmula del código. **Sobreestimación medida: +0.37 en escenarios medios, +0.9 en altos.** Bajo DEC-011, esto es sobreestimación sistemática.
+- **Decisión:** se conserva **un solo término**: `HIDRO_TERMICO=0.15`. Se elimina `TERMICO_HIDRO=0.10`.
+- **Justificación:**
+  1. `0.15` es el valor que aparece primero en ADR-005 y en §9.2 de `03_MOTOR_RIESGO.md`. Es el que se citó como principal.
+  2. `0.10` aparece después, sin contexto que justifique por qué es más débil que el otro.
+  3. Reducir a 0.15 elimina la duplicación (−40 % de sobreestimación) sin ser tan agresivo como dejar 0.10 (−60 %).
+  4. Es reversible con `git revert` si la calibración futura (PEND-03) demuestra que 0.15 es insuficiente.
+- **Consecuencias:**
+  - El acoplamiento hidro-térmico pasa de 0.25 efectivo a 0.15 efectivo.
+  - Algunas localidades que antes cruzaban de N2 a N3 por acoplamiento duplicado podrían quedarse en N2. Bajo DEC-011, esto es una corrección esperada.
+  - Los tests de `crossThreatOrchestrator.test.js` que dependían de la sobreestimación se actualizarán en el próximo commit (Commit F, si el fix de código aplica).
+- **Verificación:** P2 del 29/10/2026.
 
 ---
 
@@ -250,6 +279,32 @@
 >
 > **El texto original de DEC-011 no se edita.** Esta nota es una confirmación empírica del principio, no una enmienda.
 
+### DEC-012: La niebla deja de disparar nivel, se expone como contexto
+
+- **Estado:** vigente (29/10/2026). Resuelve PEND-06. Cierra H-MOTOR-05, H-DIAG-04, N-MOTOR-05-bis, N-MOTOR-11, N-MOTOR-13, N-MOTOR-14, N-MOTOR-15, H-UI-02.
+- **Contexto:** la auditoría P9–P12 del 29/10/2026 confirmó que la Regla 6 del motor hidrológico disparaba N2 para toda la ventana de 24 h si **cualquier** hora tenía visibilidad ≤ 2 km. En la corrida del 28/10/2026 a las 19:03 MX, de 227 N2 sobre 405 localidades, **217 (95.6 %) eran "Vigilancia por Niebla Densa"** con `lluvia=0` y `saturación<30 mm`. La niebla ocurría típicamente a las 00:00–01:00 y el sistema seguía en N2 a las 19:00. Bajo DEC-011, esto es exactamente el "efecto del niño que gritó lobo".
+- **Decisión:** la niebla **deja de ser disparador de nivel de alerta**. Se expone como campo informativo `contexto.niebla` con:
+  - `activa: bool`
+  - `visibilidadMinKm: número o null`
+  - `persistenciaHoras: horas consecutivas`
+  - `periodo: 'MADRUGADA' | 'MAÑANA' | 'TARDE' | 'NOCHE' | 'MIXTO'`
+  - `ventana: { inicio, fin, duracionHoras }`
+  
+  La Regla 6 queda: `lluvia >= 8 mm || saturación >= 30 mm`. **La visibilidad no participa en la decisión de nivel.**
+  
+  La niebla se menciona en el texto descriptivo de SARA y en el Monitor Público como información contextual (matinal, nocturna, persistente), con precaución para traslados, pero **NUNCA** como amenaza que justifique alerta, evacuación o suspensión.
+- **Justificación operativa:** la coordinación técnica y pastoral del 29/10/2026 confirmó: *"el mapa de riesgo está pensado para riesgos latentes reales que hagan que peligre la integridad, en las zonas serranas la niebla es algo relativamente normal, SARA es quien en los reportes o en la descripción de la localidad es donde se debería mencionar, no así ser parte de una alerta por niebla, a menos que la niebla vaya acompañada de otro vector."*
+- **Consecuencias:**
+  - Impacto estimado en producción: N2 pasa de 227 a ~10 (solo las legítimas de ATG y PMN). Precisión de N2 sube de ~4.4 % a >90 %.
+  - N-MOTOR-11 (visibilidad solo GFS) deja de ser crítico. La visibilidad se usa para contexto, no para nivel.
+  - N-MOTOR-13, N-MOTOR-14, N-MOTOR-15 quedan cerradas porque el criterio `min(24h)` deja de disparar nivel.
+  - H-UI-02 se resuelve de facto: el texto secundario del Monitor Público ya no usa `lluviaTotalDia >= 20`, usa el motor + `contexto.niebla`.
+  - La niebla SOLO se eleva a amenaza si aparece acompañada de otro vector con nivel ≥ 3. En ese caso, se menciona como factor agravante, no como amenaza independiente.
+- **Verificación:**
+  - Empírica: P12 del 29/10/2026. Niebla de 2 h en madrugada → N1 con `contexto.niebla.activa = true, periodo = MADRUGADA, persistenciaHoras = 2`. Comportamiento correcto.
+  - Tests: 4 nuevos en `riskEvaluator.test.js` (incluye contexto, sin niebla, MIXTO, niebla + lluvia) + 1 en `riskEvaluatorRunner.test.js` (paridad) + 1 en `crossThreatOrchestrator.test.js` (propagación) + 3 en `estadoDiocesanoSchema.test.js` (tolerancia del campo).
+  - Producción: verificar en la próxima corrida del runner (03:00 MX por `cron-job.org`) que el semáforo pasa de N2=227 a N2≈10.
+
 ---
 
 ## Parte C. Decisiones pendientes
@@ -259,15 +314,20 @@
 | PEND-03 | ¿Los coeficientes de acoplamiento (ADR-005) se recalibran con eventos reales? Bajo DEC-011 esta calibración es prioritaria. | Coordinación técnica y pastoral | `08_DECISIONES.md` |
 | PEND-04 | ¿Se migrará el runner a un modelo de ejecución que no dependa de GitHub Actions (por ejemplo, Vercel Cron)? | Coordinación técnica | `08_DECISIONES.md` |
 | PEND-05 | ¿Cuál es la métrica objetivo de confiabilidad (porcentaje de alertas que se materializan) que cierra DEC-011? | Coordinación técnica y pastoral | `08_DECISIONES.md` |
-| **PEND-06** | **¿Qué criterio operativo debe disparar N2 por niebla?** Bajo DEC-011, las opciones son: (A) **persistencia ≥ 4 h consecutivas** de visibilidad ≤ 2 km; (B) **ventana próxima de 6 h** en vez de 24 h (solo si la niebla está por llegar); (C) **niebla + otra condición agravante** (lluvia o saturación) — niebla sola no dispara N2; (D) **niebla densa ≤ 1 km con persistencia ≥ 2 h**; (E) **híbrido** de las anteriores. **Cada opción tiene implicaciones operativas distintas para las brigadas.** La opción A reduce falsos positivos pero puede perder niebla real breve. La opción C es la más estricta y la más alineada con DEC-011. La opción B es la más justa temporalmente pero requiere distinguir "evento actual" de "evento futuro". **Bloquea el fix de H-MOTOR-05 y N-MOTOR-13, que son la prioridad #1 bajo DEC-011.** | Coordinación técnica y pastoral | P12 del 29/10/2026 |
-| **PEND-07** | **¿El `on.schedule` interno de `sara_cron.yml` es un respaldo deliberado o se elimina?** Actualmente hay doble disparador no documentado (N-CRON-05 + N-CRON-06): `on.schedule: '21 */3 * * *'` interno con jitter masivo (~3.4 corridas/día) + `cron-job.org` externo estable (~8.6 corridas/día). Total efectivo: ~11-12 corridas/día en vez de 8. Bajo `00_METODOLOGIA.md` Fase 4 y `07_GUIA_OPERACION.md` §1.2, la documentación solo menciona el externo. Opciones: (A) mantener ambos y documentar el interno como respaldo; (B) eliminar el `on.schedule` interno y mantener solo el externo; (C) eliminar el externo y depender del interno (implica aceptar jitter); (D) mantener ambos pero reducir el externo a 1×/día como prueba de vida. Impacto: minutos de GitHub Actions, cuota de Apps Script, ruido en bitácora, más estados publicados. **Agrava H-MOTOR-05 si no se corrige.** | Coordinación técnica | P7 del 29/10/2026 |
-| **PEND-08** | **¿Cómo debe resolverse N-MOTOR-09 (acoplamiento hidro-térmico duplicado)?** ADR-005 lista `HIDRO_TERMICO: 0.15` y `TERMICO_HIDRO: 0.10` sin aclarar si es uno o dos términos. El código suma ambos sobre el mismo producto simétrico, resultando en `0.25` efectivo. Confirmado con P2: sobreestima `+0.37` en escenarios medios y `+0.9` en altos. Opciones: (A) **un solo término con `HIDRO_TERMICO=0.15`** (el más alto de los dos documentados); (B) **un solo término con `TERMICO_HIDRO=0.10`**; (C) **mantener ambos pero reinterpretar** (e.g., `HIDRO_TERMICO` para frío y `TERMICO_HIDRO` para calor, sumando condicionalmente según el signo de la temperatura); (D) **fusión a un solo coeficiente nuevo calibrado empíricamente** en el rango 0.10–0.25 con eventos reales. **Naturaleza del hallazgo: diseño ambiguo, no bug.** La opción D es la más rigurosa bajo DEC-011 pero requiere PEND-03 (registro de eventos reales) primero. La opción A es la más rápida y reduce la sobreestimación sin perder la intención original. **Requiere ADR de reemplazo de ADR-005.** | Coordinación técnica y pastoral | P2 del 29/10/2026 |
 
-**Nota sobre el proceso de decisión:**
+**Decisiones resueltas el 29/10/2026:**
 
-- **PEND-06** y **PEND-08** están acopladas: resolver la niebla (PEND-06) reduce ~95 % del ruido actual de N2; resolver el acoplamiento (PEND-08) reduce el riesgo de que otras combinaciones sobreestimen. Ambas son necesarias bajo DEC-011.
-- **PEND-07** es independiente y operativa. No requiere coordinación pastoral, solo técnica.
-- Las tres bloquean fixes que ya están especificados en `06_PENDIENTES.md`. No se debe iniciar código de motor ni de cron hasta que las tres se resuelvan.
+| ID | Pregunta | Decisión | Documento |
+|---|---|---|---|
+| **PEND-06** | ¿Qué criterio operativo debe disparar N2 por niebla? | **Opción C enriquecida.** La niebla deja de disparar nivel. Se expone como `contexto.niebla` con período (MADRUGADA/MAÑANA/TARDE/NOCHE/MIXTO), visibilidad mínima y persistencia. Bajo DEC-011, la niebla es información contextual, no amenaza. La Regla 6 queda con `lluvia >= 8 \|\| saturación >= 30`. | **DEC-012** |
+| **PEND-07** | ¿El `on.schedule` interno de `sara_cron.yml` es un respaldo deliberado o se elimina? | **Opción A.** Se mantienen ambos disparadores como capa de seguridad. El `on.schedule` interno es respaldo deliberado ante caída de `cron-job.org`. Se documenta en Fase 4 y §1.2. | **ADR-010** |
+| **PEND-08** | ¿Cómo debe resolverse N-MOTOR-09 (acoplamiento hidro-térmico duplicado)? | **Opción A.** Se conserva `HIDRO_TERMICO=0.15` y se elimina `TERMICO_HIDRO=0.10`. El acoplamiento efectivo pasa de 0.25 a 0.15 (−40 % de sobreestimación). Reversible si la calibración empírica futura (PEND-03) demuestra insuficiencia. | **ADR-011** (reemplaza a ADR-005) |
+
+**ADR y DEC vigentes desde el 29/10/2026:**
+
+- **ADR-010** (nueva): doble disparador del runner como capa de seguridad.
+- **ADR-011** (nueva): reemplaza a ADR-005. Coeficiente hidro-térmico único (0.15).
+- **DEC-012** (nueva): criterio operativo de niebla. No dispara nivel; se expone como contexto.
 
 ---
 

@@ -102,7 +102,9 @@ Las reglas se aplican en orden. Cada una puede subir el nivel, nunca bajarlo.
 >
 > **Fix bloqueado por PEND-06** en `08_DECISIONES.md`: decisión de coordinación técnica + pastoral sobre qué criterio operativo debe disparar N2 por niebla.
 >
-> **Nota adicional sobre el Altiplano:** la Regla 1 funciona correctamente. Las 5 zonas de Altiplano (ACT, APN, PMS, TIZ) están al 0 % N2 en producción hoy. La sobreclasificación es específica de las zonas de montaña.
+> **Nota adicional sobre el Altiplano:** la Regla 1 funciona correctamente. Las 5 zonas de Altiplano (ACT, APN, PMS, TIZ) están al **0 % N2** en producción hoy. La sobreclasificación es específica de las zonas de montaña.
+>
+> **Fix aplicado el 29/10/2026 (DEC-012):** la Regla 6 ya no incluye `visibilidadMinKm <= 2.0`. Los disparadores son solo `lluvia >= 8 mm || saturación >= 30 mm`. La niebla se expone como `contexto.niebla` con período (MADRUGADA/MAÑANA/TARDE/NOCHE/MIXTO). Ver commit `6fd6120` y `03_MOTOR_RIESGO.md` §5.
 
 ### 2.2 Prioridad y diagnóstico
 
