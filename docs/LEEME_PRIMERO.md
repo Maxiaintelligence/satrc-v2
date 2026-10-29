@@ -28,6 +28,7 @@ Detalle completo en `01_CONTEXTO.md`. Decisiones de arquitectura en `08_DECISION
 | Sesión 28/10/2026: rescate de producción (`RESPUESTA_EN_VIVO`) + fix de Zod | Cerrada (commits `2a3e3e8`, `3053e29`, `b25d7c5`) | `04_HISTORIAL.md` §6 |
 | **Sesión 29/10/2026: auditoría empírica P0–P12** | **Diagnóstico cerrado. Sin cambios de código. 3 documentos actualizados (06, 04, 08) + este archivo.** | `04_HISTORIAL.md` §7 |
 | Versión 3.0 (autenticación real, nuevos vectores, percentiles) | Planeada, no iniciada | `06_PENDIENTES.md` §4 |
+| **Fixes post-auditoría 29/10/2026** | **Cerrados:** H-PKG-01 (Zod 4), H-REPORTE-02 (migración a Drive), N-PROMPT-JSON-01 (estructura JSON). **Abierto:** N-RESILIENCIA-429 (falla silenciosa del reporte diario ante 429 de Groq). | `06_PENDIENTES.md` §2.4 |
 
 **Baseline verificado el 29/10/2026** (HEAD `1281d43`, `node v22.23.3`, `npm 10.9.9`):
 
@@ -86,7 +87,7 @@ Es exactamente el "efecto del niño que gritó lobo" que DEC-011 se propuso elim
 
 En 23 horas de bitácora (27/10 20:45 → 28/10 19:03) se ejecutaron **22 corridas CRON** y **0 reportes diarios**. Al menos 11 de esas corridas ocurrieron después de las 6:00 MX. Ninguna generó el reporte automático.
 
-- **H-REPORTE-02:** `reporteDiario.mjs` usa `@vercel/blob` sin `BLOB_READ_WRITE_TOKEN` inyectado. Falla silenciosamente. El `catch` del runner lo absorbe. La corrida queda en verde.
+- **N-RESILIENCIA-429 (nueva prioridad #1):** El reporte diario falla silenciosamente ante el 429 de Groq (por concurrencia inmediata: dictamen + diario en 5s). Bajo DEC-011, el sistema no puede ocultar esta falla. La solución arquitectónica requiere separar las llamadas, implementar backoff y hacer el fallo visible. **Bloqueador para la próxima sesión.**
 - **H-REPORTE-03:** `debeGenerarReporteDiario` reintenta cada corrida post-6:00 porque no ve la entrada de bitácora (el diario falla antes de registrarla). Son ~8-11 intentos fallidos por día, invisibles.
 - **Agravante:** cuando se arregle H-REPORTE-02, el diario saldría con el prompt sin la regla 17 (H-PROMPT-06). Hay que corregir ambos en el mismo lote.
 

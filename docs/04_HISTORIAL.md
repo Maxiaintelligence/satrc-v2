@@ -632,6 +632,20 @@ Cinco commits ejecutados sobre `origin/main` tras la auditoría P0–P12. **Todo
 
 **H-PROCESO-07:** ante un `git status` ambiguo, ejecutar primero `git log -1` para confirmar el HEAD real. En el Commit D, el `git status` mostró "deleted: salida_*.txt" sin los archivos de UI modificados. Un `git log -1` reveló que el commit ya estaba hecho y que solo faltaba restaurar los 2 archivos de salida borrados. Asumir el estado sin verificar el HEAD produjo 3 intentos fallidos de commit inexistente.
 
+### 7.20 Sesión 29/10/2026 — Fixes post-auditoría
+
+Se aplicaron 3 fixes más tras el cierre de los 5 commits del bloque PEND-06:
+
+| # | Commit | Fix | Verificación |
+|---|---|---|---|
+| 1 | F1 | Zod `.errors` → `.issues` en el runner (H-PKG-01). | `node --check`, log del runner ahora imprime el path exacto del campo que falla. |
+| 2 | F2 (`b22772b`) | `reporteDiario.mjs` migrado a Google Drive (H-REPORTE-02). Test L actualizado. | `node --check`, `npm test` 173 pass + 2 rojos, sin imports reales de `@vercel/blob`. Cadena hasta Groq verificada en producción. |
+| 3 | `5b2d70b` | Forzar estructura JSON y mapeo defensivo de llaves (N-PROMPT-JSON-01). | Prueba empírica con Groq devuelve `seccion_0_decision`, etc. Reporte on-demand verificado en la app. |
+
+**Nueva lección (H-TEST-18):** los prompts que piden JSON deben incluir la estructura exacta de llaves. Decir "responde con 7 secciones" no es suficiente: el modelo inventa los nombres de las llaves. La estructura debe ser explícita.
+
+**Nueva lección (H-TEST-19):** ante un error de API externa, no asumir la causa. El 429 de Groq parecía saturación por cantidad de llamadas. La prueba directa desde PowerShell (aislada) fue exitosa. El 429 real fue por concurrencia inmediata (2 llamadas en 5s), no por volumen.
+
 ---
 
 ## 8. Lecciones consolidadas
