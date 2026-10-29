@@ -192,7 +192,16 @@ ${REGLAS_MULTIVECTOR}
 
 ${REGLAS_CONTEXTO_NIEBLA}
 
-Responde ÚNICAMENTE un objeto JSON con las 7 secciones exactas.`;
+Responde ÚNICAMENTE un objeto JSON con esta estructura EXACTA (no cambies los nombres de las llaves):
+{
+  "seccion_0_decision": "...",
+  "seccion_I_atmosfera": "...",
+  "seccion_II_focos_sierra": "...",
+  "seccion_III_condiciones_altiplano": "...",
+  "seccion_IV_evolucion": "...",
+  "seccion_V_recomendaciones_pastorales": "...",
+  "seccion_VI_deslinde": "..."
+}`;
 
     const userPrompt = `Fecha y hora de emisión: ${fechaDiaMexico} a las ${horaExactaMexico}.
 Operador: ${nombreOperador}.
