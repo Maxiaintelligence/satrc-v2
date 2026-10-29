@@ -128,30 +128,13 @@ Un ítem no puede estar en dos documentos a la vez. Si está en el historial, sa
 A partir del 29/10/2026, toda edición masiva o crítica de los documentos fundacionales (00 a 09) debe realizarse utilizando el siguiente método para evitar problemas de codificación (UTF-8), saltos de línea (CRLF vs LF) y errores de reemplazo manual:
 
 1. **No editar directamente en el editor de texto** si el cambio afecta a más de 10 líneas o involucra múltiples secciones.
-2. **Usar un script de Node.js** (extensión .js en un proyecto con type: module) para leer y escribir el archivo markdown.
-3. **Establecer la codificación correcta** en PowerShell: Out-File -Encoding UTF8.
-4. **Usar fs.readFileSync y fs.writeFileSync** dentro del script para leer y escribir el archivo markdown, preservando su estructura y saltos de línea originales.
-5. **Usar expresiones regulares (replace)** en lugar de reemplazos exactos de string cuando el contenido pueda tener variaciones de espaciado o saltos de línea.
-6. **Verificar el resultado con Select-String** en PowerShell para confirmar que las nuevas líneas se insertaron correctamente antes de hacer el git commit.
-
-**Plantilla estándar para actualizaciones documentales:**
-
-```powershell
-cd "C:\\Users\\anton\\OneDrive\\Documents\\4. Maxia\\Proyectos_Caritas\\satrc-v3"
-
-New-Item -Path "actualizar_doc.js" -ItemType File -Force
-Set-Content -Path "actualizar_doc.js" -Encoding UTF8 -Value @'
-const fs = require('fs');
-let md = fs.readFileSync('docs/ARCHIVO.md', 'utf8');
-// ... lógica de reemplazo ...
-fs.writeFileSync('docs/ARCHIVO.md', md, 'utf8');
-console.log('✅ Archivo actualizado.');
-'@
-node actualizar_doc.js
-Remove-Item "actualizar_doc.js" -Force
-```
+2. **Usar un script de Node.js (CJS)** para leer y escribir el archivo Markdown.
+3. **Encapsular el script de Node en un Here-String de comillas dobles (@" ... "@) en PowerShell.** Esto permite la interpolación de variables y evita conflictos con comillas simples o backticks dentro del código JS.
+4. **Construir el texto markdown usando un arreglo de strings** (usando String.fromCharCode(10) para los saltos de línea) y unirlos con join. Esto evita que los backticks del markdown rompan el template literal de JavaScript.
+5. **Verificar el resultado con Select-String** antes de hacer el commit.
 
 Esta regla garantiza que la documentación se mantenga íntegra y que los asistentes de IA puedan aplicar cambios de forma segura y reproducible.
+
 ### Reglas de seguridad documental
 
 - Nunca escribir en la documentación claves, tokens, contraseñas ni sus valores de ejemplo. Usa el nombre de la variable de entorno y un placeholder (`<CLAVE>`).
