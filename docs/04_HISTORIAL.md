@@ -364,6 +364,24 @@ Tras el rescate, se realizó una auditoría empírica de los 11 documentos funda
 - `02_ARQUITECTURA.md`, `03_MOTOR_RIESGO.md`, `05_PROMPT_SARA.md`, `07_GUIA_OPERACION.md`, `09_ARBOL_Y_RUTA_DE_APRENDIZAJE.md`, `LEEME_PRIMERO.md`: Actualizados con el estado real de las deudas, la arquitectura de Drive y las referencias cruzadas.
 - `06_PENDIENTES.md`: Integración de 26 deudas nuevas y reclasificación bajo DEC-011.
 
+### 6.4 Fix del Fallback Mentiroso (H-SARA-01/03/04)
+
+- **Síntoma:** Cada vez que alguien consultaba `/api/sara`, el fallback generaba un registro falso en la bitácora con `origen_evento: PROGRAMADO_CRON`, consumía cuota de Groq y devolvía `SITUACION_NORMAL` ("Calma") incluso si Drive fallaba en un día con emergencia real.
+- **Causa:** El endpoint tenía un fallback que:
+  1. No distinguía entre "Drive no responde" y "no hay emergencias".
+  2. Escribía en `bitacora_sara.json` con un `origen_evento` falso.
+  3. Llamaba a Groq con `TIMEOUT_GROQ_MS = 10000` en cada lectura.
+- **Solución:** Se eliminó el bloque de fallback completo. Ahora:
+  1. Si Drive falla o Zod rechaza, devuelve `503` con `SISTEMA_NO_DISPONIBLE`.
+  2. No escribe en la bitácora.
+  3. No llama a Groq.
+  El frontend tiene su propio respaldo (Open-Meteo en el navegador) y puede manejar el 503.
+- **Verificación:**
+  - **Local:** El script `test-sara-fallback.mjs` confirmó que el endpoint devuelve 503 sin tocar la bitácora.
+  - **Producción:** 5 lecturas consecutivas a `/api/sara` no hicieron crecer la bitácora (22 registros antes y después). El semáforo sigue mostrando datos reales (`N2=227 N1=178`).
+- **Commit:** `b25d7c5`.
+- **Lección:** H-PROCESO-02 aplicada (validar en entorno local antes de desplegar) y H-TEST-15 reforzada (no confiar en que el fallback funciona si no se ha probado en condiciones de fallo).
+
 ---
 
 ## 7. Lecciones consolidadas
