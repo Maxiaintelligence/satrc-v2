@@ -1,16 +1,14 @@
-name: Watchdog Reporte Diario
+﻿name: Watchdog Reporte Diario
 
 on:
   schedule:
     # Corre a las 12:30 UTC = 06:30 AM (Hora de México)
-    # Damos 30 minutos de margen tras la ventana de las 6:00 AM
     - cron: '30 12 * * *'
-  workflow_dispatch: # Permite dispararlo manualmente para pruebas
+  workflow_dispatch: 
 
 jobs:
   verificar_y_disparar:
     runs-on: ubuntu-latest
-    # Permisos para que el GITHUB_TOKEN por defecto pueda disparar otro workflow
     permissions:
       actions: write
       contents: read
@@ -25,9 +23,9 @@ jobs:
           echo "Buscando reporte para el día: $FECHA_HOY"
           
           URL="${GOOGLE_SCRIPT_URL}?action=leer&file=reporte_diocesano_vigente.json"
-          REPORTE=$(curl -s "$URL")
+          # -L para seguir redirecciones (Apps Script usa 302)
+          REPORTE=$(curl -sL "$URL")
           
-          # Extraer el timestamp del reporte
           TIMESTAMP=$(echo "$REPORTE" | jq -r '.timestamp_iso_utc // empty')
           
           if [[ "$TIMESTAMP" == "$FECHA_HOY"* ]]; then
@@ -41,8 +39,14 @@ jobs:
       - name: Disparar workflow principal (Red de seguridad)
         if: steps.check.outputs.requiere_accion == 'true'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_PAT }}
+          REPO: ${{ github.repository }}
         run: |
           echo "Iniciando red de seguridad: disparando sara_cron.yml..."
-          gh workflow run sara_cron.yml --ref main
+          curl -s -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            -H "User-Agent: SatRC-Watchdog" \
+            "https://api.github.com/repos/$REPO/actions/workflows/sara_cron.yml/dispatches" \
+            -d '{"ref":"main"}'
           echo "✅ Workflow de emergencia disparado exitosamente."
