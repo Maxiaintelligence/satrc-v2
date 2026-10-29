@@ -11,15 +11,19 @@
  * - Solo se genera si es la primera corrida >= 6:00 AM del día.
  * - Marca es_parcial: true si la cobertura es < 14/14 zonas.
  * 
- * ⚠️ DEUDA TÉCNICA:
- * - repararMojibake: EXTRAÍDA a src/lib/compartido/mojibake.js (H6.4.2).
+ * ALMACENAMIENTO (H-REPORTE-02, fix del 29/10/2026):
+ * - Escribe en Google Drive vía `escribirJSONBlob` de `src/lib/compartido/googleDrive.js`.
+ * - Lee bitácora vía `leerJSONBlob` si `bitacoraBase` no se pasa (fallback).
+ * - Ya NO usa @vercel/blob.
+ * 
+ * ⚠️ DEUDA TÉCNICA RESIDUAL:
  * - normalizarDatosRegionales y construirBloqueRegional: todavía duplicadas
  *   en este archivo y en api/reporte-ondemand.js. Extraer en H6.5.
  * 
  * @module reporteDiario
  */
 
-import { put, list } from '@vercel/blob';
+import { leerJSONBlob, escribirJSONBlob } from '../../src/lib/compartido/googleDrive.js';
 import { repararMojibake } from '../../src/lib/compartido/mojibake.js';
 import { construirBloqueRegional } from '../../src/lib/compartido/regionales.js';
 import { REGLAS_MULTIVECTOR, REGLAS_CONTEXTO_NIEBLA } from '../../src/lib/compartido/promptsMultivector.js';
@@ -242,7 +246,7 @@ Devuelve la respuesta en formato JSON estricto.`;
  * @param {string} opciones.horaExactaMexico - "06:00:15 a.m."
  * @param {string} opciones.horaMexicoStr - "06:00 a.m."
  * @param {string} opciones.apiKeyGroq - GROQ_API_KEY
- * @param {string} opciones.blobToken - BLOB_READ_WRITE_TOKEN
+ * @param {string} opciones.blobToken - DEPRECATED: ya no se usa. Se mantiene por compatibilidad con el runner. Eliminar en H-DRIVE-01. 
  * @param {Array|null} opciones.bitacoraBase - Bitácora actual en memoria (para evitar colisiones)
  * @returns {Promise<Object>} { exito, reporte_guardado, registro_bitacora, es_parcial }
  */
@@ -390,20 +394,18 @@ export async function generarReporteDiario({
     reporte: reporteJSON
   };
 
-  // 8. Publicar en Blob (H-REPORTE-01: solo si NO es parcial)
+  // 8. Publicar en Google Drive (H-REPORTE-02 fix del 29/10/2026, H-REPORTE-01: solo si NO es parcial)
   if (!esParcial) {
-    console.log('   Publicando en Blob...');
-    await put('reporte_diocesano_vigente.json', JSON.stringify(reporteCompleto, null, 2), {
-      access: 'public',
-      addRandomSuffix: false,
-      allowOverwrite: true,
-      token: blobToken
-    });
+    console.log('   Publicando en Google Drive...');
+    await escribirJSONBlob('reporte_diocesano_vigente.json', JSON.stringify(reporteCompleto, null, 2));
   } else {
-    console.log('   Reporte PARCIAL: NO se publica en Blob (protege el vigente).');
+    console.log('   Reporte PARCIAL: NO se publica en Drive (protege el vigente).');
   }
 
   // 9. Preparar registro en bitácora (H-BITACORA-01: devolver, no escribir)
+  // H-REPORTE-02 (29/10/2026): el fallback de lectura se migra a leerJSONBlob de googleDrive.js.
+  // En producción, el runner siempre pasa bitacoraBase, así que este fallback no se ejecuta.
+  // Se conserva por robustez: si algún día se invoca sin bitacoraBase, lee la bitácora de Drive.
   console.log('   Preparando registro de bitácora...');
   let bitacoraHistorial = [];
 
@@ -411,14 +413,9 @@ export async function generarReporteDiario({
     bitacoraHistorial = [...bitacoraBase];
   } else {
     try {
-      const listado = await list();
-      const blobB = listado?.blobs?.find(b => b.pathname.includes('bitacora_sara.json'));
-      if (blobB) {
-        const rB = await fetch(blobB.url, { cache: 'no-store' });
-        if (rB.ok) {
-          const dB = await rB.json();
-          bitacoraHistorial = dB.bitacora || [];
-        }
+      const dB = await leerJSONBlob('bitacora_sara.json');
+      if (dB) {
+        bitacoraHistorial = dB.bitacora || [];
       }
     } catch (e) {}
   }

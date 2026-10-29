@@ -277,9 +277,12 @@ describe('Regresión multifactor — H-MULTI-01/02', () => {
       expect(codigo).not.toMatch(/put\(\s*['"]bitacora_sara\.json['"]/);
     });
 
-    it('L. reporteDiario.mjs solo escribe el reporte vigente si NO es parcial (fix H-REPORTE-01)', () => {
+    it('L. reporteDiario.mjs solo escribe el reporte vigente si NO es parcial (fix H-REPORTE-01 + H-REPORTE-02)', () => {
       const codigo = fs.readFileSync(REPORTE_DIARIO_PATH, 'utf-8');
-      expect(codigo).toMatch(/if\s*\(\s*!\s*esParcial\s*\)[\s\S]*?put\(\s*['"]reporte_diocesano_vigente\.json['"]/);
+      // Antes del fix H-REPORTE-02 usaba `put` de @vercel/blob. Ahora usa
+      // `escribirJSONBlob` de googleDrive.js. El patrón debe aceptar ambos
+      // por retrocompatibilidad si algún día se revierte.
+      expect(codigo).toMatch(/if\s*\(\s*!\s*esParcial\s*\)[\s\S]*?(?:put|escribirJSONBlob)\(\s*['"]reporte_diocesano_vigente\.json['"]/);
     });
 
     it('M. ejecutar_sara_autonomo.mjs pasa bitacoraBase a generarReporteDiario (fix H-BITACORA-01)', () => {
