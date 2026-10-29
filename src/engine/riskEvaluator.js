@@ -321,7 +321,7 @@ export function evaluarLocalidad(localidad, serieHoraria, contexto = {}) {
       apiPrevio7DiasMm: apiPrevio,
       lluviaEvento24hMm: parseFloat(lluviaEfectiva24h.toFixed(1)),
       saturacionTotalSueloMm: saturacionTotalSuelo,
-      umbralFisicoDeslaveMm: umbralDeslave,
+      umbralFisicoDeslaveMm: 65.0,
       vientoSostenidoKmh: vientoSostenidoMax,
       rafagaMaximaKmh: rafagaMaxima,
       visibilidadMinKm: visibilidadMinKm,

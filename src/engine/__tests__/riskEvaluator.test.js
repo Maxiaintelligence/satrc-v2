@@ -421,4 +421,27 @@ describe('riskEvaluator — Las 6 reglas del motor', () => {
     });
   });
 
+  describe('Contrato del campo umbralFisicoDeslaveMm (N-MOTOR-30)', () => {
+    it('reporta 65.0 constante, no el umbral dinámico', () => {
+      // Localidad de pendiente alta (50°): umbral dinámico = 65 - 50*0.85 - 15 = 7.5 → piso 12
+      // Pero el real aplicado en Reglas 2 y 3 es 65.0 (L203)
+      const localidadPendienteAlta = mockLocalidad({
+        zona_id: 'HUA',
+        topografia: { altitud_msnm: 1600, pendiente_max_deg: 50, relieve: 'LADERA', twi: 13 }
+      });
+      const serieSeca = mockSerie({ lluvia_mm: 0, temperatura_c: 18 });
+      const resAlta = evaluarLocalidad(localidadPendienteAlta, serieSeca, {});
+      expect(resAlta.impactoSistemico.umbralFisicoDeslaveMm).toBe(65.0);
+
+      // Localidad de pendiente baja (5°): umbral dinámico = 65 - 5*0.85 = 60.75
+      // Reportado debe ser 65.0 igual
+      const localidadPendienteBaja = mockLocalidad({
+        zona_id: 'ACT',
+        topografia: { altitud_msnm: 2000, pendiente_max_deg: 5, relieve: 'MESETA', twi: 8 }
+      });
+      const resBaja = evaluarLocalidad(localidadPendienteBaja, serieSeca, {});
+      expect(resBaja.impactoSistemico.umbralFisicoDeslaveMm).toBe(65.0);
+    });
+  });
+
 });
