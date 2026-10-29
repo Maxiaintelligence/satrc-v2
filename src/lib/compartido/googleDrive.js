@@ -16,7 +16,6 @@ export async function leerJSONBlob(nombreArchivo) {
   }
 }
 
-// --- INICIO DEL NUEVO BLOQUE ---
 export async function escribirJSONBlob(nombreArchivo, contenido) {
   const url = process.env.GOOGLE_SCRIPT_URL;
   if (!url) throw new Error("Falta GOOGLE_SCRIPT_URL");
