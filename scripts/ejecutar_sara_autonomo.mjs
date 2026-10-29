@@ -632,7 +632,9 @@ async function ejecutarSARA() {
   // H8 — Validar el contrato de datos antes de publicar
   const validacion = EstadoDiocesanoBlobSchema.safeParse(paqueteMaestro);
   if (!validacion.success) {
-    console.error("❌ [ZOD] El paqueteMaestro no cumple el schema:", validacion.error.errors);
+    // H-PKG-01 (29/10/2026): Zod 4 eliminó `.errors`; el campo vigente es `.issues`.
+    // Antes del fix, el log imprimía `undefined` en lugar del detalle del fallo.
+    console.error("❌ [ZOD] El paqueteMaestro no cumple el schema:", validacion.error.issues);
     process.exit(1);
   }
 
