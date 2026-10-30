@@ -64,6 +64,74 @@ function consensuarVariableE4(datosHorarios, nombreVariable, indice, estrategia 
   return calcularMediana(validos);
 }
 
+// ============================================================
+// H-CONV-02 / Opción A (29/10/2026): Cizalladura vectorial
+//
+// Las direcciones de viento son circulares (0° = Norte, 90° = Este).
+// Una mediana lineal de 350° y 10° da 180° (opuesto), lo cual es
+// incorrecto. La solución es convertir a componentes u, v, consensuar
+// cada componente por separado y recalcular dirección y velocidad.
+//
+// Convención meteorológica: la dirección indica DESDE dónde viene el
+// viento. Componentes: u = -speed*sin(dir), v = -speed*cos(dir).
+// ============================================================
+
+function velocidadYDirAComponentes(speedMs, dirDeg) {
+  if (!Number.isFinite(speedMs) || !Number.isFinite(dirDeg)) return null;
+  const rad = dirDeg * Math.PI / 180;
+  return {
+    u: -speedMs * Math.sin(rad),
+    v: -speedMs * Math.cos(rad)
+  };
+}
+
+function componentesAVelocidadYDir(u, v) {
+  if (!Number.isFinite(u) || !Number.isFinite(v)) return null;
+  const speedMs = Math.sqrt(u * u + v * v);
+  let dirDeg = Math.atan2(-u, -v) * 180 / Math.PI;
+  if (dirDeg < 0) dirDeg += 360;
+  return { speedMs, dirDeg };
+}
+
+/**
+ * Consensúa viento (speed + direction) de los 3 modelos devolviendo
+ * componentes u, v en m/s y la dirección consensuada.
+ *
+ * @param {Object} datosHorarios - Objeto hourly de Open-Meteo.
+ * @param {string} varSpeed - Nombre base de la variable de velocidad (ej. "wind_speed_10m").
+ * @param {string} varDir - Nombre base de la dirección (ej. "wind_direction_10m").
+ * @param {number} indice - Índice de la hora.
+ * @param {number} factorMs - Factor de conversión a m/s (1/3.6 si el speed está en km/h).
+ * @returns {{u:number, v:number, speedMs:number, dirDeg:number}|null}
+ */
+function consensuarVectorViento(datosHorarios, varSpeed, varDir, indice, factorMs) {
+  const sufijos = ['_gfs_seamless', '_icon_seamless', '_gem_seamless'];
+  const componentes = [];
+  for (const suf of sufijos) {
+    const speed = datosHorarios[`${varSpeed}${suf}`]?.[indice]
+               ?? datosHorarios[varSpeed]?.[indice];
+    const dir = datosHorarios[`${varDir}${suf}`]?.[indice]
+             ?? datosHorarios[varDir]?.[indice];
+    if (Number.isFinite(speed) && Number.isFinite(dir)) {
+      const comp = velocidadYDirAComponentes(speed * factorMs, dir);
+      if (comp) componentes.push(comp);
+    }
+  }
+  if (componentes.length === 0) return null;
+  const us = componentes.map(c => c.u).sort((a, b) => a - b);
+  const vs = componentes.map(c => c.v).sort((a, b) => a - b);
+  const medU = us[Math.floor(us.length / 2)];
+  const medV = vs[Math.floor(vs.length / 2)];
+  const reconstruido = componentesAVelocidadYDir(medU, medV);
+  return {
+    u: medU,
+    v: medV,
+    speedMs: reconstruido.speedMs,
+    dirDeg: reconstruido.dirDeg
+  };
+}
+
+
 export function generarConsensoDeterminista(datosHorarios) {
   if (!datosHorarios || !datosHorarios.time) return [];
 
@@ -95,6 +163,14 @@ export function generarConsensoDeterminista(datosHorarios) {
     const r_icon = datosHorarios["wind_gusts_10m_icon_seamless"]?.[i] ?? 0;
     const r_gem = datosHorarios["wind_gusts_10m_gem_seamless"]?.[i] ?? 0;
     const rafagaConsenso = Math.max(r_gfs, r_icon, r_gem);
+    // H-CONV-02 / Opción A (29/10/2026): componentes vectoriales de viento
+    // a 10m y 700hPa. Open-Meteo devuelve wind_speed en km/h → factor 1/3.6.
+    const vector10m = consensuarVectorViento(datosHorarios, 'wind_speed_10m', 'wind_direction_10m', i, 1/3.6);
+    const vector700 = consensuarVectorViento(datosHorarios, 'wind_speed_700hPa', 'wind_direction_700hPa', i, 1/3.6);
+
+    // Gate convectivo: precipitación convectiva consensuada (mediana de 3 modelos).
+    // Nota: `precipitation` (lluvia total) ya está consensuada como `lluviaConsenso`.
+    const showersConsenso = consensuarVariableE4(datosHorarios, 'showers', i);
 
     // Humedad
     const h_gfs = datosHorarios["relative_humidity_2m_gfs_seamless"]?.[i] ?? datosHorarios["relative_humidity_2m"]?.[i] ?? 50;
@@ -144,7 +220,17 @@ export function generarConsensoDeterminista(datosHorarios) {
       cape_jkg: capeJkgRaw !== null ? parseFloat(capeJkgRaw.toFixed(1)) : null,
       nivel_congelacion_m: nivelCongelacionRaw !== null ? Math.round(nivelCongelacionRaw) : null,
       humedad_700hpa: humedad700Raw !== null ? Math.round(humedad700Raw) : null,
-      viento_700hpa: viento700Raw !== null ? parseFloat(viento700Raw.toFixed(1)) : null
+      viento_700hpa: viento700Raw !== null ? parseFloat(viento700Raw.toFixed(1)) : null,
+      // H-CONV-02 / Opción A (29/10/2026): cizalladura vectorial y gate convectivo.
+      // Los campos u/v se exponen en m/s (consistente con umbrales ECMWF de 10-15 m/s).
+      // Los campos wind_direction_* están en grados meteorológicos (0=N, 90=E).
+      wind_direction_10m: vector10m ? Math.round(vector10m.dirDeg) : null,
+      wind_direction_700hpa: vector700 ? Math.round(vector700.dirDeg) : null,
+      u10_ms: vector10m ? parseFloat(vector10m.u.toFixed(2)) : null,
+      v10_ms: vector10m ? parseFloat(vector10m.v.toFixed(2)) : null,
+      u700_ms: vector700 ? parseFloat(vector700.u.toFixed(2)) : null,
+      v700_ms: vector700 ? parseFloat(vector700.v.toFixed(2)) : null,
+      showers_mm: showersConsenso !== null ? parseFloat(showersConsenso.toFixed(1)) : null
     });
   }
 
