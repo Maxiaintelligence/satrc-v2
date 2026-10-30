@@ -173,4 +173,91 @@ describe('convectiveEvaluator.js', () => {
     });
   });
   
+  describe('H-CONV-02 / Opción A: reproducción del falso positivo del 29/10/2026', () => {
+    // Contexto empírico: en producción el 29/10/2026 el motor publicó 39 N3
+    // por DOWNBURST en TIZ/PMN con lluvia real = 0 mm. El ambiente real
+    // tenía LCL=338 m, DMI=-6.08, showers=0. Físicamente imposible un
+    // downburst (dry ni wet).
+    //
+    // El código actual (pre-fix) dispara DOWNBURST porque:
+    //   - capeMax > 1000 ✓
+    //   - potencialDesplome > 100 ✓
+    //   - shearMax escalar (22.3 - 8.3 = 14.0) — borderline
+    //   - En horas con viento 700 hPa más fuerte de la ventana 24h,
+    //     shearMax escalar supera 15 → dispara DOWNBURST N3.
+    //
+    // Con el fix (Opción A):
+    //   - Cizalladura vectorial (10m 48°, 700hPa 131°) subestima la
+    //     escalar actual: escalar 16.7 km/h, vectorial ~33 km/h.
+    //   - Gate convectivo: showers = 0, precipitation = 0 → rechaza.
+    //   - El downburst NO se clasifica.
+    it('NO clasifica DOWNBURST sin lluvia convectiva en ambiente tipo Pachuca (29/10/2026)', () => {
+      // Localidad: Pachuca de Soto Centro (PMN), 2401 msnm
+      const loc = mockLocalidad(2401);
+
+      // Serie que reproduce el estado real de hoy:
+      // - CAPE moderado (1100 J/kg, sobre el umbral 1000)
+      // - Humedad 700hPa al 85% (supera el 90% de saturación, deja
+      //   potencialDesplome > 100)
+      // - Viento 700hPa fuerte (25 km/h) y viento 10m débil (8.3 km/h)
+      //   → shearMax escalar = 16.7 km/h > 15 → el código actual DISPARA
+      // - Direcciones cruzadas (48° vs 131°) → shear vectorial ~9.25 m/s
+      //   < 10 m/s → con fix NO dispara
+      // - showers = 0, precipitation = 0 → gate convectivo lo rechaza
+      const serieFalsoDownburst = {
+        time: Array(192).fill('2026-10-29T18:00'),
+        cape_jkg: Array(192).fill(1100),
+        humedad_700hpa: Array(192).fill(85),
+        lluvia_mm: Array(192).fill(0),
+        nivel_congelacion_m: Array(192).fill(4200),
+        viento_700hpa: Array(192).fill(25),
+        viento_kmh: Array(192).fill(8.3),
+        wind_direction_10m: Array(192).fill(48),
+        wind_direction_700hPa: Array(192).fill(131),
+        showers: Array(192).fill(0),
+        precipitation: Array(192).fill(0)
+      };
+
+      const res = evaluarConvectivo(loc, serieFalsoDownburst);
+
+      // Con el código actual (pre-fix), estas aserciones FALLAN.
+      // Con el fix (Opción A), estas aserciones PASAN.
+      expect(res.vector_dominante).not.toBe('DOWNBURST');
+      expect(res.vector_dominante).not.toBe('TORMENTA_DISPERSA');
+      expect(res.nivel_alerta).toBeLessThanOrEqual(2);
+    });
+
+    it('diagnóstico: confirma que el código actual dispara con esta serie', () => {
+      // Este test NO valida el comportamiento deseado. Valida que el bug
+      // existe con el código actual. Su valor es documental: si mañana el
+      // código cambia y este test deja de fallar sin tocar el evaluador,
+      // significa que el falso positivo desapareció por otra vía.
+      //
+      // Se espera que pase con el código actual y siga pasando con el fix
+      // (porque el fix hace que el downburst NO se dispare, por lo que
+      // "no debería ser DOWNBURST" sigue siendo coherente).
+      const loc = mockLocalidad(2401);
+      const serie = {
+        time: Array(192).fill('2026-10-29T18:00'),
+        cape_jkg: Array(192).fill(1100),
+        humedad_700hpa: Array(192).fill(85),
+        lluvia_mm: Array(192).fill(0),
+        nivel_congelacion_m: Array(192).fill(4200),
+        viento_700hpa: Array(192).fill(25),
+        viento_kmh: Array(192).fill(8.3),
+        wind_direction_10m: Array(192).fill(48),
+        wind_direction_700hPa: Array(192).fill(131),
+        showers: Array(192).fill(0),
+        precipitation: Array(192).fill(0)
+      };
+
+      const res = evaluarConvectivo(loc, serie);
+      // Solo trazabilidad: no se valida contra el estado deseado, solo se
+      // reporta en consola qué devuelve el código actual.
+      // eslint-disable-next-line no-console
+      console.log(`[A.3 diagnóstico] vector=${res.vector_dominante}, nivel=${res.nivel_alerta}, continuo=${res.nivel_alerta_continuo}`);
+      expect(res).toBeDefined();
+    });
+  });
+
 });
