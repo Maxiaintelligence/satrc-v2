@@ -3,6 +3,11 @@
 > **Versión del documento:** 2.9 (29/10/2026)
 > **Propósito:** registro único de lo que falta, lo que se aceptó como deuda y los riesgos abiertos. Es la única lista vigente. Un ítem cerrado sale de aquí y pasa a `04_HISTORIAL.md`.
 > **Regla:** cada ítem tiene identificador, severidad, estado y fuente. Ningún otro documento mantiene una lista paralela.
+> **Cambios de esta versión (Opción A / H-CONV-02, 29/10/2026):**
+> - **H-CONV-02 cerrada.** Cizalladura vectorial (u,v en m/s) y gate convectivo (`showers >= 0.5` o `precipitation >= 0.5`) implementados. Commits `7df06d7` y `b6f7b60`.
+> - **PEND-11 abierta.** Calibración del umbral mínimo de precipitación convectiva con eventos reales (difiere a primavera 2026).
+> - **Baseline actualizado:** 195 → 206 pass, 18 → 19 archivos. `consensusEngine.vector.test.js` nuevo (7 tests). Tests 14/15 en `crossThreatOrchestrator.test.js` nuevos (2 tests). Tests de reproducción H-CONV-02 en `convectiveEvaluator.test.js` (2 tests).
+>
 > **Cambios de esta versión (Sesión de cierre del 29/10/2026):**
 > - **Motor y Calidad:** Cierre de N-MOTOR-09 (ADR-011), N-MOTOR-06 (+bis), N-MOTOR-36 y N-FETCH-01. Actualización del baseline a **179 pass + 0 rojos** (H-DOC-BASELINE-01 cerrado).
 > - **Infraestructura:** Reparación del token en `cron-job.org` (soluciona error 401) y creación del Watchdog en GitHub Actions (Capa 3).
@@ -53,7 +58,7 @@ Severidad: 🔴 crítica · 🟠 alta · 🟡 media · 🟢 baja. El esfuerzo es
 | **N-MOTOR-15** | **Regla 6 usa OR sin contexto agravante.** `lluvia >= 8 OR saturación >= 30 OR visibilidad <= 2`. A diferencia de las reglas 2-5 que exigen combinación (pendiente + saturación + lluvia), la Regla 6 dispara N2 con una sola señal. Para eventos severos (N3/N4) es aceptable; para vigilancia N2 es demasiado laxo bajo DEC-011. | 🟠 | Bajo | Abierta | P12 del 29/10/2026 |
 | H-SMN-WS | El scraping del SMN depende del HTML de la página oficial, que puede cambiar sin aviso. Migrar al servicio oficial de CONAGUA. | 🟠 | Medio | Abierta | `03` §2.4 |
 | H-BITACORA-02 | Concurrencia entre los cuatro escritores de bitácora (`ejecutar_sara_autonomo.mjs`, `reporteDiario.mjs`, `api/reporte-ondemand.js` y `api/sara.js`). Si dos corren al mismo tiempo, el último en hacer `put` pisa la cadena del otro. **No se ha manifestado en 2 días de producción; verificado íntegro 23/23 eslabones el 29/10/2026.** Riesgo latente. | 🟡 | Alto | Abierta | Análisis de H-BITACORA-01 + P6 |
-| H-CONV-02 | `convectiveEvaluator.js` mide `shearMax` como diferencia escalar de velocidades, sin dirección. Falsos negativos de downburst/supercélula posibles con cambio de dirección. Corregir requiere agregar `wind_direction_10m` y `wind_direction_700hPa` al fetcher y al consenso. | 🟡 | Alto | Abierta | `03` §7.1 |
+| **H-CONV-02** | ~~`convectiveEvaluator.js` mide `shearMax` como diferencia escalar de velocidades, sin dirección.~~ **CERRADA el 29/10/2026 (Opción A, commits `7df06d7` y `b6f7b60`).** Cizalladura vectorial + gate convectivo implementados. `wind_direction_10m` y `wind_direction_700hPa` propagados desde el fetcher hasta el evaluador. Ver `03_MOTOR_RIESGO.md` §7.2. | ✅ **Cerrada** | — | ✅ **Cerrada** |
 | H-ENCODING-01 | El runner sigue guardando cadenas con doble codificación UTF-8. El adaptador de Google Drive no lo repara al leer; se sigue parcheando con `repararObjeto` en la API. | 🟡 | Medio | Abierta, V3.0 | `02` §9 |
 | DEU-29 | Parser SMN duplicado entre `api/smn.js` y `scripts/ejecutar_sara_autonomo.mjs`. ~60 líneas idénticas de scraping y clasificación de fenómenos. Viola DRY (ADR-004). Relacionado con H-SMN-WS. | 🟡 | Medio | Abierta | `api/smn.js` |
 | H-MOTOR-01 | Gemelo del runner distinto del motor canónico. | 🟡 | Alto | Abierta, V3.0 | `03` §3 |
@@ -132,7 +137,7 @@ Severidad: 🔴 crítica · 🟠 alta · 🟡 media · 🟢 baja. El esfuerzo es
 ### 2.5 Pruebas y calidad
 
 > **Baseline verificado el 29/10/2026 (Cierre de sesión, HEAD 4543fce):**
-> - `npm test` → **195 pass + 0 rojos** en 18 archivos. Incluye: 179 previos + 6 googleDrive.test.js (H-DRIVE-01) + 3 divergencias del gemelo (N-TEST-02) + 1 CAPE nulls GEM (N-TEST-11) + 1 umbralFisicoDeslaveMm (N-MOTOR-30) + 4 proximidad_umbral_n4 (N-MOTOR-16) + 1 Test 7 Regla 4 graduada N4 (H-MOTOR-01 divergencia 4). Los 2 rojos obsoletos de schema fueron actualizados en el commit `f6f4281`. Los 3 tests nuevos (N-MOTOR-06 + bis) y el test de N-FETCH-01 están en verde.
+> - `npm test` → **206 pass + 0 rojos** en 19 archivos. Incluye: 195 previos + 7 tests de cizalladura vectorial y showers (H-CONV-02, `consensusEngine.vector.test.js`) + 2 tests nuevos de propagación en el orquestador + 2 tests nuevos de reproducción del falso positivo (H-CONV-02, `convectiveEvaluator.test.js`). Verificado el 29/10/2026 con `npm test` sobre el HEAD `b6f7b60` + A.6.1.
 > - `npm run lint` → **57 advertencias, 0 errores**.
 > - `npm run build` → verde, 853.44 kB / 201.79 kB gzip.
 
@@ -319,6 +324,7 @@ Estas prioridades están propuestas, no aprobadas. Se confirman antes de comenza
 | **PEND-08** | **¿Cómo debe resolverse N-MOTOR-09?** **RESUELTA el 29/10/2026 (Opción A).** Se conserva `HIDRO_TERMICO=0.15` y se elimina `TERMICO_HIDRO=0.10`. | Coordinación técnica y pastoral | P2 del 29/10/2026 |
 | **PEND-09** | **¿Cómo debe tratarse la escritura de `reporte_diocesano_vigente.json` y `bitacora_sara.json` cuando el primero tiene éxito y el segundo falla?** Opciones: (a) rollback; (b) orden invertido; (c) aceptar la inconsistencia con log persistente; (d) escritura transaccional en un único JSON. Bajo DEC-011, la opción debe ser verificable empíricamente y auditable. | Coordinación técnica y pastoral | Sesión 29/10/2026 (H-ONDEMAND-09, N-ONDEMAND-04) |
 | **PEND-10** | **¿Cómo se alinean los subtipos de `tipo_amenaza` entre el motor, la documentación (§9.4 de `03_MOTOR_RIESGO.md`) y los prompts (`REGLAS_MULTIVECTOR` en `promptsMultivector.js`)?** Opciones: (a) alinear código a docs; (b) alinear docs a código; (c) mapeo intermedio en el orquestador. Requiere test de contrato. | Coordinación técnica y pastoral | Sesión 29/10/2026 (N-MOTOR-29, N-MOTOR-05, N-RUNNER-VECTOR-CONTRACT) |
+| **PEND-11** | **¿Cuál es el umbral mínimo de `showers`/`precipitation` que activa el gate convectivo del downburst?** El valor inicial de 0.5 mm/h es una calibración de referencia. Bajo DEC-011, debe calibrarse con eventos observados en la Sierra de Puebla-Hidalgo para evitar trazas de lluvia (0.2-0.3 mm/h) que activen falsos positivos. | Coordinación técnica y pastoral | Sesión 29/10/2026 (Opción A, A.4) |
 
 ---
 
