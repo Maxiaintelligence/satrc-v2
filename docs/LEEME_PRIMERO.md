@@ -1,8 +1,8 @@
 # SatRC V2.0 — Leer primero
 
 > **Propósito de este archivo:** punto de entrada para cualquier persona o chat de IA que retome el proyecto. Resume el estado actual y dice en qué orden leer el resto de la documentación.
-> **Última actualización:** 29/10/2026 (Sesión de cierre: fixes de motor, infraestructura y Groq).
-> **Estado de la sesión:** Se aplicaron 7 commits de blindaje. Baseline en verde. Disparadores asegurados con Watchdog.
+> **Última actualización:** 29/10/2026 (Opción A: H-CONV-02 cerrada; sesión de cierre previa: motor, infraestructura y Groq).
+> **Estado de la sesión:** Opción A / H-CONV-02 cerrada (cizalladura vectorial + gate convectivo, 7 commits, 11 tests nuevos). Sesión de cierre previa: 7 commits de blindaje, baseline verde, Watchdog. Baseline actual: 206 pass.
 
 ---
 
@@ -29,13 +29,14 @@ Detalle completo en `01_CONTEXTO.md`. Decisiones de arquitectura en `08_DECISION
 | Auditoría empírica P0–P12 (29/10/2026) | Cerrada | `04_HISTORIAL.md` §7 |
 | **Sesión de Cierre 29/10/2026** | **Cerrada.** Fixes de motor, infraestructura y resiliencia. | `04_HISTORIAL.md` §7.22 |
 | **Consolidación del contrato del motor (29/10/2026)** | **Cerrada.** 7 commits, 8 IDs reales cerrados, 3 IDs formalizados. Baseline 194 pass. | `04_HISTORIAL.md` §7.23 |
+| **Opción A / H-CONV-02 (29/10/2026)** | **Cerrada.** Cizalladura vectorial + gate convectivo. 7 commits, 11 tests nuevos. Baseline 206 pass. | `04_HISTORIAL.md` §7.24, ADR-014 |
 | Versión 3.0 (autenticación real, nuevos vectores, percentiles) | Planeada, no iniciada | `06_PENDIENTES.md` §4 |
 
 **Baseline verificado el 29/10/2026 (Cierre):**
 
 | Comando | Resultado real |
 |---|---|
-| `npm test` | **194 pass + 0 rojos** en 18 archivos (179 previos + 6 googleDrive.test.js + 3 divergencias gemelo + 1 CAPE nulls GEM + 1 umbralFisicoDeslaveMm + 4 proximidad_umbral_n4). Los tests obsoletos de Zod se actualizaron en el commit `f6f4281`. |
+| `npm test` | **206 pass + 0 rojos** en 19 archivos (194 previos + 7 tests de `consensusEngine.vector.test.js` + 2 tests nuevos en `crossThreatOrchestrator.test.js` + 2 tests nuevos en `convectiveEvaluator.test.js` + 1 test A.3). Verificado el 29/10/2026 sobre el HEAD `c85ce78`. |
 | `npm run lint` | **57 advertencias, 0 errores.** |
 | `npm run build` | Verde. 858.42 kB / 203.42 kB gzip. / 201.79 kB gzip. |
 
@@ -63,6 +64,7 @@ Antes de cualquier cambio, revisar `06_PENDIENTES.md` §2 (deuda técnica activa
 - **N-MOTOR-06:** Se filtraron los `null` en humedad y nivel de congelación del convectivo.
 - **N-MOTOR-36:** El diagnóstico de viento ahora es coherente (muestra ráfaga real y equivalente).
 - **N-FETCH-01:** Se blindó la alineación de medianoche con Open-Meteo.
+- **H-CONV-02 / Opción A:** Cizalladura vectorial (u,v en m/s) + gate convectivo. Cierra el falso positivo DOWNBURST sin lluvia. 7 commits, 11 tests nuevos. Verificación en producción pendiente de push.
 
 ### 3.4 Críticas independientes que siguen abiertas
 - **H-PROMPT-09:** El prompt de on-demand no tiene la regla 12.bis (coherencia).
@@ -80,6 +82,7 @@ Antes de cualquier cambio, revisar `06_PENDIENTES.md` §2 (deuda técnica activa
 | PEND-05 | ¿Cuál es la métrica objetivo de confiabilidad? | Monitoreo |
 | **PEND-09** | Escritura transaccional de bitácora | H-ONDEMAND-09 |
 | **PEND-10** | Alineación de subtipos de `tipo_amenaza` | N-MOTOR-29, N-MOTOR-05, N-RUNNER-VECTOR-CONTRACT |
+| **PEND-11** | Calibración del umbral mínimo de `showers`/`precipitation` (0.5 mm/h) con eventos reales de la Sierra de Puebla-Hidalgo | Monitoreo de Opción A |
 
 ---
 
