@@ -13,9 +13,12 @@ function mockSerie({
   lluvia = 0,
   nivelCongelacion = 4000,
   viento700 = 20,
-  viento10 = 10
+  viento10 = 10,
+  windDir700 = null,
+  windDir10 = null,
+  showers = null
 } = {}) {
-  return {
+  const base = {
     time: Array(192).fill('2026-10-21T12:00'),
     cape_jkg: Array(192).fill(cape),
     humedad_700hpa: Array(192).fill(humedad700),
@@ -24,6 +27,10 @@ function mockSerie({
     viento_700hpa: Array(192).fill(viento700),
     viento_kmh: Array(192).fill(viento10)
   };
+  if (windDir10 !== null) base.wind_direction_10m = Array(192).fill(windDir10);
+  if (windDir700 !== null) base.wind_direction_700hPa = Array(192).fill(windDir700);
+  if (showers !== null) base.showers_mm = Array(192).fill(showers);
+  return base;
 }
 
 describe('convectiveEvaluator.js', () => {
@@ -53,19 +60,31 @@ describe('convectiveEvaluator.js', () => {
     expect(res.datos_tecnicos.espesor_capa_fusion_m).toBeLessThan(1000);
   });
 
-  it('4. Alerta por downburst: CAPE alto + aire seco en capas medias → N3', () => {
+  it('4. Alerta por downburst: CAPE alto + aire seco + cizalladura vectorial + convección → N3', () => {
     const loc = mockLocalidad(2000);
-    // Humedad baja (30%) y shear alto (viento700 40 km/h vs viento10 10 km/h)
-    const serie = mockSerie({ cape: 2000, humedad700: 30, lluvia: 5, viento700: 40, viento10: 10 });
+    // H-CONV-02 (Opción A): se requieren direcciones opuestas para que la
+    // cizalladura vectorial supere el umbral de 10 m/s.
+    // 10m desde 180°, 700hPa desde 0° → cizalladura vectorial = 50 km/h = 13.9 m/s.
+    const serie = mockSerie({
+      cape: 2000, humedad700: 30, lluvia: 5,
+      viento700: 40, viento10: 10,
+      windDir10: 180, windDir700: 0
+    });
     const res = evaluarConvectivo(loc, serie);
     expect(res.nivel_alerta).toBe(3);
     expect(res.vector_dominante).toBe('DOWNBURST');
     expect(res.datos_tecnicos.potencial_desplome).toBeGreaterThan(100);
+    expect(res.datos_tecnicos.cizalladura_vectorial_ms).toBeGreaterThan(10);
   });
 
-  it('5. Emergencia por supercélula: CAPE extremo + shear extremo → N4', () => {
+  it('5. Emergencia por supercélula: CAPE extremo + cizalladura vectorial extrema + convección → N4', () => {
     const loc = mockLocalidad(2000);
-    const serie = mockSerie({ cape: 3500, humedad700: 20, lluvia: 20, viento700: 60, viento10: 10 });
+    // Direcciones opuestas → cizalladura vectorial = 80 km/h = 22.2 m/s (>15 m/s).
+    const serie = mockSerie({
+      cape: 3500, humedad700: 20, lluvia: 20,
+      viento700: 70, viento10: 10,
+      windDir10: 180, windDir700: 0
+    });
     const res = evaluarConvectivo(loc, serie);
     expect(res.nivel_alerta).toBe(4);
     expect(res.vector_dominante).toBe('SUPERCELULA');
@@ -161,16 +180,20 @@ describe('convectiveEvaluator.js', () => {
       expect(res.vector_dominante).not.toBe('DOWNBURST');
     });
 
-    it('Sí debe disparar Downburst con CAPE alto (1500) y aire seco', () => {
+    it('Sí debe disparar Downburst con CAPE alto (1500) y aire seco y cizalladura vectorial', () => {
       const loc = mockLocalidad(2400);
-      const serie = mockSerie({ 
-        cape: 1500, humedad700: 30, lluvia: 5, viento700: 40, viento10: 10 
+      // H-CONV-02 (Opción A): direcciones opuestas para cizalladura vectorial > 10 m/s.
+      const serie = mockSerie({
+        cape: 1500, humedad700: 30, lluvia: 5,
+        viento700: 40, viento10: 10,
+        windDir10: 180, windDir700: 0
       });
       const res = evaluarConvectivo(loc, serie);
       
       expect(res.nivel_alerta).toBe(3);
       expect(res.vector_dominante).toBe('DOWNBURST');
     });
+    
   });
   
   describe('H-CONV-02 / Opción A: reproducción del falso positivo del 29/10/2026', () => {
