@@ -57,49 +57,6 @@ const INTERVALO_SMN_MS = 30 * 60 * 1000;
  * La serie tiene 240 h: índices 0-167 son las últimas 7 días pasadas,
  * índice 168 es "ahora" (aprox), y 168-239 son el pronóstico.
  */
-function construirResumenAtmosferico(serie, nodoNombre) {
-  if (!Array.isArray(serie) || serie.length < 192) return null;
-
-  const ultimas24h = serie.slice(144, 168);   // 24 h antes de "ahora"
-  const proximas24h = serie.slice(168, 192);  // 24 h de pronóstico
-
-  const lluviaAcumulada24h = ultimas24h.reduce((a, h) => a + (h.lluvia_mm || 0), 0);
-  const lluviaProyectada24h = proximas24h.reduce((a, h) => a + (h.lluvia_mm || 0), 0);
-
-  const temps = ultimas24h.map(h => h.temperatura_c).filter(Number.isFinite);
-  const vientos = ultimas24h.map(h => h.viento_kmh).filter(Number.isFinite);
-  const rafagas = ultimas24h.map(h => h.rafagas_kmh).filter(Number.isFinite);
-  const humedades = ultimas24h.map(h => h.humedad_relativa_pct).filter(Number.isFinite);
-  const visibilidades = ultimas24h.map(h => h.visibility_km).filter(Number.isFinite);
-
-  const actual = serie[168] || ultimas24h[ultimas24h.length - 1] || {};
-
-  // Confiabilidad dominante en las últimas 24 h
-  const cuentaConfiabilidad = { ALTA: 0, MODERADA: 0, EN_DISPUTA: 0 };
-  ultimas24h.forEach(h => {
-    if (h.confiabilidad && cuentaConfiabilidad[h.confiabilidad] !== undefined) {
-      cuentaConfiabilidad[h.confiabilidad]++;
-    }
-  });
-  const confiabilidadDominante = Object.entries(cuentaConfiabilidad)
-    .sort((a, b) => b[1] - a[1])[0]?.[0] || 'DESCONOCIDA';
-
-  return {
-    nodo_nombre: nodoNombre,
-    ventana_analisis: 'últimas 24 horas',
-    lluvia_acumulada_24h_mm: parseFloat(lluviaAcumulada24h.toFixed(1)),
-    lluvia_proyectada_prox_24h_mm: parseFloat(lluviaProyectada24h.toFixed(1)),
-    temperatura_min_c: temps.length ? parseFloat(Math.min(...temps).toFixed(1)) : null,
-    temperatura_max_c: temps.length ? parseFloat(Math.max(...temps).toFixed(1)) : null,
-    temperatura_actual_c: Number.isFinite(actual.temperatura_c) ? parseFloat(actual.temperatura_c.toFixed(1)) : null,
-    viento_max_kmh: vientos.length ? parseFloat(Math.max(...vientos).toFixed(1)) : null,
-    rafaga_max_kmh: rafagas.length ? parseFloat(Math.max(...rafagas).toFixed(1)) : null,
-    humedad_min_pct: humedades.length ? Math.round(Math.min(...humedades)) : null,
-    humedad_max_pct: humedades.length ? Math.round(Math.max(...humedades)) : null,
-    visibilidad_min_km: visibilidades.length ? parseFloat(Math.min(...visibilidades).toFixed(1)) : null,
-    confiabilidad_dominante: confiabilidadDominante
-  };
-}
 
 export default function SatRCOperativo({ alCerrarSesion }) {
   const todasLocalidades = db.localidades || [];
