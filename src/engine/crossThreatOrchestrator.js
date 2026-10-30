@@ -118,7 +118,20 @@ export function evaluarMultiamenaza(localidad, serieHoraria, contexto = {}) {
       humedad_700hpa: serieHoraria.map(h => h.humedad_700hpa ?? 50),
       nivel_congelacion_m: serieHoraria.map(h => h.nivel_congelacion_m ?? 4000),
       presion_hpa: serieHoraria.map(h => h.presion_hpa ?? 1013),
-      viento_700hpa: serieHoraria.map(h => h.viento_700hpa ?? 20)
+      viento_700hpa: serieHoraria.map(h => h.viento_700hpa ?? 20),
+      // H-CONV-02 / Opción A (29/10/2026): propagar campos de cizalladura
+      // vectorial y precipitación convectiva al evaluador.
+      // Nota: se propaga `null` cuando el campo no existe (no `0`), porque
+      // "sin dato" ≠ "viento calma" ni "sin lluvia". El evaluador distingue
+      // ambos casos con Number.isFinite() y conserva el comportamiento
+      // conservador de DEC-011 (sin dato → no emitir alerta convectiva).
+      u10_ms: serieHoraria.map(h => h.u10_ms ?? null),
+      v10_ms: serieHoraria.map(h => h.v10_ms ?? null),
+      u700_ms: serieHoraria.map(h => h.u700_ms ?? null),
+      v700_ms: serieHoraria.map(h => h.v700_ms ?? null),
+      wind_direction_10m: serieHoraria.map(h => h.wind_direction_10m ?? null),
+      wind_direction_700hPa: serieHoraria.map(h => h.wind_direction_700hpa ?? h.wind_direction_700hPa ?? null),
+      showers_mm: serieHoraria.map(h => h.showers_mm ?? null)
     };
   }
 

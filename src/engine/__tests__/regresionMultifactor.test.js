@@ -135,17 +135,28 @@ describe('Regresión multifactor — H-MULTI-01/02', () => {
     const fixture = JSON.parse(fs.readFileSync(FIXTURE_PATH, 'utf-8'));
     const serie = generarConsensoDeterminista(fixture.hourly);
 
-    // Forzar CAPE alto en la ventana de 24h (168–191) para que el convectivo
-    // tenga condiciones de disparar con independencia de la meteorología real.
+    // Forzar CAPE alto Y convección activa Y cizalladura vectorial en la
+    // ventana de 24h (168–191). H-CONV-02 (Opción A) requiere los 3 para
+    // disparar el convectivo.
     const serieForzada = serie.map((h, i) =>
       i >= 168 && i < 192
-        ? { ...h, cape_jkg: 3500, humedad_700hpa: 20 }
+        ? {
+            ...h,
+            cape_jkg: 3500,
+            humedad_700hpa: 20,
+            showers_mm: 5,
+            wind_direction_10m: 180,
+            wind_direction_700hPa: 0,
+            viento_700hpa: 70,
+            viento_kmh: 10
+          }
         : h
     );
 
     const res = evaluarMultiamenaza(mockLocalidadPMN(), serieForzada);
 
-    // Con CAPE 3500, el convectivo debe superar la línea base N1.
+    // Con CAPE 3500 + cizalladura vectorial + convección, el convectivo
+    // debe superar la línea base N1.
     expect(res.niveles_por_vector.convectivo).toBeGreaterThan(1.0);
   });
 
@@ -165,7 +176,7 @@ describe('Regresión multifactor — H-MULTI-01/02', () => {
       nivel_congelacion_m: 4000,
       presion_hpa: 1013,
       viento_700hpa: 20
-    }));
+   }));
 
     const res = evaluarMultiamenaza(mockLocalidadPMN(), serieCeroReal);
 
