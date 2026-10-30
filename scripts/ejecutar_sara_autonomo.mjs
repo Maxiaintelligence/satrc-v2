@@ -41,7 +41,7 @@ function seleccionarNodosRegionales() {
 
 async function consultarZonaUnaVez(nodo) {
   const url = `https://api.open-meteo.com/v1/forecast?latitude=${nodo.lat}&longitude=${nodo.lon}` +
-              `&hourly=precipitation,temperature_2m,relative_humidity_2m,wind_speed_10m,wind_gusts_10m,visibility,surface_pressure,apparent_temperature,cloud_cover,wet_bulb_temperature_2m,cape,freezing_level_height,relative_humidity_700hPa,wind_speed_700hPa` +
+              `&hourly=precipitation,temperature_2m,relative_humidity_2m,wind_speed_10m,wind_gusts_10m,visibility,surface_pressure,apparent_temperature,cloud_cover,wet_bulb_temperature_2m,cape,freezing_level_height,relative_humidity_700hPa,wind_speed_700hPa,wind_direction_10m,wind_direction_700hPa,showers` +
               `&models=gfs_seamless,icon_seamless,gem_seamless&past_days=7&forecast_days=3&timezone=America%2FMexico_City`;
 
   const res = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_FETCH_MS) });

@@ -24,7 +24,12 @@ export async function consultarModelosDeterministas(lat, lon) {
     "cape",                      // convectiveEvaluator (inestabilidad)
     "freezing_level_height",     // convectiveEvaluator (granizo) — GEM devuelve null
     "relative_humidity_700hPa",  // convectiveEvaluator (downburst)
-    "wind_speed_700hPa"          // convectiveEvaluator (cizalladura)
+    "wind_speed_700hPa",         // convectiveEvaluator (cizalladura)
+    // Opción A / H-CONV-02 (29/10/2026): dirección de viento y precipitación convectiva
+    // necesarias para cizalladura vectorial y gate convectivo del downburst.
+    "wind_direction_10m",        // convectiveEvaluator (cizalladura vectorial, capa baja)
+    "wind_direction_700hPa",     // convectiveEvaluator (cizalladura vectorial, nivel medio)
+    "showers"                    // convectiveEvaluator (gate convectivo wet microburst)
   ].join(",");
 
   // Tríada verificada y sin deprecaciones: GFS (NOAA), ICON (DWD) y GEM (Canadá)
