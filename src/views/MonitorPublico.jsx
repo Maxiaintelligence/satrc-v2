@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import db from '../data/localidades.json';
 import { consultarModelosDeterministas } from '../engine/meteoFetcher.js';
 import { generarConsensoDeterminista } from '../engine/consensusEngine.js';
@@ -13,7 +13,6 @@ import {
   Wind,
   MapPin,
   ShieldCheck,
-  Calendar,
   Info,
   Building2,
   Bot,
@@ -149,7 +148,6 @@ export default function MonitorPublico() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [localidadActiva]);
 
-  // Lógica de auto-refresco
   useEffect(() => {
     const intervalo = setInterval(() => {
       if (document.visibilityState === 'visible' && localidadRef.current) {
