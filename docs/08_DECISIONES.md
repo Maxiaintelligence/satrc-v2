@@ -1,6 +1,10 @@
 # SatRC V2.0 — Registro de decisiones
 
-> **Versión del documento:** 2.8 (29/10/2026)
+> **Versión del documento:** 2.9 (29/10/2026)
+> **Cambios de esta versión (Opción A / H-CONV-02, 29/10/2026):**
+> - **ADR-014 (nueva):** Reforma del evaluador convectivo. Sustituye cizalladura escalar por vectorial, agrega gate convectivo. Difiere DCAPE/DMI/LCL a Opción B/C.
+> - **Referencias bibliográficas** actualizadas: Fujita 1985, Wakimoto 1985/2001, Gilmore & Wicker 1998, Atlas et al. 2004, ECMWF 2021.
+>
 > **Propósito:** explicar por qué el sistema está diseñado como está. Cada decisión tiene contexto, decisión, consecuencias y estado.
 > **Regla:** una decisión nueva se agrega al final con el siguiente número. Una decisión se reemplaza con otra nueva; no se edita la original para cambiar su sentido.
 > **Cambios de esta versión:**
@@ -194,6 +198,44 @@
   1. **Reducción de límite:** El dictamen usará `max_completion_tokens: 800` y el reporte diario `max_completion_tokens: 3000`.
   2. **Reintentos:** Ante un error 429, el reporte diario esperará 30 segundos y reintentará una vez antes de lanzar la excepción final.
 - **Consecuencias:** Se elimina el riesgo del 413. Se previene el 429 por concurrencia inmediata. Se mantiene la calidad del reporte (3000 tokens son suficientes para las 7 secciones).
+
+---
+
+### ADR-014: Reforma del evaluador convectivo (Opción A)
+
+- **Estado:** vigente (29/10/2026). Cierra H-CONV-02. Sustituye el cálculo de cizalladura escalar por vectorial y agrega gate convectivo al evaluador. Difiere DCAPE, DMI y LCL a una futura Opción B/C.
+- **Contexto:** el 29/10/2026, la corrida del runner publicó 39 localidades en N3 con `vector_dominante=CONVECTIVO` y `tipo_amenaza=DOWNBURST`, todas con `lluviaEvento24hMm=0` y sin aviso SMN activo. Diagnóstico empírico (P1-bis): 64 N2 adicionales del mismo vector (`TORMENTA_DISPERSA`), también sin precipitación. El 100 % del problema de credibilidad del semáforo era el evaluador convectivo.
+- **Causa raíz (3 errores físicos independientes):**
+  1. **Sustitución de variable.** El código usaba CAPE (energía del updraft) como proxy de DCAPE (energía del downdraft). Son procesos físicos distintos. La literatura documenta casos de dry microburst con CAPE=0 y DCAPE=880 (Gilmore & Wicker 1998).
+  2. **Cizalladura escalar en lugar de vectorial.** `shearMax = max(v700 - v10)` sin dirección. Con vientos opuestos (N vs S), la diferencia escalar es 0 pero la vectorial es máxima. Error catalogado como H-CONV-02 desde el 24/10/2026.
+  3. **Ausencia de gate convectivo.** Las reglas de downburst, supercélula y tormentas dispersas no exigían precipitación. Bajo DEC-011, un fenómeno convectivo sin hidrometeoros en la columna es físicamente imposible.
+- **Decisión:**
+  1. **Cizalladura vectorial.** Reemplazar `shearMax` escalar por `ΔV = √((u700 − u10)² + (v700 − v10)²)` en m/s. Umbrales: 10 m/s (downburst), 15 m/s (supercélula), coherentes con ECMWF 2021 para organización convectiva.
+  2. **Gate convectivo.** Exigir `showers >= 0.5 mm/h` o `precipitation >= 0.5 mm/h` en la ventana de 24 h para las 3 reglas convectivas (downburst, supercélula, tormentas dispersas). El umbral 0.5 mm/h es una **calibración inicial pendiente** (PEND-11).
+  3. **Diferir DCAPE, DMI y LCL.** El rediseño completo del evaluador (Opción B/C) queda para la primavera 2026, cuando haya eventos convectivos observados que permitan calibrar los umbrales para la Sierra de Puebla-Hidalgo.
+  4. **Conservar granizo y estable.** La regla de granizo (`capeMax > 1500 && espesorFusion < 1000 && lluviaTotal > 5`) no se modifica: ya exige precipitación y su física no depende de la cizalladura.
+- **Justificación física (dictamen experto, 29/10/2026):**
+  - Un downburst es una corriente descendente convectiva que alcanza la superficie, no una combinación de inestabilidad y viento. Requiere hidrometeoros en la columna (Fujita 1985, Wakimoto 2001).
+  - CAPE no sustituye DCAPE. Hay caso documentado de dry microburst con CAPE=0 (Gilmore & Wicker 1998).
+  - La cizalladura vectorial es la definición estándar de la cizalladura bulk en meteorología convectiva (ECMWF 2021).
+  - La ausencia de lluvia superficial no descarta un dry microburst, pero su detección requiere LCL, DMI e inverted-V, que se difieren a Opción B/C.
+- **Consecuencias:**
+  1. **Impacto inmediato:** los 103 falsos positivos convectivos del 29/10/2026 se eliminan. Con `showers = 0`, el gate convectivo impide la clasificación.
+  2. **Nuevos campos en el contrato del consenso:** `u10_ms`, `v10_ms`, `u700_ms`, `v700_ms`, `wind_direction_10m`, `wind_direction_700hPa`, `showers_mm`. El schema Zod los acepta por `.passthrough()`.
+  3. **Nuevo comportamiento en el evaluador:** la cizalladura vectorial puede detectar cambios de dirección que la escalar omitía (H-CONV-02).
+  4. **Deuda explícita:** PEND-11 (calibración de 0.5 mm/h con eventos reales). Hasta entonces, el gate es conservador.
+  5. **Riesgo residual:** un dry microburst real con `showers = 0` y `precipitation = 0` sería un falso negativo. Bajo DEC-011, este trade-off se acepta hasta que la Opción B/C esté implementada y calibrada.
+  6. **No resuelve:** DCAPE, DMI, LCL, clasificación dry/wet. La cobertura completa de DEC-011 queda diferida.
+- **Alternativas consideradas:**
+  - **Opción B (cizalladura vectorial + gate + LCL + DMI):** diferida. Requiere calibración local de los umbrales de LCL y DMI con eventos observados, que no están disponibles en octubre.
+  - **Opción C (Opción B + DCAPE + inverted-V + clasificación dry/wet):** diferida. Requiere implementar el algoritmo correcto de DCAPE (adiabática húmeda, no θe constante) y calibrar con eventos reales.
+  - **Mantener el estado actual:** rechazada. 103 falsos positivos diarios bajo DEC-011 son inaceptables.
+- **Referencias:**
+  - Commits: `7df06d7` (evaluador) y `b6f7b60` (orquestador).
+  - `03_MOTOR_RIESGO.md` §7.2 (tabla de reglas actualizada + nota del 29/10/2026).
+  - `06_PENDIENTES.md` §2.2 (H-CONV-02 cerrada) y §6 (PEND-11).
+  - `04_HISTORIAL.md` §7.24 (registro completo del fix).
+  - Bibliografía: Fujita (1985) "The Downburst"; Wakimoto (1985, 2001); Gilmore & Wicker (1998); Atlas et al. (2004); ECMWF (2021) "Vertical Wind Shear and Convective Storms"; NWS Warning Decision Training Division.
 
 ---
 
