@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import db from '../data/localidades.json';
 import { consultarModelosDeterministas } from '../engine/meteoFetcher.js';
 import { generarConsensoDeterminista } from '../engine/consensusEngine.js';
@@ -23,20 +23,18 @@ import {
 
 const INTERVALO_REFRESCO_MS = 30 * 60 * 1000;
 
-export default function MonitorPublico() {
+export default function MonitorPublico({ localidadActiva, setLocalidadActiva, datosConsenso, setDatosConsenso }) {
   const listaZonas = Object.values(db.indices.zonas);
 
   const [zonaActiva, setZonaActiva] = useState(listaZonas[0] || null);
   const [evaluacionLocal, setEvaluacionLocal] = useState(null);
   const [dictamenGlobal, setDictamenGlobal] = useState(null);
   const [municipioActivo, setMunicipioActivo] = useState('');
-  const [localidadActiva, setLocalidadActiva] = useState(null);
   const [reporteVigente, setReporteVigente] = useState(null);
   
   const [modalReportePublicoAbierto, setModalReportePublicoAbierto] = useState(false);
   const [modalUbicacionAbierto, setModalUbicacionAbierto] = useState(false);
   const [cargando, setCargando] = useState(false);
-  const [datosConsenso, setDatosConsenso] = useState([]);
   const [pestanaActiva, setPestanaActiva] = useState('hoy');
   const [mostrarDisclaimer, setMostrarDisclaimer] = useState(false);
 

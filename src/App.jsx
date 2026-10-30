@@ -9,9 +9,9 @@ export default function App() {
   // Vistas: 'inicio' (MonitorPublico), 'mapa_graficas', 'reporte_sara', 'operativo'
   const [vistaActiva, setVistaActiva] = useState('inicio'); 
   const [operativoAbierto, setOperativoAbierto] = useState(false);
-  
   const [localidadActiva, setLocalidadActiva] = useState(null);
   const [datosConsenso, setDatosConsenso] = useState([]);
+  
 
   // Estados para el login operativo
   const [autenticado, setAutenticado] = useState(false);
@@ -67,8 +67,20 @@ export default function App() {
 
       {/* 2. Contenido Principal Dinámico */}
       <main className="flex-1 w-full max-w-7xl mx-auto px-4 py-4">
-        {vistaActiva === 'inicio' && <MonitorPublico />}
-        {vistaActiva === 'mapa_graficas' && <MapaGraficas />}
+        {vistaActiva === 'inicio' && (
+          <MonitorPublico 
+            localidadActiva={localidadActiva} 
+            setLocalidadActiva={setLocalidadActiva} 
+            datosConsenso={datosConsenso} 
+            setDatosConsenso={setDatosConsenso} 
+          />
+        )}
+        {vistaActiva === 'mapa_graficas' && (
+          <MapaGraficas 
+            localidadActiva={localidadActiva} 
+            datosConsenso={datosConsenso} 
+          />
+        )}
         {vistaActiva === 'reporte_sara' && <ReporteSara />}
       </main>
 

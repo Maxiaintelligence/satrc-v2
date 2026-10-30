@@ -1,37 +1,49 @@
 import React from 'react';
 import RiskMap from '../components/RiskMap.jsx';
 import WeatherChart from '../components/WeatherChart.jsx';
+import { MapPin, AlertCircle } from 'lucide-react';
 
-// Datos de prueba para el diseño visual (en el siguiente commit se conectarán al backend)
-const mockDataTemp = Array.from({ length: 24 }, (_, i) => ({ hora: `${i}:00`, valor: 15 + Math.sin(i / 3) * 5 }));
-const mockDataLluvia = Array.from({ length: 24 }, (_, i) => ({ hora: `${i}:00`, valor: i > 12 && i < 18 ? 2.5 : 0 }));
-const mockDataViento = Array.from({ length: 24 }, (_, i) => ({ hora: `${i}:00`, valor: 20 + Math.cos(i / 4) * 15 }));
-const mockDataHumedad = Array.from({ length: 24 }, (_, i) => ({ hora: `${i}:00`, valor: 60 + Math.sin(i / 2) * 15 }));
+export default function MapaGraficas({ localidadActiva, datosConsenso }) {
+  if (!localidadActiva || !datosConsenso || datosConsenso.length < 240) {
+    return (
+      <div className="p-12 flex flex-col items-center justify-center text-center gap-4 bg-slate-900 border border-slate-800 rounded-2xl">
+        <AlertCircle className="w-10 h-10 text-slate-500" />
+        <p className="text-slate-400 text-sm">Selecciona una localidad en el Monitor para ver sus gráficas.</p>
+      </div>
+    );
+  }
 
-export default function MapaGraficas() {
+  const ventanaHoy = datosConsenso.slice(168, 192);
+
+  const datosTemp = ventanaHoy.map((h, i) => ({ hora: `${i}:00`, valor: h.temperatura_c }));
+  const datosLluvia = ventanaHoy.map((h, i) => ({ hora: `${i}:00`, valor: h.lluvia_mm }));
+  const datosViento = ventanaHoy.map((h, i) => ({ hora: `${i}:00`, valor: h.rafagas_kmh }));
+  const datosHumedad = ventanaHoy.map((h, i) => ({ hora: `${i}:00`, valor: h.humedad_relativa_pct }));
+
   return (
-    <div className="space-y-6">
-      <h2 className="text-xl font-black text-white px-2">Mapa y Gráficas</h2>
+    <div className="space-y-6 animate-fade-in pb-10">
+      <div className="flex items-center gap-3 px-2 border-b border-slate-800 pb-4">
+        <div className="p-2.5 bg-slate-800 text-slate-300 rounded-xl">
+          <MapPin className="w-6 h-6" />
+        </div>
+        <div>
+          <h2 className="text-xl font-black text-white leading-tight">{localidadActiva.nombre}</h2>
+          <p className="text-xs text-slate-400">Mapa y Gráficas · Datos de Open-Meteo</p>
+        </div>
+      </div>
+
+      <RiskMap evaluaciones={[localidadActiva]} localidadFoco={localidadActiva} alSeleccionarLocalidad={() => {}} />
       
-      {/* Mapa de Riesgos */}
-      <RiskMap evaluaciones={[]} localidadFoco={null} alSeleccionarLocalidad={() => {}} />
-      
-      {/* Gráficas Detalladas */}
       <div className="space-y-4">
         <div className="flex justify-between items-center px-2">
-          <h3 className="text-sm font-bold text-slate-300 uppercase tracking-wider">Variables Meteorológicas</h3>
-          <select className="bg-slate-800 text-xs text-white border border-slate-700 rounded-lg px-2 py-1 outline-none">
-            <option>24 horas</option>
-            <option>48 horas</option>
-            <option>7 días</option>
-          </select>
+          <h3 className="text-sm font-bold text-slate-300 uppercase tracking-wider">Variables Meteorológicas (Hoy)</h3>
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <WeatherChart titulo="Temperatura (°C)" datos={mockDataTemp} unidad="°C" colorLinea="#f59e0b" />
-          <WeatherChart titulo="Lluvia (mm)" datos={mockDataLluvia} unidad="mm" colorLinea="#3b82f6" />
-          <WeatherChart titulo="Viento (km/h)" datos={mockDataViento} unidad="km/h" colorLinea="#06b6d4" />
-          <WeatherChart titulo="Humedad (%)" datos={mockDataHumedad} unidad="%" colorLinea="#a855f7" />
+          <WeatherChart titulo="Temperatura (°C)" datos={datosTemp} unidad="°C" colorLinea="#f59e0b" />
+          <WeatherChart titulo="Lluvia (mm)" datos={datosLluvia} unidad="mm" colorLinea="#3b82f6" />
+          <WeatherChart titulo="Viento (km/h)" datos={datosViento} unidad="km/h" colorLinea="#06b6d4" />
+          <WeatherChart titulo="Humedad (%)" datos={datosHumedad} unidad="%" colorLinea="#a855f7" />
         </div>
       </div>
     </div>
