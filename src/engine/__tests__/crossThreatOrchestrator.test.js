@@ -37,6 +37,9 @@ function mockLocalidad(overrides = {}) {
 
 
 // Helper para serie horaria con todos los datos (formato array de objetos)
+// H-CONV-02 / Opción A (29/10/2026): acepta viento700, direcciones y showers.
+// Por defecto: showersMm=0, sin direcciones → el evaluador convectivo da N1
+// (sin datos de cizalladura vectorial, sin convección activa).
 function mockSerieCompleta({
   lluvia = 0,
   temp = 15,
@@ -48,23 +51,33 @@ function mockSerieCompleta({
   cape = 500,
   humedad700 = 60,
   nivelCongelacion = 4000,
-  presion = 1013
+  presion = 1013,
+  viento700 = 20,
+  windDir10 = null,
+  windDir700 = null,
+  showersMm = 0
 } = {}) {
-  return Array.from({ length: 192 }, (_, i) => ({
-    fecha_hora: `2026-10-21T${String(i % 24).padStart(2, '0')}:00`,
-    lluvia_mm: lluvia,
-    temperatura_c: temp,
-    sensacion_termica_c: sensacion,
-    rafagas_kmh: rafagas,
-    viento_kmh: sostenido,
-    cobertura_nubosa_pct: nubosidad,
-    bulbo_humedo_c: bulbo,
-    cape_jkg: cape,
-    humedad_700hpa: humedad700,
-    nivel_congelacion_m: nivelCongelacion,
-    presion_hpa: presion,
-    viento_700hpa: 20
-  }));
+  return Array.from({ length: 192 }, (_, i) => {
+    const h = {
+      fecha_hora: `2026-10-21T${String(i % 24).padStart(2, '0')}:00`,
+      lluvia_mm: lluvia,
+      temperatura_c: temp,
+      sensacion_termica_c: sensacion,
+      rafagas_kmh: rafagas,
+      viento_kmh: sostenido,
+      cobertura_nubosa_pct: nubosidad,
+      bulbo_humedo_c: bulbo,
+      cape_jkg: cape,
+      humedad_700hpa: humedad700,
+      nivel_congelacion_m: nivelCongelacion,
+      presion_hpa: presion,
+      viento_700hpa: viento700,
+      showers_mm: showersMm
+    };
+    if (windDir10 !== null) h.wind_direction_10m = windDir10;
+    if (windDir700 !== null) h.wind_direction_700hPa = windDir700;
+    return h;
+  });
 }
 
 describe('crossThreatOrchestrator.js', () => {
@@ -118,19 +131,24 @@ describe('crossThreatOrchestrator.js', () => {
     expect(res.nivel_alerta_global).toBeGreaterThanOrEqual(3);
   });
 
-  it('4. Acoplamiento Convectivo+Viento: Downburst → N4', () => {
+  it('4. Acoplamiento Convectivo+Viento: Supercélula → N4', () => {
     const loc = mockLocalidad({
       zona_id: 'HUA',
       topografia: { altitud_msnm: 2000, pendiente_max_deg: 10, relieve: 'MESETA', twi: 8 }
     });
-    // CAPE alto + aire seco + viento fuerte
+    // H-CONV-02 (Opción A): requiere cizalladura vectorial >= 15 m/s y convección.
+    // Direcciones opuestas (180° vs 0°) y velocidad 700hPa 70 km/h → shear ~22 m/s.
     const serie = mockSerieCompleta({ 
       cape: 3000,
       humedad700: 20,
       lluvia: 3,
       rafagas: 90,
       temp: 25,
-      sensacion: 25
+      sensacion: 25,
+      viento700: 70,
+      windDir10: 180,
+      windDir700: 0,
+      showersMm: 5
     });
     const res = evaluarMultiamenaza(loc, serie);
     
@@ -364,5 +382,56 @@ describe('crossThreatOrchestrator.js', () => {
     expect(res.diagnostico.titulo).not.toMatch(/Acoplamiento/i);
     expect(res.diagnostico.causa).not.toMatch(/acoplamiento entre/i);
   });
-  
+
+  // --- INICIO DE LA MODIFICACIÓN ---
+  it('14. Propaga u/v y showers al evaluador convectivo (H-CONV-02 / Opción A)', () => {
+    // Verifica que los campos nuevos (cizalladura vectorial y precipitación
+    // convectiva) llegan al evaluador y producen un diagnóstico que los menciona.
+    const loc = mockLocalidad({
+      zona_id: 'HUA',
+      topografia: { altitud_msnm: 2000, pendiente_max_deg: 10, relieve: 'MESETA', twi: 8 }
+    });
+    const serie = mockSerieCompleta({
+      cape: 3000,
+      humedad700: 20,
+      lluvia: 3,
+      rafagas: 90,
+      viento700: 70,
+      windDir10: 180,
+      windDir700: 0,
+      showersMm: 5
+    });
+    const res = evaluarMultiamenaza(loc, serie);
+
+    // El vector convectivo debe haber disparado.
+    expect(res.niveles_por_vector.convectivo).toBeGreaterThan(2.0);
+
+    // El diagnóstico debe mencionar cizalladura o precipitación convectiva.
+    const causa = res.diagnosticos_por_vector?.convectivo?.causa || '';
+    expect(causa).toMatch(/cizalladura|precipitaci[oó]n|Riesgo/i);
+  });
+
+  it('15. Serie sin datos vectoriales ni convección: el convectivo queda en N1 (no dispara)', () => {
+    // Regresión: si la serie no tiene u10_ms, v10_ms, u700_ms, v700_ms ni
+    // showers_mm NI lluvia (lluvia_mm=0), el evaluador NO debe disparar
+    // convectivo (DEC-011: sin datos + sin evento = sin alerta).
+    const loc = mockLocalidad({
+      zona_id: 'HUA',
+      topografia: { altitud_msnm: 2000, pendiente_max_deg: 10, relieve: 'MESETA', twi: 8 }
+    });
+    // CAPE alto y humedad baja, pero SIN lluvia, SIN showers y SIN cizalladura
+    // vectorial. Condiciones adversas pero sin mecanismo convectivo activo.
+    const serie = mockSerieCompleta({
+      cape: 3000,
+      humedad700: 20,
+      lluvia: 0,
+      rafagas: 90
+    });
+    const res = evaluarMultiamenaza(loc, serie);
+
+    // Aunque el CAPE sea alto, sin lluvia ni cizalladura vectorial,
+    // no se dispara downburst, supercélula ni tormenta dispersa.
+    expect(res.niveles_por_vector.convectivo).toBeLessThan(2.0);
+  });
+ 
 });
