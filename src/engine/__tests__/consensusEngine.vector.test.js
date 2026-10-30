@@ -20,7 +20,9 @@ function construirSerie({
   windDir10m = [48, 48, 48],
   windSpeed700 = [20, 20, 20],
   windDir700 = [131, 131, 131],
-  showers = [0, 0.3, 0.2],
+  showersGfs = Array(horas).fill(0),
+  showersIcon = Array(horas).fill(0),
+  showersGem = Array(horas).fill(0),
   gemNullsDir10m = false,
   gemNullsShowers = false
 } = {}) {
@@ -61,9 +63,9 @@ function construirSerie({
     wind_direction_700hPa_icon_seamless: windDir700,
     wind_direction_700hPa_gem_seamless: windDir700,
     // Showers (precipitación convectiva)
-    showers_gfs_seamless: showers,
-    showers_icon_seamless: showers,
-    showers_gem_seamless: gemNullsShowers ? Array(horas).fill(null) : showers
+    showers_gfs_seamless: showersGfs,
+    showers_icon_seamless: showersIcon,
+    showers_gem_seamless: gemNullsShowers ? Array(horas).fill(null) : showersGem
   };
 
   return datos;
@@ -106,17 +108,27 @@ describe('consensusEngine — cizalladura vectorial y showers (H-CONV-02)', () =
     expect(h.wind_direction_10m).toBe(48);
   });
 
-  it('5. Consenso de showers con los 3 modelos', () => {
-    const serie = generarConsensoDeterminista(construirSerie({ horas: 3, showers: [0, 0.3, 0.2] }));
-    // Mediana de [0, 0.3, 0.2] = 0.2
-    expect(serie[0].showers_mm).toBe(0.2);
+  it('5. Consenso de showers: mediana de los 3 modelos en la misma hora', () => {
+    // 3 modelos, 1 hora, valores distintos: [0, 0.5, 0.3] → mediana = 0.3
+    const serie = generarConsensoDeterminista(construirSerie({
+      horas: 1,
+      showersGfs: [0],
+      showersIcon: [0.5],
+      showersGem: [0.3]
+    }));
+    expect(serie[0].showers_mm).toBe(0.3);
   });
 
-  it('5.bis. Consenso de showers con GEM null: usa mediana de 2', () => {
-    const serie = generarConsensoDeterminista(construirSerie({ horas: 1, showers: [0, 0.5, 0.5], gemNullsShowers: true }));
-    // Mediana de [0, 0.5] = 0.25 → redondeado a 0.2 ó 0.3 según toFixed(1). Verificar que sea finito.
-    expect(serie[0].showers_mm).not.toBeNull();
-    expect(serie[0].showers_mm).toBeGreaterThanOrEqual(0);
+  it('5.bis. Consenso de showers con GEM null: usa mediana de los 2 válidos', () => {
+    // Solo GFS=0.4 y ICON=0.6 son válidos. Mediana de [0.4, 0.6] = 0.5
+    const serie = generarConsensoDeterminista(construirSerie({
+      horas: 1,
+      showersGfs: [0.4],
+      showersIcon: [0.6],
+      showersGem: [0],
+      gemNullsShowers: true
+    }));
+    expect(serie[0].showers_mm).toBe(0.5);
   });
 
   it('6. Cizalladura vectorial > diferencia escalar cuando hay cambio de dirección', () => {
