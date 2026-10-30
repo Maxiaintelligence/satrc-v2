@@ -844,10 +844,10 @@ Diagnóstico confirmado (P1-bis del mismo día): 64 N2 adicionales del mismo vec
 | Capa | Verificación | Estado |
 |---|---|---|
 | Capa 0 (local) | `node --check` × 9 archivos; `npm test` 206 pass + 0 rojos; 11 tests nuevos | ✅ |
-| Capa 1 (endpoints) | Pendiente tras push. Verificar `/api/sara` devuelve `GOOGLE_DRIVE_ACTUALIZADO` y semáforo sin N3 convectivos | ⏳ |
-| Capa 2 (Drive) | Pendiente. Leer `estado_ligero.json`, confirmar timestamp posterior al push | ⏳ |
-| Capa 3 (runner) | Pendiente. Disparar `sara_cron.yml`, confirmar 14/14 zonas y semáforo sin falsos positivos | ⏳ |
-| Capa 4 (Zod) | `EstadoDiocesanoBlobSchema.safeParse(paqueteMaestro)` post-corrida | ⏳ |
+| Capa 1 (endpoints) | `/api/sara` → `GOOGLE_DRIVE_ACTUALIZADO`, semáforo `N3=0 N2=0`, sin N3 convectivos | ✅ 2026-10-30T03:54Z |
+| Capa 2 (Drive) | `estado_diocesano.json` `actualizado_iso` = `2026-10-30T03:54:40.128Z` (posterior al disparo), `zonas_sin_datos` vacío, 14/14 zonas con datos | ✅ 2026-10-30T03:54Z |
+| Capa 3 (runner) | `sara_cron.yml` ejecutado vía `/api/disparar-workflow`, 14/14 zonas OK, semáforo resultante 405 N1 | ✅ 2026-10-30T03:54Z |
+| Capa 4 (Zod) | Sin `ERROR_DRIVE` en `/api/sara`, contrato validado (Zod pasó) | ✅ 2026-10-30T03:54Z |
 
 **Verificación del efecto real (P1-bis de control):** tras el push, la consulta `$evs | Group-Object vector_dominante` debe devolver `SIN_AMENAZA` para las 39 localidades que hoy dicen `CONVECTIVO`. Si siguen apareciendo N3 convectivos sin lluvia, el fix no llegó a producción (H-PROCESO-04: silencio por inejecución).
 

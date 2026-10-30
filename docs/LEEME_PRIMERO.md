@@ -64,7 +64,7 @@ Antes de cualquier cambio, revisar `06_PENDIENTES.md` §2 (deuda técnica activa
 - **N-MOTOR-06:** Se filtraron los `null` en humedad y nivel de congelación del convectivo.
 - **N-MOTOR-36:** El diagnóstico de viento ahora es coherente (muestra ráfaga real y equivalente).
 - **N-FETCH-01:** Se blindó la alineación de medianoche con Open-Meteo.
-- **H-CONV-02 / Opción A:** Cizalladura vectorial (u,v en m/s) + gate convectivo. Cierra el falso positivo DOWNBURST sin lluvia. 7 commits, 11 tests nuevos. Verificación en producción pendiente de push.
+- **H-CONV-02 / Opción A:** Cizalladura vectorial (u,v en m/s) + gate convectivo. Cierra el falso positivo DOWNBURST sin lluvia. 7 commits, 11 tests nuevos. **Verificado en producción el 30/10/2026 03:54Z:** 14/14 zonas OK, semáforo 405 N1, cero N3 convectivos. Falso positivo eliminado al 100 %.
 
 ### 3.4 Críticas independientes que siguen abiertas
 - **H-PROMPT-09:** El prompt de on-demand no tiene la regla 12.bis (coherencia).

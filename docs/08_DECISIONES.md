@@ -231,6 +231,12 @@
   - **Opción C (Opción B + DCAPE + inverted-V + clasificación dry/wet):** diferida. Requiere implementar el algoritmo correcto de DCAPE (adiabática húmeda, no θe constante) y calibrar con eventos reales.
   - **Mantener el estado actual:** rechazada. 103 falsos positivos diarios bajo DEC-011 son inaceptables.
 - **Referencias:**
+- **Verificación en producción (2026-10-30T03:54:40Z):**
+  - 14/14 zonas con datos válidos (`zonas_sin_datos` vacío).
+  - `sin_datos_regionales=true` en 0 localidades.
+  - Semáforo resultante: N4=0, N3=0, N2=0, N1=405.
+  - Los 39 falsos positivos N3 (`DOWNBURST` sin lluvia) del 29/10/2026 se eliminaron al 100 %.
+  - Capa 4 Zod: sin `ERROR_DRIVE`, contrato validado.
   - Commits: `7df06d7` (evaluador) y `b6f7b60` (orquestador).
   - `03_MOTOR_RIESGO.md` §7.2 (tabla de reglas actualizada + nota del 29/10/2026).
   - `06_PENDIENTES.md` §2.2 (H-CONV-02 cerrada) y §6 (PEND-11).
