@@ -1,6 +1,11 @@
 # SatRC V2.0 — Historial de bugs, hitos y lecciones
 
-> **Versión del documento:** 2.7 (29/10/2026)
+> **Versión del documento:** 2.8 (29/10/2026)
+> **Cambios de esta versión (Opción A / H-CONV-02, 29/10/2026):**
+> - **Nueva sección §7.24:** registro completo del cierre de H-CONV-02 (cizalladura vectorial + gate convectivo). 7 commits, 11 tests nuevos, baseline 195 → 206.
+> - **§8 ampliada:** H-PROCESO-18 (patrones de verificación ambiguos) y H-PROCESO-19 (anclajes que asumen formato de la línea).
+> - **§9 actualizada:** nueva entrada de la sesión de Opción A.
+>
 > **Propósito:** registro cronológico de los problemas resueltos, los hitos cerrados y las lecciones aprendidas. Cada entrada indica síntoma, causa, solución, verificación y commit.
 > **Regla:** un bug entra aquí solo cuando está resuelto. Lo pendiente va a `06_PENDIENTES.md`.
 > **Cambios de esta versión:**
@@ -800,6 +805,63 @@ Ver §8: H-PROCESO-10 a H-PROCESO-17.
 
 ---
 
+### 7.24 Sesión 29/10/2026 — Opción A: cierre de H-CONV-02 (cizalladura vectorial + gate convectivo)
+
+> **Propósito:** registrar el fix de H-CONV-02 bajo el marco de DEC-011. Reemplaza el cálculo de cizalladura escalar por vectorial y agrega gate convectivo a las reglas de downburst, supercélula y tormentas dispersas.
+
+#### Contexto y síntoma empírico
+
+El 29/10/2026, la corrida del runner publicó **39 localidades en N3 con `vector_dominante=CONVECTIVO` y `tipo_amenaza=DOWNBURST`**, 100 % de las zonas TIZ y PMN. Todas con `lluviaEvento24hMm=0`, sin aviso SMN activo.
+
+Diagnóstico confirmado (P1-bis del mismo día): 64 N2 adicionales del mismo vector (`TORMENTA_DISPERSA`), también sin precipitación. **El 100 % del problema de credibilidad del semáforo era el evaluador convectivo.**
+
+#### Causa raíz (3 errores físicos independientes)
+
+1. **Sustitución de variable.** El código usaba CAPE (energía del updraft) como proxy de DCAPE (energía del downdraft). Son procesos físicos distintos. La literatura (Gilmore & Wicker 1998, dictamen experto) documenta casos de dry microburst con CAPE=0 y DCAPE=880.
+2. **Cizalladura escalar en lugar de vectorial.** `shearMax = max(v700 - v10)` sin dirección. Con vientos opuestos (N vs S), la diferencia escalar es 0 pero la vectorial es máxima. Error ya catalogado como H-CONV-02 desde el 24/10/2026.
+3. **Ausencia de gate convectivo.** Las reglas de downburst, supercélula y tormentas dispersas no exigían precipitación. Bajo DEC-011, un fenómeno convectivo sin hidrometeoros en la columna es físicamente imposible.
+
+#### Solución: 7 commits atómicos
+
+| # | Hash | Contenido |
+|---|---|---|
+| A.3 | `e2cd14c` | Test de reproducción del falso positivo (falla con el código pre-fix) |
+| A.1 | `e7206c0` | Fetcher: agrega `wind_direction_10m`, `wind_direction_700hPa`, `showers` |
+| A.2 | `e526488` | Consenso: calcula componentes u,v y consensúa showers |
+| A.2-bis | `82f49c3` | Corrige diseño de tests de showers para que discriminen |
+| A.4 | `7df06d7` | Evaluador convectivo: cizalladura vectorial + gate convectivo |
+| A.5 | `b6f7b60` | Orquestador: propaga cizalladura y showers al evaluador |
+| A.5-bis | `9439346` | Corrige test 15 (discrimina sin lluvia, no con lluvia=3) |
+
+**Cambios técnicos clave:**
+
+- **`consensusEngine.js`:** convierte `(speed, dir)` a `(u, v)` por modelo, consensúa u y v por separado (mediana), reconstruye dirección. Evita el bug de promediar ángulos circulares (350° + 10° no es 180°).
+- **`convectiveEvaluator.js`:** cizalladura vectorial en m/s con umbrales 10 m/s (downburst) y 15 m/s (supercélula), coherentes con ECMWF. Gate convectivo: `showers >= 0.5 mm/h` o `precipitation >= 0.5 mm/h` en la ventana de 24 h.
+- **`crossThreatOrchestrator.js`:** propaga `u10_ms`, `v10_ms`, `u700_ms`, `v700_ms`, `wind_direction_10m`, `wind_direction_700hPa`, `showers_mm` de la serie consenso al evaluador.
+
+#### Verificación (4 capas)
+
+| Capa | Verificación | Estado |
+|---|---|---|
+| Capa 0 (local) | `node --check` × 9 archivos; `npm test` 206 pass + 0 rojos; 11 tests nuevos | ✅ |
+| Capa 1 (endpoints) | Pendiente tras push. Verificar `/api/sara` devuelve `GOOGLE_DRIVE_ACTUALIZADO` y semáforo sin N3 convectivos | ⏳ |
+| Capa 2 (Drive) | Pendiente. Leer `estado_ligero.json`, confirmar timestamp posterior al push | ⏳ |
+| Capa 3 (runner) | Pendiente. Disparar `sara_cron.yml`, confirmar 14/14 zonas y semáforo sin falsos positivos | ⏳ |
+| Capa 4 (Zod) | `EstadoDiocesanoBlobSchema.safeParse(paqueteMaestro)` post-corrida | ⏳ |
+
+**Verificación del efecto real (P1-bis de control):** tras el push, la consulta `$evs | Group-Object vector_dominante` debe devolver `SIN_AMENAZA` para las 39 localidades que hoy dicen `CONVECTIVO`. Si siguen apareciendo N3 convectivos sin lluvia, el fix no llegó a producción (H-PROCESO-04: silencio por inejecución).
+
+#### Deuda derivada
+
+- **PEND-11:** calibración del umbral mínimo de precipitación convectiva (0.5 mm/h) con eventos observados en la Sierra de Puebla-Hidalgo. Difiere a primavera 2026.
+- **H-MULTI-06 (reactivado):** el fallback de la Sala Operativa sigue usando solo el motor hidrológico. No es regresión de esta sesión, pero el contraste con el fix es más visible.
+
+#### Lecciones
+
+Ver §8: **H-PROCESO-18** (patrones de verificación ambiguos) y **H-PROCESO-19** (anclajes que asumen formato de línea).
+
+---
+
 ## 8. Lecciones consolidadas
 
 | ID | Lección | Origen |
@@ -832,6 +894,8 @@ Ver §8: H-PROCESO-10 a H-PROCESO-17.
 | **H-PROCESO-15** | **Los documentos fundacionales usan CRLF en checkout Windows.** Un script Node.js que hace `split('\n')` deja `\r` al final y rompe el reemplazo de bloques multilínea. Usar `split(/\r?\n/)` + `join(sep)` con `sep = s.includes('\r\n') ? '\r\n' : '\n'`. | Sesión 29/10/2026 |
 | **H-PROCESO-16** | **En proyectos con `"type": "module"` en `package.json`, un script `.mjs` fuerza ESM (sin `require`).** Para forzar CJS, usar extensión `.cjs`. | Sesión 29/10/2026 |
 | **H-PROCESO-17** | **Un script de edición documental con más de ~10 cambios debe tener `process.exit(1)` por cada anclaje fallido, ANTES del `writeFileSync`.** Verificar todos los anclajes primero, escribir solo si todos pasan. | Sesión 29/10/2026 |
+| **H-PROCESO-18** | **Un patrón de verificación demasiado amplio produce falsos positivos.** Si se reemplaza una cifra (por ejemplo, "179 pass" → "206 pass"), el `Select-String` debe anclarse al contexto de la sección modificada, no a la cadena literal sola. La cadena literal aparece también en el changelog histórico del documento, y el script reporta un falso "FALLO" cuando el reemplazo real ya se aplicó correctamente. Verificar con dos patrones: uno para la línea activa, otro para la sección de changelog. | Sesión 29/10/2026 (A.6.1) |
+| **H-PROCESO-19** | **Un anclaje no debe asumir formato.** Las filas de tabla en `06_PENDIENTES.md` mezclan `| PEND-03 |` (plano) y `| **PEND-10** |` (negrita). Un anclaje que omita `**` falla silenciosamente con `process.exit(1)`, sin indicar que el problema es de formato, no de encoding. Verificar el contenido exacto de la línea con `Select-String` y `Format-List` antes de diseñar el anclaje. | Sesión 29/10/2026 (A.6.2) |
 
 ---
 
@@ -844,6 +908,8 @@ El handover de cada sesión registra el estado, los pendientes y cómo retomar e
 - **Sesión 29/10/2026:** Auditoría empírica P0–P12 ejecutada. 5 hipótesis críticas confirmadas (H-PKG-01, N-MOTOR-09, H-PROMPT-06, H-DRIVE-01 latente, H-REPORTE-02) + 3 pruebas adicionales (P6 cadena íntegra, P7 doble disparador, P9 causa raíz de H-MOTOR-05) + refutación documentada de N-MOTOR-12 y confirmación de N-MOTOR-11/13/14/15. Sin cambios en código de producción (HEAD `1281d43`). Baseline corregido a 165 pass + 2 rojos y 55 advertencias. Corrección documental de H-VIENTO-01. Nuevas lecciones H-PROCESO-03, H-TEST-16, H-TEST-17. Nuevas decisiones pendientes PEND-06, PEND-07, PEND-08. **Ningún fix se ha aplicado aún; la sesión fue de diagnóstico y documentación.**
 
 ---
+
+- **Sesión 29/10/2026 (Opción A):** cierre de H-CONV-02. Cizalladura vectorial (u,v en m/s) y gate convectivo (`showers`/`precipitation` >= 0.5 mm/h) implementados. 7 commits atómicos. 11 tests nuevos. Baseline 195 → 206. PEND-11 abierta (calibración local). Verificación en producción pendiente de push.
 
 ## 10. Trazabilidad
 
