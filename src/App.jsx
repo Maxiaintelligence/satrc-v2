@@ -10,6 +10,9 @@ export default function App() {
   const [vistaActiva, setVistaActiva] = useState('inicio'); 
   const [operativoAbierto, setOperativoAbierto] = useState(false);
   
+  const [localidadActiva, setLocalidadActiva] = useState(null);
+  const [datosConsenso, setDatosConsenso] = useState([]);
+
   // Estados para el login operativo
   const [autenticado, setAutenticado] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
