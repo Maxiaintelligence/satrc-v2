@@ -390,11 +390,21 @@ Valores posibles: `FRIO_EXTREMO`, `HELADA_AGRICOLA`, `NEVADA`, `CALOR_EXTREMO`, 
 
 | Regla | Condición | Nivel | Vector |
 |---|---|---|---|
+| Regla | Condición | Nivel | Vector |
+|---|---|---|---|
 | Granizo | CAPE > 1 000 y espesor de fusión < 1 000 m y lluvia > 5 mm; con CAPE > 1 500 | 3 | `GRANIZO` |
-| Downburst | CAPE > 1000 y potencial de desplome > 100 y cizalladura > 15 km/h | 3 | `DOWNBURST` |
-| Supercélula | Potencial de desplome > 150 y cizalladura > 25 km/h y CAPE > 2 500 | 4 | `SUPERCELULA` |
-| Tormentas dispersas | Ninguna de las anteriores y CAPE > 800 | 2 | `CONVECTIVO` |
+| Downburst | CAPE > 1000 y potencial de desplome > 100 y cizalladura vectorial >= 10 m/s y (showers >= 0.5 mm/h o precipitation >= 0.5 mm/h) | 3 | `DOWNBURST` |
+| Supercélula | Potencial de desplome > 150 y cizalladura vectorial >= 15 m/s y CAPE > 2 500 y (showers >= 0.5 mm/h o precipitation >= 0.5 mm/h) | 4 | `SUPERCELULA` |
+| Tormentas dispersas | Ninguna de las anteriores y CAPE > 800 y (showers >= 0.5 mm/h o precipitation >= 0.5 mm/h) | 2 | `CONVECTIVO` |
 | Estable | Ninguna de las anteriores | 1 | `SIN_AMENAZA` |
+
+> **Nota del 29/10/2026 (H-CONV-02 / Opción A):**
+>
+> **Cizalladura vectorial.** La cizalladura vertical se calcula como `ΔV = √((u700 − u10)² + (v700 − v10)²)` en m/s, no como diferencia escalar de velocidades. La versión anterior comparaba `vientos700[i] - vientos10m[i]` sin considerar la dirección del viento, lo que producía falsos negativos cuando el viento cambiaba de dirección (por ejemplo, 20 km/h del norte contra 20 km/h del sur → diferencia escalar = 0 pero cizalladura vectorial máxima).
+>
+> **Gate convectivo.** Las reglas de downburst, supercélula y tormentas dispersas exigen precipitación convectiva activa (`showers >= 0.5 mm/h` o `precipitation >= 0.5 mm/h` en la ventana de 24 h). Bajo DEC-011 (precisión sobre cobertura), un fenómeno convectivo sin hidrometeoros en la columna es físicamente imposible. La implementación anterior disparaba DOWNBURST sin lluvia, lo que produjo 39 falsos positivos N3 en TIZ y PMN el 29/10/2026.
+>
+> **Umbrales.** La cizalladura vectorial usa umbrales de 10 m/s (downburst) y 15 m/s (supercélula), coherentes con la referencia ECMWF para organización convectiva (10-15 m/s multicelular, ≥15 m/s significativa). La precipitación mínima de 0.5 mm/h es una **calibración inicial pendiente** (ver PEND-11). Los umbrales no están validados para la Sierra de Puebla-Hidalgo: requieren calibración local con eventos observados.
 
 > **Nota correctiva del 29/10/2026 (auditoría cruzada):** los subtipos del código **no coinciden** con los de §9.4.
 >
@@ -567,7 +577,7 @@ El paquete publicado por el runner contiene, por localidad, `nivel_alerta` (igua
 
 ## 11. Pruebas
 
-La suite se ejecuta con `npm test`. **Baseline verificado el 29/10/2026 (Cierre)** (node v22.23.3, npm 10.9.9): **179 pass + 0 rojos** en 17 archivos. Los tests obsoletos se actualizaron en el commit `f6f4281`.
+La suite se ejecuta con `npm test`. **Baseline verificado el 29/10/2026 (Opción A)** (node v22.23.3, npm 10.9.9): **206 pass + 0 rojos** en 19 archivos. Los tests obsoletos se actualizaron en el commit `f6f4281`.
 
 **Los 2 rojos son obsoletos, no bugs del motor:**
 
@@ -598,7 +608,7 @@ Las pruebas del motor están en `src/engine/__tests__/` y `scripts/engine/__test
 | ID | Descripción | Estado | Severidad bajo DEC-011 |
 |---|---|---|---|
 | H-CONV-01 | Unidades erróneas en la especificación convectiva (§7.3) | Documental | 🟢 |
-| H-CONV-02 | Cizalladura escalar en lugar de vectorial (§7.1) | Abierta; requiere expandir el contrato del consenso | 🟡 |
+| **H-CONV-02** | ~~Cizalladura escalar en lugar de vectorial (§7.1)~~ **CERRADA el 29/10/2026 (Opción A, commits `7df06d7` y `b6f7b60`).** Cizalladura vectorial + gate convectivo implementados. Ver §7.2 nota del 29/10/2026. | ✅ **Cerrada** |
 | H-ORQ-07 | Coeficientes γ y mapeo del orquestador distintos de la especificación (§9.2, §9.3) | Documental; el código es la referencia | 🟢 |
 | H-ORQ-08 | `determinarVectorDominante` con `indexOf` en `sort` (§9.4) | Abierta, cosmética | 🟢 |
 | H-MOTOR-01 | Gemelo del runner distinto del canónico (§3) | Abierta, V3.0 | 🟡 |
