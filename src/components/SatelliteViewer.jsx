@@ -102,6 +102,9 @@ export default function SatelliteViewer() {
     setVersionCache(Date.now());
   };
 
+  // P0: Trazabilidad satelital (DEC-011). Si supera los 60 min, es RETRASADO.
+  const esRetrasado = minutosAtras > 60;
+
   const IconoProducto = productoActivo.icono;
 
   return (
@@ -114,9 +117,15 @@ export default function SatelliteViewer() {
           <h3 className="font-bold text-xs md:text-sm text-white tracking-wide">
             Satélite GOES-19 • Sector México
           </h3>
-          <span className="text-[9px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.5 rounded font-mono font-bold">
-            EN VIVO • NOAA
+          {/* --- INICIO DE LA MODIFICACIÓN --- */}
+          <span className={`text-[9px] border px-1.5 py-0.5 rounded font-mono font-bold ${
+            esRetrasado 
+              ? 'bg-amber-500/20 text-amber-400 border-amber-500/30' 
+              : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+          }`}>
+            {esRetrasado ? 'RETRASADO • NOAA' : 'EN DIRECTO • NOAA'}
           </span>
+          {/* --- FIN DE LA MODIFICACIÓN --- */}
         </div>
 
         <div className="flex items-center gap-2">
@@ -234,8 +243,8 @@ export default function SatelliteViewer() {
             <span className="text-2xl font-black text-white font-mono leading-none">
               {horaSatelital}
             </span>
-            <span className="text-[11px] text-amber-400 font-bold">
-              hace {minutosAtras} min
+            <span className={`text-[11px] font-bold ${esRetrasado ? 'text-amber-400' : 'text-emerald-400'}`}>
+              Antigüedad: {minutosAtras} min
             </span>
           </div>
         </div>
