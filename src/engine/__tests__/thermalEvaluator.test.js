@@ -220,6 +220,32 @@ describe('thermalEvaluator.js', () => {
     expect(res.nivel_alerta_continuo).toBeLessThanOrEqual(3.99);
   });
 
+  describe('H-TERM-02 — defensa contra null en nivel_congelacion_m (30/10/2026)', () => {
+    it('15. nivel_congelacion_m null → NO es Nevada, sin N3 falsa', () => {
+      const loc = mockLocalidad(2400);
+      const serie = mockSerie({
+        temp: 1, sensacion: 0, nubosidad: 90, viento: 10,
+        bulbo: 0.5, lluvia: 5, nivelCongelacion: null
+      });
+      const res = evaluarTermico(loc, serie);
+      expect(res.vector_dominante).not.toBe('NEVADA');
+      expect(res.nivel_alerta).toBeLessThan(3);
+      expect(res.datos_tecnicos.es_nevada).toBe(false);
+    });
+
+    it('16. regresión: nivel_congelacion_m 2800 con localidad 2400 → SÍ es Nevada N3', () => {
+      const loc = mockLocalidad(2400);
+      const serie = mockSerie({
+        temp: 1, sensacion: 0, nubosidad: 90, viento: 10,
+        bulbo: 0.5, lluvia: 5, nivelCongelacion: 2800
+      });
+      const res = evaluarTermico(loc, serie);
+      expect(res.vector_dominante).toBe('NEVADA');
+      expect(res.nivel_alerta).toBe(3);
+      expect(res.datos_tecnicos.es_nevada).toBe(true);
+    });
+  });
+
   it('14. Frío N2 + Calor N2 simultáneos: frío gana, continuo en [2.0, 2.99]', () => {
     const loc = mockLocalidad(2000);
     // Ventana evaluada: 168-191 (24 h).

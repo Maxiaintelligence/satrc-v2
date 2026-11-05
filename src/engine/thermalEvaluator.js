@@ -107,13 +107,20 @@ export function evaluarTermico(localidad, serieHoraria) {
     causaFrio = `Temperatura estimada en superficie: ${tempSuperficie.toFixed(1)}°C (aire a 2m: ${tempMin.toFixed(1)}°C). Riesgo para cultivos.`;
   }
 
-  // Nevada (Bulbo Húmedo)
-  const esNevada = lluviaTotal > 0 && bulboMin < 1.0 && 
-                    (nivelCongelacionMin - altitud) < 500;
+  // H-TERM-02 (detectado 30/10/2026): defensa contra null en nivel_congelacion_m.
+  // Paridad conceptual con N-MOTOR-06-bis (convectivo). Bajo DEC-011, sin dato
+  // de nivel de congelación no se puede emitir Nevada: "sin dato" != "nevada".
+  // El cálculo anterior hacía `null - altitud = -altitud` (número negativo),
+  // lo que disparaba la condición siempre que lluvia y bulbo se cumplieran.
+  const espesorFusionNevada = nivelCongelacionMin !== null
+    ? (nivelCongelacionMin - altitud)
+    : null;
+  const esNevada = lluviaTotal > 0 && bulboMin < 1.0
+    && espesorFusionNevada !== null && espesorFusionNevada < 500;
   if (esNevada && nivelFrio < 3) {
     nivelFrio = 3;
     tituloFrio = "Alerta por Nevada";
-    causaFrio = `Precipitación con bulbo húmedo de ${bulboMin.toFixed(1)}°C y nivel de congelación a ${(nivelCongelacionMin - altitud).toFixed(0)}m de la localidad.`;
+    causaFrio = `Precipitación con bulbo húmedo de ${bulboMin.toFixed(1)}°C y nivel de congelación a ${espesorFusionNevada.toFixed(0)}m de la localidad.`;
   }
 
   // 4. Evaluación de Riesgos por Calor
